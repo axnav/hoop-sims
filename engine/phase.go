@@ -150,7 +150,7 @@ func (lg *League) CanGoToDraft() error {
 func (lg *League) CanFinishOffseason(reportSeen bool) error {
 	switch lg.Phase(reportSeen) {
 	case PhaseFreeAgency:
-		return nil
+		return lg.sheetBlock()
 	case PhaseDraftDone:
 		return errors.New("free agency has not begun yet")
 	}
@@ -161,6 +161,9 @@ func (lg *League) CanFinishOffseason(reportSeen bool) error {
 func (lg *League) CanAdvanceFreeAgency() error {
 	if lg.FA == nil {
 		return errors.New("free agency is not open")
+	}
+	if err := lg.sheetBlock(); err != nil {
+		return err
 	}
 	if lg.FA.DaysLeft() == 0 {
 		return errors.New("free agency is over; start the new season")

@@ -426,3 +426,106 @@ func TestSixSeasons(t *testing.T) {
 	}
 	t.Logf("average payrolls: %.0f", avgs)
 }
+
+// setPayroll gives the team's first player the salary that brings the payroll
+// to the target (everyone else keeps his contract).
+func setPayroll(lg *League, tid, target int) {
+	t := lg.Teams[tid]
+	t.Roster[0].Contract.Salary += target - lg.Payroll(tid)
+	t.Roster[0].Contract.Years = max(1, t.Roster[0].Contract.Years)
+}
+
+func TestMidLevelException(t *testing.T) {
+	lg := GenerateLeague(3)
+	tid := 4
+	tm := lg.Teams[tid]
+	tm.Roster = tm.Roster[:RosterSize-3] // spots for signings
+	newFA := func(id int) *Player {
+		p := GenerateRookie(NewRNG(uint64(id)), 9000+id, 2025)
+		p.TeamID = -1
+		lg.FreeAgents = append(lg.FreeAgents, p)
+		return p
+	}
+
+	// Below the tax line: the full mid-level, up to MidLevelYears.
+	setPayroll(lg, tid, 150000)
+	info := lg.ExceptionFor(tid)
+	if info.Kind != "mid" || info.MaxSalary != Cap.MidLevel || info.MaxYears != Cap.MidLevelYears || info.Used {
+		t.Fatalf("ExceptionFor at 150000: %+v", info)
+	}
+	if err := lg.CanSign(tid, Cap.MidLevel, SignException); err != nil {
+		t.Errorf("mid-level refused: %v", err)
+	}
+	if err := lg.CanSign(tid, Cap.MidLevel+100, SignException); err == nil || !strings.Contains(err.Error(), "mid-level") {
+		t.Errorf("over the mid-level allowed: %v", err)
+	}
+	// ...but a mid-level deal that would carry payroll past the tax line is a taxpayer deal.
+	setPayroll(lg, tid, Cap.TaxLine-8000)
+	if err := lg.CanSign(tid, 8000, SignException); err != nil {
+		t.Errorf("deal landing exactly on the tax line refused: %v", err)
+	}
+	if err := lg.CanSign(tid, 8100, SignException); err == nil || !strings.Contains(err.Error(), "taxpayer") {
+		t.Errorf("deal past the tax line allowed at mid-level size: %v", err)
+	}
+
+	// Taxpayer exception: small, short.
+	setPayroll(lg, tid, 165000)
+	info = lg.ExceptionFor(tid)
+	if info.Kind != "taxpayer" || info.MaxSalary != Cap.TaxMidLevel || info.MaxYears != Cap.TaxMidLevelYears {
+		t.Fatalf("ExceptionFor at 165000: %+v", info)
+	}
+	if err := lg.CanSign(tid, Cap.TaxMidLevel+100, SignException); err == nil {
+		t.Error("over the taxpayer amount allowed")
+	}
+	a := newFA(1)
+	if err := lg.Sign(tid, a, Cap.TaxMidLevel, Cap.TaxMidLevelYears+1, SignException); err == nil || !strings.Contains(err.Error(), "years") {
+		t.Errorf("too many years under the taxpayer exception: %v", err)
+	}
+	if tm.ExceptionYear != 0 {
+		t.Error("a refused signing used the exception")
+	}
+	if err := lg.Sign(tid, a, Cap.TaxMidLevel, Cap.TaxMidLevelYears, SignException); err != nil {
+		t.Fatal(err)
+	}
+	if tm.ExceptionYear != lg.Year || a.TeamID != tid {
+		t.Errorf("signing did not record the exception: year %d", tm.ExceptionYear)
+	}
+	// Once per offseason.
+	info = lg.ExceptionFor(tid)
+	if info.Kind != "none" || !info.Used {
+		t.Errorf("ExceptionFor after use: %+v", info)
+	}
+	b := newFA(2)
+	if err := lg.Sign(tid, b, 1500, 1, SignException); err == nil || !strings.Contains(err.Error(), "already used") {
+		t.Errorf("second use: %v", err)
+	}
+	// It resets with the next league year.
+	lg.Year++
+	if info := lg.ExceptionFor(tid); info.Used {
+		t.Errorf("still used next year: %+v", info)
+	}
+	lg.Year--
+
+	// The hard ceiling still applies.
+	tm2 := lg.Teams[5]
+	tm2.Roster = tm2.Roster[:RosterSize-1]
+	setPayroll(lg, 5, Cap.HardCeiling-3000)
+	if info := lg.ExceptionFor(5); info.Kind != "none" || !strings.Contains(info.Reason, "ceiling") {
+		t.Errorf("near the ceiling: %+v", info)
+	}
+	if err := lg.CanSign(5, 4000, SignException); err == nil || !strings.Contains(err.Error(), "hard ceiling") {
+		t.Errorf("exception past the ceiling: %v", err)
+	}
+
+	// Cap room at least as big as the exception: use the room.
+	tm3 := lg.Teams[6]
+	setPayroll(lg, 6, Cap.SalaryCap-Cap.MidLevel)
+	if info := lg.ExceptionFor(6); info.Kind != "none" || info.Used {
+		t.Errorf("with enough cap room: %+v", info)
+	}
+	setPayroll(lg, 6, Cap.SalaryCap-Cap.MidLevel+100)
+	if info := lg.ExceptionFor(6); info.Kind != "mid" {
+		t.Errorf("with a little cap room: %+v", info)
+	}
+	_ = tm3
+}

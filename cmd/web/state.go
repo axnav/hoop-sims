@@ -30,7 +30,7 @@ func (s *server) state() M {
 	ph := s.phase()
 	out := M{
 		"year": lg.Year, "phase": ph, "day": st.Day, "totalDays": engine.SeasonDays,
-		"offers": len(lg.PendingProposals()), "expiring": len(lg.Expiring(u)), "payroll": s.payrollObj(u), "injured": len(lg.InjuryReport(u)),
+		"offers": len(lg.PendingProposals()), "expiring": len(lg.Expiring(u)), "payroll": s.payrollObj(u), "injured": len(lg.InjuryReport(u)), "pendingSheets": len(lg.PendingSheets()),
 		"mode": map[bool]string{true: "real", false: "fictional"}[s.isReal()], "conferences": confNames,
 		"user": M{"team": s.team(u), "w": st.Wins[u], "l": st.Losses[u], "pd": st.PointDiff[u],
 			"confRank": s.rank(u), "confName": confNames[engine.Conference(u)]},

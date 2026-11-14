@@ -136,6 +136,9 @@ export default function Dashboard() {
   const recent = (sched.data?.games ?? []).filter((g) => g.played).slice(-12)
   return (
     <Page title={`${s.user.team.fullName}`}>
+      {(s.pendingSheets ?? 0) > 0 && (
+        <Link to="/free-agency" className="card mb-4 block border-accent p-4 font-semibold text-accent">An offer sheet is waiting for your answer.</Link>
+      )}
       <Interlude />
       <OffseasonTrades />
       <OffersCard />

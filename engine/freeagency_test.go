@@ -102,11 +102,13 @@ func TestFreeAgencyFlowAndOffers(t *testing.T) {
 
 	// cap room: leave the user $5.0M
 	keep := u.Roster[0].Contract
+	u.ExceptionYear = lg.Year // fixture: this block tests the cap-room rule alone (the exception has its own tests)
 	u.Roster[0].Contract.Salary = Cap.SalaryCap - (lg.Payroll(u.ID) - keep.Salary) - 5000
 	if _, err := lg.MakeOffer(u.ID, star.ID, ask, years); err == nil || !strings.Contains(err.Error(), "cap room") {
 		t.Errorf("offer over cap room: %v", err)
 	}
 	u.Roster[0].Contract = keep
+	u.ExceptionYear = 0
 	// minimum always allowed with no cap room
 	u.Roster[0].Contract.Salary = Cap.SalaryCap - (lg.Payroll(u.ID) - keep.Salary) + 100
 	cheap := pool[len(pool)-1]
@@ -375,4 +377,462 @@ func TestFreeAgencyStarsSign(t *testing.T) {
 		t.Errorf("user signed him at %d, offered %d", s.Salary, room)
 	}
 	t.Logf("user offered %d (ask %d): star signed with team %d for %d", room, orig, s.Team, s.Salary)
+}
+
+// ---- mid-level exception and restricted free agency ----
+
+// resetTeam keeps the first n players on minimum two-year deals and tops the
+// first one up so the payroll is the target.
+func resetTeam(lg *League, tid, n, payroll int) {
+	t := lg.Teams[tid]
+	if len(t.Roster) > n {
+		t.Roster = t.Roster[:n]
+	}
+	for _, p := range t.Roster {
+		p.Contract = Contract{Cap.MinSalary, 2}
+	}
+	t.Roster[0].Contract.Salary += payroll - lg.Payroll(tid)
+}
+
+// poolPlayer finds a free agent with an ask in the range who is not restricted
+// and is not in skip; with rights >= 0 he must be worth keeping to that team.
+func poolPlayer(lg *League, lo, hi int, skip map[int]bool, rights int) *Player {
+	cf := lg.contendFactors()
+	for _, p := range lg.sortedPool() {
+		ask, _ := lg.FreeAgentAsk(p)
+		if _, r := lg.RightsTeam(p.ID); r || skip[p.ID] || ask < lo || ask > hi {
+			continue
+		}
+		if rights >= 0 && lg.value(p, rights, cf) < Cap.ReSignMinValue {
+			continue
+		}
+		return p
+	}
+	return nil
+}
+
+func setRights(lg *League, p *Player, tid int) {
+	if lg.FA.Rights == nil {
+		lg.FA.Rights = map[int]int{}
+	}
+	lg.FA.Rights[p.ID] = tid
+}
+
+func TestUserExceptionSigning(t *testing.T) {
+	lg := draftDoneLeagueFor(21, 0)
+	mustBeginFA(t, lg)
+	u := lg.UserTeamID
+	resetTeam(lg, u, 12, Cap.SalaryCap-5000) // $5.0M of cap room, one open spot
+	skip := map[int]bool{}
+	var ps []*Player
+	for i := 0; i < 3; i++ {
+		p := poolPlayer(lg, 2000, 8000, skip, -1)
+		if p == nil {
+			t.Fatal("no free agent for the fixture")
+		}
+		skip[p.ID] = true
+		ps = append(ps, p)
+	}
+	o1, err := lg.MakeOffer(u, ps[0].ID, 12000, 2)
+	if err != nil || o1.Kind != SignException {
+		t.Fatalf("exception offer: %+v %v", o1, err)
+	}
+	// A pending exception offer does not use cap room: a cap-room offer still fits.
+	o2, err := lg.MakeOffer(u, ps[1].ID, 4000, 1)
+	if err != nil || o2.Kind != SignCapRoom {
+		t.Fatalf("cap-room offer next to an exception offer: %+v %v", o2, err)
+	}
+	// But there is only one exception.
+	if _, err := lg.MakeOffer(u, ps[2].ID, 9000, 2); err == nil {
+		t.Error("a second exception offer was accepted")
+	}
+	// Exception limits are readable.
+	if _, err := lg.MakeOffer(u, ps[2].ID, Cap.MidLevel+100, 2); err == nil {
+		t.Error("offer above the mid-level and above cap room accepted")
+	}
+	lg.WithdrawOffer(u, o2.ID)
+	for lg.FA.DaysLeft() > 0 {
+		if _, ok := signingOf(lg, ps[0].ID); ok {
+			break
+		}
+		lg.AdvanceFreeAgency()
+	}
+	s, ok := signingOf(lg, ps[0].ID)
+	if !ok || s.Team != u || s.Via != "exception" || s.Salary != 12000 {
+		t.Fatalf("exception signing: %+v ok=%v", s, ok)
+	}
+	if lg.Teams[u].ExceptionYear != lg.Year || !lg.ExceptionFor(u).Used {
+		t.Error("exception not recorded as used")
+	}
+	if lg.Payroll(u) <= Cap.SalaryCap {
+		t.Errorf("payroll %d not over the cap after the signing", lg.Payroll(u))
+	}
+	lg.Teams[u].Roster = lg.Teams[u].Roster[:RosterSize-1] // a spot for the next offer
+	if lg.FA.DaysLeft() > 0 {
+		if _, err := lg.MakeOffer(u, ps[2].ID, 9000, 2); err == nil || !strings.Contains(err.Error(), "already used") {
+			t.Errorf("exception used twice: %v", err)
+		}
+	}
+}
+
+func TestRestrictedEligibility(t *testing.T) {
+	lg := draftDoneLeagueFor(21, 0)
+	u := lg.Teams[lg.UserTeamID]
+	young, old := u.Roster[0], u.Roster[1]
+	young.Contract.Years, young.Experience = 0, 2
+	old.Contract.Years, old.Experience = 0, FATuning.RFAMaxExperience+1
+	if !lg.RestrictedEligible(young) || lg.RestrictedEligible(old) {
+		t.Fatal("eligibility by experience wrong")
+	}
+	mustBeginFA(t, lg)
+	if rt, ok := lg.RightsTeam(young.ID); !ok || rt != lg.UserTeamID {
+		t.Errorf("user's young expiring player: rights %d %v", rt, ok)
+	}
+	if _, ok := lg.RightsTeam(old.ID); ok {
+		t.Error("an experienced player is restricted")
+	}
+	if len(lg.FA.Rights) < 2 {
+		t.Logf("rights held: %d", len(lg.FA.Rights))
+	}
+	for pid, tid := range lg.FA.Rights {
+		p := lg.faPlayer(pid)
+		if p == nil || !lg.RestrictedEligible(p) || tid < 0 || tid >= len(lg.Teams) {
+			t.Fatalf("bad rights entry %d -> %d", pid, tid)
+		}
+	}
+}
+
+func TestOfferSheetMinYears(t *testing.T) {
+	lg := draftDoneLeagueFor(21, 0)
+	mustBeginFA(t, lg)
+	u := lg.UserTeamID
+	resetTeam(lg, u, 10, 20000)
+	p := poolPlayer(lg, 3000, 20000, nil, -1)
+	setRights(lg, p, 5)
+	ask, _ := lg.FreeAgentAsk(p)
+	if _, err := lg.MakeOffer(u, p.ID, ask, 1); err == nil || !strings.Contains(err.Error(), "restricted") {
+		t.Errorf("one-year offer sheet: %v", err)
+	}
+	if _, err := lg.MakeOffer(u, p.ID, ask, FATuning.OfferSheetMinYears); err != nil {
+		t.Errorf("two-year offer sheet: %v", err)
+	}
+	if lg.MinYearsFor(u, p.ID) != 2 || lg.MinYearsFor(5, p.ID) != 1 {
+		t.Error("MinYearsFor wrong")
+	}
+	// the rights team itself may offer one year, even over the cap
+	resetTeam(lg, 5, 9, 165000)
+	o, err := lg.MakeOffer(5, p.ID, ask, 1)
+	if err != nil || o.Kind != SignOwn {
+		t.Errorf("rights team's own offer: %+v %v", o, err)
+	}
+	// computer offers respect the minimum
+	for lg.FA.DaysLeft() > 0 {
+		lg.AdvanceFreeAgency()
+		for _, o := range lg.FA.Offers {
+			if rt, ok := lg.RightsTeam(o.PlayerID); ok && rt != o.Team && o.Years < FATuning.OfferSheetMinYears {
+				t.Fatalf("offer sheet of %d year(s): %+v", o.Years, o)
+			}
+		}
+	}
+}
+
+// vsComputerRights: the user offers 30000 x 3 to a restricted player whose rights a
+// computer team (payroll rightsPayroll) holds.
+func vsComputerRights(t *testing.T, rightsPayroll int) (*League, *Player, FASigning) {
+	lg := draftDoneLeagueFor(21, 0)
+	mustBeginFA(t, lg)
+	u, rt := lg.UserTeamID, 5
+	resetTeam(lg, u, 10, 20000)
+	resetTeam(lg, rt, 9, rightsPayroll)
+	p := poolPlayer(lg, 6000, 20000, nil, rt)
+	if p == nil {
+		t.Fatal("no fixture player")
+	}
+	setRights(lg, p, rt)
+	if _, err := lg.MakeOffer(u, p.ID, 30000, 3); err != nil {
+		t.Fatal(err)
+	}
+	for lg.FA.DaysLeft() > 0 && lg.faPlayer(p.ID) != nil {
+		lg.AdvanceFreeAgency()
+	}
+	s, ok := signingOf(lg, p.ID)
+	if !ok {
+		t.Fatal("restricted player did not sign")
+	}
+	return lg, p, s
+}
+
+func TestComputerRightsTeamMatches(t *testing.T) {
+	lg, p, s := vsComputerRights(t, 20000)
+	if !s.Matched || s.Team != 5 || s.SheetFrom != lg.UserTeamID || s.Salary != 30000 || s.Years != 3 || s.Via != "own" {
+		t.Fatalf("expected a match by team 5: %+v", s)
+	}
+	if p.TeamID != 5 || p.Contract != (Contract{30000, 3}) {
+		t.Errorf("player: team %d contract %+v", p.TeamID, p.Contract)
+	}
+	if lg.OffersFor(p.ID) != 0 {
+		t.Error("offers left")
+	}
+	if len(lg.PendingSheets()) != 0 {
+		t.Error("a sheet was created for a computer rights team")
+	}
+}
+
+func TestComputerRightsTeamDeclines(t *testing.T) {
+	lg, p, s := vsComputerRights(t, 165000) // matching would pass the tax line
+	if s.Matched || s.Team != lg.UserTeamID || s.Via != "room" || p.TeamID != lg.UserTeamID {
+		t.Fatalf("expected the offering team to sign him: %+v", s)
+	}
+}
+
+// userSheet builds a pending offer sheet from team 7 against the user.
+func userSheet(t *testing.T) (*League, *Player) {
+	lg := draftDoneLeagueFor(21, 0)
+	mustBeginFA(t, lg)
+	u, off := lg.UserTeamID, 7
+	resetTeam(lg, u, 12, 155000)
+	resetTeam(lg, off, 9, 20000)
+	p := poolPlayer(lg, 6000, 20000, nil, u)
+	setRights(lg, p, u)
+	if _, err := lg.makeOffer(off, p.ID, 30000, 3, false); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4 && len(lg.PendingSheets()) == 0; i++ {
+		if err := lg.CanAdvanceFreeAgency(); err != nil {
+			t.Fatal(err)
+		}
+		lg.AdvanceFreeAgency()
+	}
+	sh := lg.PendingSheets()
+	if len(sh) != 1 || sh[0].PlayerID != p.ID || sh[0].Team != off || sh[0].Salary != 30000 || sh[0].Years != 3 {
+		t.Fatalf("pending sheets: %+v", sh)
+	}
+	if lg.faPlayer(p.ID) == nil || p.TeamID != -1 {
+		t.Fatal("the player signed instead of waiting")
+	}
+	return lg, p
+}
+
+func TestUserOfferSheetMatch(t *testing.T) {
+	lg, p := userSheet(t)
+	u := lg.UserTeamID
+	if err := lg.CanAdvanceFreeAgency(); err == nil || !strings.Contains(err.Error(), "Answer the offer sheet for "+p.Name) {
+		t.Errorf("advance with a pending sheet: %v", err)
+	}
+	if err := lg.CanFinishOffseason(true); err == nil || !strings.Contains(err.Error(), "offer sheet") {
+		t.Errorf("finish with a pending sheet: %v", err)
+	}
+	if _, err := lg.makeOffer(7, p.ID, 31000, 3, false); err == nil {
+		t.Error("the held offer was replaced")
+	}
+	if err := lg.WithdrawOffer(7, lg.OffersBy(7)[0].ID); err == nil {
+		t.Error("the held offer was withdrawn")
+	}
+	// the day passes with the sheet pending: he stays in the pool
+	day := lg.FA.Day
+	lg.AdvanceFreeAgency()
+	if lg.FA.Day != day+1 || len(lg.PendingSheets()) != 1 || p.TeamID != -1 {
+		t.Error("a pending sheet changed on the next day")
+	}
+	if len(lg.Teams[u].Roster) >= RosterSize {
+		t.Fatal("fixture roster full")
+	}
+	g, err := lg.AnswerSheet(p.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.Matched || g.Team != u || g.SheetFrom != 7 || g.Salary != 30000 || g.Via != "own" {
+		t.Errorf("match log row: %+v", g)
+	}
+	if p.TeamID != u || p.Contract != (Contract{30000, 3}) || lg.Payroll(u) <= Cap.SalaryCap {
+		t.Errorf("after matching: team %d contract %+v payroll %d", p.TeamID, p.Contract, lg.Payroll(u))
+	}
+	if len(lg.PendingSheets()) != 0 || lg.OffersFor(p.ID) != 0 {
+		t.Error("sheet or offers left")
+	}
+	if err := lg.CanAdvanceFreeAgency(); err != nil {
+		t.Errorf("advance after answering: %v", err)
+	}
+	if _, err := lg.AnswerSheet(p.ID, true); err == nil {
+		t.Error("answered twice")
+	}
+}
+
+func TestUserOfferSheetMatchRefusals(t *testing.T) {
+	lg, p := userSheet(t)
+	u := lg.UserTeamID
+	for len(lg.Teams[u].Roster) < RosterSize {
+		lg.forceSign(u, lg.sortedPool()[len(lg.FreeAgents)-1], Cap.MinSalary, 1)
+	}
+	resetTeam(lg, u, 13, 100000)
+	if _, err := lg.AnswerSheet(p.ID, true); err == nil || !strings.Contains(err.Error(), "full") {
+		t.Errorf("match with a full roster: %v", err)
+	}
+	resetTeam(lg, u, 12, Cap.HardCeiling-10000)
+	if _, err := lg.AnswerSheet(p.ID, true); err == nil || !strings.Contains(err.Error(), "hard ceiling") {
+		t.Errorf("match past the ceiling: %v", err)
+	}
+	if len(lg.PendingSheets()) != 1 {
+		t.Error("a refused match removed the sheet")
+	}
+}
+
+func TestUserOfferSheetDecline(t *testing.T) {
+	lg, p := userSheet(t)
+	g, err := lg.AnswerSheet(p.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Matched || g.Team != 7 || g.Salary != 30000 || g.Via != "room" || p.TeamID != 7 {
+		t.Errorf("decline: %+v team %d", g, p.TeamID)
+	}
+	if len(lg.PendingSheets()) != 0 || lg.CanAdvanceFreeAgency() != nil {
+		t.Error("sheet left after declining")
+	}
+
+	// the offering team can no longer sign him: the sheet is void, he stays in the pool
+	lg, p = userSheet(t)
+	resetTeam(lg, 7, 9, 150000) // no longer has the cap room
+	g, err = lg.AnswerSheet(p.ID, false)
+	if err != nil || g.Name != "" {
+		t.Fatalf("void sheet: %+v %v", g, err)
+	}
+	if lg.faPlayer(p.ID) == nil || len(lg.PendingSheets()) != 0 {
+		t.Error("void sheet: player not back in the pool")
+	}
+	if rt, ok := lg.RightsTeam(p.ID); !ok || rt != lg.UserTeamID {
+		t.Error("void sheet: rights lost")
+	}
+}
+
+func TestNoScreensPathsNeverWait(t *testing.T) {
+	lg, p := userSheet(t)
+	lg.FinishOffseason()
+	if lg.FA != nil || p.TeamID != 7 || p.Contract.Salary != 30000 {
+		t.Fatalf("FinishOffseason must decline a pending sheet: FA %v, player team %d %+v", lg.FA != nil, p.TeamID, p.Contract)
+	}
+	// The fully automatic path answers it with the computer match rule.
+	lg, p = userSheet(t)
+	resetTeam(lg, lg.UserTeamID, 12, 100000)
+	lg.finishOffseason(true)
+	if lg.FA != nil || p.TeamID != 0 || p.Contract != (Contract{30000, 3}) {
+		t.Fatalf("automatic path should match: FA %v, player team %d %+v", lg.FA != nil, p.TeamID, p.Contract)
+	}
+	lg, p = userSheet(t) // payroll 155000: matching would pass the tax line, so it declines
+	lg.finishOffseason(true)
+	if p.TeamID != 7 {
+		t.Fatalf("automatic path should decline over the tax line: team %d", p.TeamID)
+	}
+	// Offseason() runs the whole thing with the user's restricted players in the pool.
+	lg = GenerateLeague(5)
+	lg.UserTeamID = 0
+	lg.StartSeason()
+	lg.SimRegularSeason()
+	lg.SimPlayoffs()
+	y := lg.Year
+	lg.Offseason()
+	if lg.Year != y+1 || lg.FA != nil {
+		t.Error("Offseason did not finish")
+	}
+}
+
+func TestSaveRoundTripRightsAndSheets(t *testing.T) {
+	lg, p := userSheet(t)
+	lg.Teams[3].ExceptionYear = lg.Year
+	path := filepath.Join(t.TempDir(), "league.json")
+	if err := lg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.FA, lg.FA) || got.Teams[3].ExceptionYear != lg.Year {
+		t.Fatal("rights, sheets or exception year lost in the round trip")
+	}
+	if rt, ok := got.RightsTeam(p.ID); !ok || rt != got.UserTeamID || len(got.PendingSheets()) != 1 {
+		t.Error("loaded league lost the rights or the sheet")
+	}
+	if _, err := got.AnswerSheet(p.ID, false); err != nil {
+		t.Error(err)
+	}
+
+	// An older save (no rights, no sheets, offers without a kind) still plays out.
+	lg = draftDoneLeagueFor(21, 0)
+	mustBeginFA(t, lg)
+	lg.FA.Rights, lg.FA.Sheets = nil, nil
+	resetTeam(lg, lg.UserTeamID, 10, 20000)
+	q := poolPlayer(lg, 3000, 20000, nil, -1)
+	ask, _ := lg.FreeAgentAsk(q)
+	if _, err := lg.MakeOffer(lg.UserTeamID, q.ID, ask, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := lg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	old, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for old.FA.DaysLeft() > 0 {
+		if err := old.CanAdvanceFreeAgency(); err != nil {
+			t.Fatal(err)
+		}
+		old.AdvanceFreeAgency()
+	}
+	old.FinishOffseason()
+}
+
+// TestExceptionAndRFAMeasurement plays three offseasons hands-off, reports
+// what the mid-level exception and restricted free agency did, and checks the
+// league stays inside the hard ceiling and a sane payroll band.
+func TestExceptionAndRFAMeasurement(t *testing.T) {
+	lg := GenerateLeague(5)
+	lg.UserTeamID = 0
+	for y := 0; y < 3; y++ {
+		lg.StartSeason()
+		lg.SimRegularSeason()
+		lg.SimPlayoffs()
+		lg.BeginOffseason()
+		lg.DraftAutoAll()
+		mustBeginFA(t, lg)
+		rights := map[int]int{}
+		for k, v := range lg.FA.Rights {
+			rights[k] = v
+		}
+		for lg.FA.DaysLeft() > 0 {
+			lg.AdvanceFreeAgency()
+			lg.autoAnswerSheets(lg.contendFactors(), true)
+		}
+		exc, signed, matched := 0, 0, 0
+		for _, s := range lg.FA.Log {
+			if s.Via == "exception" && s.Team != lg.UserTeamID {
+				exc++
+			}
+			if _, ok := rights[s.PlayerID]; ok {
+				if s.Matched {
+					matched++
+				} else if s.Team != rights[s.PlayerID] {
+					signed++
+				}
+			}
+		}
+		big := 0
+		for _, p := range lg.FreeAgents {
+			if a, _ := AskingContract(p); a >= FATuning.SettleAskMult*Cap.MinSalary {
+				big++
+			}
+		}
+		t.Logf("offseason %d: %d restricted players, computer exception signings %d, offer sheets signed %d + matched %d, unsigned at the end %d (%d with an ask of 4x the minimum or more)",
+			lg.Year, len(rights), exc, signed, matched, len(lg.FreeAgents), big)
+		lg.FinishOffseason()
+		avg, _, _, _, oh := avgPayroll(lg)
+		t.Logf("  next season starts: avg payroll %.0f (%.0f%% of cap), over ceiling %d", avg, 100*avg/float64(Cap.SalaryCap), oh)
+		if oh > 0 {
+			t.Errorf("%d teams over the hard ceiling", oh)
+		}
+		if r := avg / float64(Cap.SalaryCap); r < 0.90 || r > 1.15 {
+			t.Errorf("average payroll %.0f%% of the cap", 100*r)
+		}
+	}
 }

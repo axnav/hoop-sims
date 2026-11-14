@@ -214,7 +214,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### Team
 
-`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `TaxPaid` (luxury tax by season year), and `Lineup` (nil means the automatic rotation).
+`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `TaxPaid` (luxury tax by season year), `Lineup` (nil means the automatic rotation), and `ExceptionYear` (the league year in whose offseason the mid-level exception was used; 0 means never).
 
 ### Player
 
@@ -249,7 +249,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### FreeAgency
 
-`FreeAgency{Day, Days, NextOfferID, Offers, Log}` exists only during free agency. `Day` is days already resolved; `Days` is 10. `FAOffer{ID, Team, PlayerID, Salary, Years, Day}` is a standing offer; `FASigning` is a log row.
+`FreeAgency{Day, Days, NextOfferID, Offers, Log, Rights, Sheets}` exists only during free agency. `Rights` maps a restricted player to the team that may match; `Sheets` are offer sheets waiting for the user's answer. `Day` is days already resolved; `Days` is 10. `FAOffer{ID, Team, PlayerID, Salary, Years, Day}` is a standing offer; `FASigning` is a log row.
 
 ### Proposal and trade records
 
@@ -304,6 +304,10 @@ All numbers are in the `Cap` block in `engine/contract.go`, in thousands of doll
 `Payroll(team)` is the sum of contracts with years left. `MarketSalary` depends only on visible overall and age (with a bonus for young players whose potential is well above their overall, and a discount from age 31).
 
 **What is allowed over the cap.** `CanSign` checks a signing by kind (`SignKind`): `SignCapRoom` needs payroll plus the salary to fit under the cap; `SignOwn` (re-signing your own expiring player, "Bird rights") ignores the cap; `SignMinimum` must be exactly the minimum salary; `SignDraft` always works. Every kind except `SignDraft` is still stopped by the hard ceiling. Trades follow the matching rule in section 7.
+
+**Mid-level exception.** `SignException`: once per offseason (`Team.ExceptionYear` holds the league year it was used) a team may sign one free agent without cap room: up to `Cap.MidLevel` (12800) for up to 4 years if payroll after the signing is at or under the tax line, otherwise up to `Cap.TaxMidLevel` (5200) for up to 2 years under the hard ceiling. `ExceptionFor(team)` tells the screens which applies. An offer records how it would be signed in `FAOffer.Kind`; an exception offer does not use cap room. Computer teams use the mid-level version only.
+
+**Restricted free agents.** A player whose contract expires with `Experience <= FATuning.RFAMaxExperience` (4) is restricted: `FreeAgency.Rights[playerID]` is the team that may match. Another team's offer must run at least `OfferSheetMinYears` (2). When he picks such an offer it is an offer sheet: a computer rights team matches if it values him and stays at or under the tax line (he then signs with it at the sheet's terms under `SignOwn`); for the user the sheet waits in `FreeAgency.Sheets` and `CanAdvanceFreeAgency` / `CanFinishOffseason` refuse until `AnswerSheet(playerID, match)` is called. A sheet still unanswered when `FinishOffseason` runs counts as declined; only the automatic `Offseason()` path matches for the user with the computer rule.
 
 **Re-signing.** After `BeginOffseason`, a player whose `Contract.Years` has dropped to 0 is "expiring" and stays on his roster. `ReSign` signs him at `AskingContract` (his market salary now; 4 years if 25 or younger, 3 if 28 or younger, 2 if 31 or younger, else 1). It is refused once free agency has begun. Computer teams do this in `reSignComputerTeams` when free agency begins, keeping players worth their ask while staying under the tax line.
 
@@ -419,6 +423,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/freeagents/offer` | Make an offer `{playerId, salary, years}` | `faOffer` (freeagency.go) |
 | POST | `/api/freeagents/withdraw` | Withdraw `{offerId}` | `faWithdraw` (freeagency.go) |
 | POST | `/api/freeagents/day` | Advance one day; returns signings | `faAdvance` (freeagency.go) |
+| POST | `/api/freeagents/sheet` | Answer an offer sheet for one of the user's restricted players: `{playerId, match}`; returns `{signings, freeAgency, state, voided}` | `faSheet` (freeagency.go) |
 | POST | `/api/admin/player/{id}` | Commissioner edit (age, potential, ratings, heal); refused unless the option is on | `adminPlayer` (admin.go) |
 
 **Response conventions.**

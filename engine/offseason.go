@@ -73,7 +73,7 @@ func (lg *League) Offseason() *OffseasonReport {
 	rep := lg.BeginOffseason()
 	lg.DraftAutoAll()
 	lg.reSignTeam(lg.Teams[lg.UserTeamID], lg.contendFactors())
-	lg.FinishOffseason()
+	lg.finishOffseason(true)
 	return rep
 }
 
@@ -247,7 +247,15 @@ func (lg *League) DraftAutoAll() {
 
 // FinishOffseason trims rosters, fills them from free agency and advances the
 // year. The draft must be finished.
-func (lg *League) FinishOffseason() {
+//
+// Offer sheets against the user that are still unanswered are declined (a
+// user who never answers has not matched).
+func (lg *League) FinishOffseason() { lg.finishOffseason(false) }
+
+// finishOffseason is FinishOffseason; matchUser answers the user's pending
+// offer sheets with the computer-team match rule instead (the fully
+// automatic Offseason).
+func (lg *League) finishOffseason(matchUser bool) {
 	c := &Progression
 	if lg.FA == nil {
 		// Callers that skip the free-agency screens: open it now.
@@ -255,8 +263,11 @@ func (lg *League) FinishOffseason() {
 			return
 		}
 	}
+	// No screens here: offer sheets against the user are answered at once so
+	// this can never wait on the user.
+	lg.autoAnswerSheets(lg.contendFactors(), matchUser)
 	for lg.FA.Day < lg.FA.Days {
-		lg.AdvanceFreeAgency()
+		lg.advanceDay(true, matchUser)
 	}
 	order := append([]int(nil), lg.Draft.Order2...)
 	if len(order) == 0 {

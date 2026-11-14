@@ -1555,3 +1555,171 @@ func TestTeamsListAndStatus(t *testing.T) {
 	checkStatus("team page", c.call("GET", "/api/team/4", nil, 200)["status"])
 	checkStatus("trade block", c.call("GET", "/api/trade/block/4", nil, 200)["status"])
 }
+
+func TestRestrictedAndExceptionAPI(t *testing.T) {
+	c := newTC(t)
+	toDraftEnd(c)
+	lg := c.s.lg
+	u := lg.UserTeamID
+	if st := c.call("GET", "/api/state", nil, 200); num(st["pendingSheets"]) != 0 {
+		t.Fatalf("pendingSheets before FA: %v", st["pendingSheets"])
+	}
+	// an expiring young player of the user is restricted
+	young, old := lg.Teams[u].Roster[0], lg.Teams[u].Roster[1]
+	young.Contract.Years, young.Experience = 0, 1
+	old.Contract.Years, old.Experience = 0, 9
+	seen := 0
+	for _, x := range c.call("GET", "/api/contracts/expiring", nil, 200)["players"].([]any) {
+		r := x.(M)
+		b, ok := r["restricted"].(bool)
+		if !ok {
+			t.Fatalf("expiring row without restricted: %v", r)
+		}
+		if num(r["id"]) == young.ID && b || num(r["id"]) == old.ID && !b {
+			seen++
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("restricted flags wrong (%d of 2 right)", seen)
+	}
+	c.call("POST", "/api/freeagents/begin", nil, 200)
+	fa := c.call("GET", "/api/freeagents", nil, 200)
+	exc, ok := fa["exception"].(M)
+	if !ok {
+		t.Fatalf("no exception object: %v", fa["exception"])
+	}
+	for _, k := range []string{"kind", "label", "maxSalary", "maxYears", "used", "reason"} {
+		if _, ok := exc[k]; !ok {
+			t.Errorf("exception lacks %q", k)
+		}
+	}
+	if sh, ok := fa["sheets"].([]any); !ok || len(sh) != 0 {
+		t.Fatalf("sheets should be an empty list: %v", fa["sheets"])
+	}
+	row := func(fa M, id int) M {
+		for _, x := range fa["players"].([]any) {
+			if num(x.(M)["id"]) == id {
+				return x.(M)
+			}
+		}
+		return nil
+	}
+	if r := row(fa, young.ID); r == nil || r["restricted"] != true || r["mine"] != true || r["rightsTeam"].(M)["id"] == nil || num(r["minYears"]) != 1 {
+		t.Fatalf("user's restricted player row: %v", r)
+	}
+	if r := row(fa, old.ID); r == nil || r["restricted"] != false || r["rightsTeam"] != nil {
+		t.Fatalf("unrestricted row: %v", r)
+	}
+	// another team's restricted player needs two years
+	other := lg.FreeAgents[len(lg.FreeAgents)-1]
+	off := (u + 1) % len(lg.Teams)
+	lg.FA.Rights[other.ID] = (u + 2) % len(lg.Teams)
+	fa = c.call("GET", "/api/freeagents", nil, 200)
+	if r := row(fa, other.ID); r["restricted"] != true || r["mine"] != false || num(r["minYears"]) != 2 {
+		t.Fatalf("other team's restricted row: %v", r)
+	}
+	c.call("POST", "/api/freeagents/offer", M{"playerId": other.ID, "salary": engine.Cap.MinSalary, "years": 1}, 409)
+	delete(lg.FA.Rights, other.ID)
+
+	// two offer sheets against the user (built directly: rival bids are hidden)
+	if len(lg.Teams[u].Roster) > engine.RosterSize-2 {
+		lg.Teams[u].Roster = lg.Teams[u].Roster[:engine.RosterSize-2]
+	}
+	for _, p := range lg.Teams[u].Roster {
+		p.Contract = engine.Contract{Salary: 5000, Years: 2}
+	}
+	if len(lg.Teams[off].Roster) > 9 {
+		lg.Teams[off].Roster = lg.Teams[off].Roster[:9]
+	}
+	for _, p := range lg.Teams[off].Roster {
+		p.Contract = engine.Contract{Salary: engine.Cap.MinSalary, Years: 2}
+	}
+	ps := []*engine.Player{lg.FreeAgents[0], lg.FreeAgents[1]}
+	for i, p := range ps {
+		lg.FA.Rights[p.ID] = u
+		lg.FA.NextOfferID++
+		lg.FA.Offers = append(lg.FA.Offers, engine.FAOffer{ID: lg.FA.NextOfferID, Team: off, PlayerID: p.ID, Salary: 9000 + 1000*i, Years: 3, Day: 0})
+		lg.FA.Sheets = append(lg.FA.Sheets, engine.OfferSheet{PlayerID: p.ID, Team: off, Salary: 9000 + 1000*i, Years: 3, Day: 0})
+	}
+	st := c.call("GET", "/api/state", nil, 200)
+	if num(st["pendingSheets"]) != 2 {
+		t.Fatalf("pendingSheets: %v", st["pendingSheets"])
+	}
+	fa = c.call("GET", "/api/freeagents", nil, 200)
+	sheets := fa["sheets"].([]any)
+	if len(sheets) != 2 {
+		t.Fatalf("sheets: %v", sheets)
+	}
+	for _, x := range sheets {
+		r := x.(M)
+		for _, k := range []string{"playerId", "name", "pos", "age", "ovr", "pot", "team", "salary", "years", "canMatch", "problem"} {
+			if _, ok := r[k]; !ok {
+				t.Errorf("sheet lacks %q: %v", k, r)
+			}
+		}
+		if r["name"] == "" || r["canMatch"] != true || r["team"].(M)["id"] == nil {
+			t.Errorf("sheet row: %v", r)
+		}
+	}
+	// nothing moves until the sheets are answered
+	if out := c.call("POST", "/api/freeagents/day", nil, 409); !strings.Contains(out["error"].(string), "offer sheet") {
+		t.Errorf("advance error: %v", out["error"])
+	}
+	c.call("POST", "/api/offseason/finish", nil, 409)
+	c.call("POST", "/api/freeagents/sheet", M{"playerId": -5, "match": true}, 409)
+	c.call("POST", "/api/freeagents/sheet", "nope{", 400)
+
+	// match the first: he signs with the user at the sheet's terms
+	out := c.call("POST", "/api/freeagents/sheet", M{"playerId": ps[0].ID, "match": true}, 200)
+	sg := out["signings"].([]any)
+	if len(sg) != 1 || out["voided"] != false || out["state"] == nil || out["freeAgency"] == nil {
+		t.Fatalf("match response: %v", out)
+	}
+	g := sg[0].(M)
+	if g["matched"] != true || g["via"] != "own" || g["mine"] != true || g["sheetFrom"].(M)["id"] == nil || num(g["salary"]) != 9000 {
+		t.Fatalf("matched row: %v", g)
+	}
+	if ps[0].TeamID != u || num(out["state"].(M)["pendingSheets"]) != 1 {
+		t.Fatalf("after matching: team %d", ps[0].TeamID)
+	}
+	// decline the second: the offering team signs him
+	out = c.call("POST", "/api/freeagents/sheet", M{"playerId": ps[1].ID, "match": false}, 200)
+	g = out["signings"].([]any)[0].(M)
+	if g["matched"] != false || g["via"] != "room" || num(g["team"].(M)["id"]) != off || g["mine"] != false || num(out["state"].(M)["pendingSheets"]) != 0 {
+		t.Fatalf("declined row: %v", g)
+	}
+	if _, has := g["sheetFrom"]; has {
+		t.Error("sheetFrom on an unmatched signing")
+	}
+	fa = out["freeAgency"].(M)
+	log := fa["log"].([]any)
+	if len(log) < 2 || log[0].(M)["via"] == nil || log[0].(M)["matched"] == nil {
+		t.Fatalf("log rows lack matched/via: %v", log)
+	}
+	c.call("POST", "/api/freeagents/sheet", M{"playerId": ps[1].ID, "match": true}, 409)
+	c.call("POST", "/api/freeagents/day", nil, 200)
+
+	// an exception offer shows its way of signing
+	if len(lg.Teams[u].Roster) > engine.RosterSize-1 {
+		lg.Teams[u].Roster = lg.Teams[u].Roster[:engine.RosterSize-1]
+	}
+	for _, p := range lg.Teams[u].Roster {
+		p.Contract = engine.Contract{Salary: (engine.Cap.SalaryCap - 5000) / len(lg.Teams[u].Roster), Years: 2} // $5.0M of room
+	}
+	var star *engine.Player
+	for _, p := range lg.FreeAgents {
+		if _, r := lg.RightsTeam(p.ID); !r {
+			star = p
+			break
+		}
+	}
+	c.call("POST", "/api/freeagents/offer", M{"playerId": star.ID, "salary": 12000, "years": 2}, 200)
+	fa = c.call("GET", "/api/freeagents", nil, 200)
+	offers := fa["offers"].([]any)
+	if len(offers) != 1 || offers[0].(M)["via"] != "exception" {
+		t.Fatalf("exception offer: %v", offers)
+	}
+	if e := fa["exception"].(M); e["kind"] == nil {
+		t.Fatalf("exception obj: %v", e)
+	}
+}

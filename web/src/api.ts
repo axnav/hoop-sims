@@ -38,19 +38,25 @@ export type GameState = {
   expiring: number
   payroll: Payroll
   fa?: { day: number; days: number; daysLeft: number }
+  pendingSheets?: number
 }
 export type FAPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; interest: number
   ovrChange?: number; changeScope?: ChangeScope; potChange?: number
-  myOffer?: { id: number; salary: number; years: number; day: number }; injury?: Injury
+  myOffer?: { id: number; salary: number; years: number; day: number; via?: FAVia }; injury?: Injury
+  restricted?: boolean; rightsTeam?: Team; mine?: boolean; minYears?: number
 }
-export type FAOfferRow = { id: number; playerId: number; name: string; salary: number; years: number; day: number }
-export type FASigning = { day: number; playerId: number; name: string; pos: string; ovr: number; team: Team; salary: number; years: number; mine: boolean }
+export type FAVia = 'room' | 'exception' | 'minimum' | 'own'
+export type FAOfferRow = { id: number; playerId: number; name: string; salary: number; years: number; day: number; via?: FAVia }
+export type FASigning = { day: number; playerId: number; name: string; pos: string; ovr: number; team: Team; salary: number; years: number; mine: boolean; matched?: boolean; via?: string; sheetFrom?: Team }
+export type FAException = { kind: 'mid' | 'taxpayer' | 'none'; label: string; maxSalary: number; maxYears: number; used: boolean; reason: string }
+export type FASheet = { playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; team: Team; salary: number; years: number; canMatch: boolean; problem: string }
 export type FreeAgencyData = {
   open: boolean; day: number; days: number; daysLeft: number; payroll: Payroll
   rosterCount: number; rosterSize: number; minSalary: number; maxYears: number
   players: FAPlayer[]; offers: FAOfferRow[]; log: FASigning[]
+  exception?: FAException; sheets?: FASheet[]
 }
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
@@ -141,7 +147,7 @@ export type SimResult = {
 export type ExpiringPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; canReSign: boolean; problem: string
-  ovrChange?: number; changeScope?: ChangeScope; potChange?: number
+  ovrChange?: number; changeScope?: ChangeScope; potChange?: number; restricted?: boolean
 }
 export type Expiring = { players: ExpiringPlayer[]; payroll: Payroll; open: boolean }
 export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; noInSeasonDev: boolean; commissioner: boolean }
@@ -260,6 +266,7 @@ export const api = {
   freeAgents: () => get<FreeAgencyData>('/api/freeagents'),
   faBegin: () => post<{ freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/begin'),
   faOffer: (b: { playerId: number; salary: number; years: number }) => post<FreeAgencyData>('/api/freeagents/offer', b),
+  faSheet: (playerId: number, match: boolean) => post<{ signings: FASigning[]; freeAgency: FreeAgencyData; state: GameState; voided?: boolean }>('/api/freeagents/sheet', { playerId, match }),
   faWithdraw: (offerId: number) => post<FreeAgencyData>('/api/freeagents/withdraw', { offerId }),
   lineup: () => get<LineupData>('/api/lineup'),
   setLineup: (b: { starters: number[]; minutes: Record<string, number> }) => post<LineupData>('/api/lineup', b),

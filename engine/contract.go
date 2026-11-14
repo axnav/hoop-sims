@@ -53,6 +53,15 @@ var Cap = struct {
 	// Computer teams re-sign an expiring player only if his trade value to
 	// them is at least this (about a 62-rated player).
 	ReSignMinValue float64
+
+	// Mid-level exception: once per offseason a team may sign one free agent
+	// without cap room. Up to MidLevel for MidLevelYears if the payroll stays
+	// at or under the tax line; otherwise the smaller taxpayer version
+	// (TaxMidLevel, TaxMidLevelYears), which still obeys the hard ceiling.
+	MidLevel         int
+	MidLevelYears    int
+	TaxMidLevel      int
+	TaxMidLevelYears int
 }{
 	SalaryCap: 140000, TaxLine: 170000, HardCeiling: 190000,
 	MinSalary: 1200, MaxSalary: 49000,
@@ -66,6 +75,7 @@ var Cap = struct {
 
 	ContractSwing: 0.30, ContractFullYears: 4, ExpiringRebuildCut: 0.08,
 	ReSignMinValue: 4.5,
+	MidLevel:       12800, MidLevelYears: 4, TaxMidLevel: 5200, TaxMidLevelYears: 2,
 }
 
 // contractOffset is the RNG stream for contract randomness (initial contract
@@ -165,10 +175,11 @@ func (lg *League) TaxBill(teamID int) int {
 type SignKind int
 
 const (
-	SignCapRoom SignKind = iota // needs cap room
-	SignOwn                     // re-signing one's own expiring player
-	SignMinimum                 // minimum contract
-	SignDraft                   // a drafted rookie
+	SignCapRoom   SignKind = iota // needs cap room
+	SignOwn                       // re-signing one's own expiring player
+	SignMinimum                   // minimum contract
+	SignDraft                     // a drafted rookie
+	SignException                 // the once-a-year mid-level exception (see ExceptionFor)
 )
 
 // fmtM writes thousands of dollars as millions, e.g. 18200 -> "$18.2M".
@@ -196,6 +207,10 @@ func (lg *League) CanSign(teamID int, salary int, kind SignKind) error {
 			return fmt.Errorf("A minimum contract must be exactly %s.", fmtM(c.MinSalary))
 		}
 	case SignOwn:
+	case SignException:
+		if err := lg.exceptionProblem(teamID, salary, 0); err != nil {
+			return err
+		}
 	case SignDraft:
 		// Draft picks always sign, even past the hard ceiling (the rookie scale
 		// is small and the roster is trimmed afterwards), so no ceiling check.
@@ -221,6 +236,8 @@ func (lg *League) Sign(teamID int, p *Player, salary, years int, kind SignKind) 
 	t := lg.Teams[teamID]
 	onTeam := lg.findRosterPlayer(teamID, p.ID) != nil
 	switch {
+	case kind == SignOwn && !onTeam && p.TeamID < 0 && lg.FA != nil && lg.FA.Rights[p.ID] == teamID:
+		// a restricted free agent signing with the team that holds his rights
 	case kind == SignOwn:
 		if !onTeam || p.Contract.Years > 0 {
 			return fmt.Errorf("%s is not an expiring player of %s.", p.Name, t.FullName())
@@ -235,8 +252,88 @@ func (lg *League) Sign(teamID int, p *Player, salary, years int, kind SignKind) 
 	if err := lg.CanSign(teamID, salary, kind); err != nil {
 		return err
 	}
+	if kind == SignException {
+		if err := lg.exceptionProblem(teamID, salary, years); err != nil {
+			return err
+		}
+		t.ExceptionYear = lg.Year
+	}
 	lg.forceSign(teamID, p, salary, years)
 	return nil
+}
+
+// ExceptionInfo describes the mid-level exception a team could use right now.
+// Kind is "mid", "taxpayer" or "none" (Reason says why). MaxSalary and
+// MaxYears are for a signing at the largest allowed amount.
+type ExceptionInfo struct {
+	Kind      string
+	Label     string
+	MaxSalary int
+	MaxYears  int
+	Used      bool
+	Reason    string
+}
+
+// exceptionUsed is true once the team has used its exception this offseason.
+func (lg *League) exceptionUsed(teamID int) bool {
+	return lg.Teams[teamID].ExceptionYear == lg.Year
+}
+
+// exceptionProblem checks a signing under the exception (years 0 = skip the
+// years check). It does not check the hard ceiling (CanSign does).
+func (lg *League) exceptionProblem(teamID, salary, years int) error {
+	c := &Cap
+	name := lg.Teams[teamID].FullName()
+	if lg.exceptionUsed(teamID) {
+		return fmt.Errorf("%s have already used their exception this offseason.", name)
+	}
+	if lg.Payroll(teamID)+salary <= c.TaxLine {
+		if salary > c.MidLevel {
+			return fmt.Errorf("The mid-level exception is at most %s.", fmtM(c.MidLevel))
+		}
+		if years > c.MidLevelYears {
+			return fmt.Errorf("The mid-level exception allows at most %d years.", c.MidLevelYears)
+		}
+		return nil
+	}
+	if salary > c.TaxMidLevel {
+		return fmt.Errorf("Over the tax line only the taxpayer exception works: at most %s for %d years.", fmtM(c.TaxMidLevel), c.TaxMidLevelYears)
+	}
+	if years > c.TaxMidLevelYears {
+		return fmt.Errorf("The taxpayer exception allows at most %d years.", c.TaxMidLevelYears)
+	}
+	return nil
+}
+
+// ExceptionFor says which exception, if any, the team can use now. It is
+// "none" when it was used this offseason, when cap room is at least as big as
+// the exception (use the room), or when even the taxpayer amount would break
+// the hard ceiling.
+func (lg *League) ExceptionFor(teamID int) ExceptionInfo {
+	c := &Cap
+	if teamID < 0 || teamID >= len(lg.Teams) {
+		return ExceptionInfo{Kind: "none", Label: "No exception", Reason: "That is not a valid team."}
+	}
+	pay := lg.Payroll(teamID)
+	none := func(reason string, used bool) ExceptionInfo {
+		return ExceptionInfo{Kind: "none", Label: "No exception", Used: used, Reason: reason}
+	}
+	if lg.exceptionUsed(teamID) {
+		return none("Already used this offseason.", true)
+	}
+	var info ExceptionInfo
+	switch {
+	case pay+c.MidLevel <= c.TaxLine:
+		info = ExceptionInfo{Kind: "mid", Label: "Mid-level exception", MaxSalary: c.MidLevel, MaxYears: c.MidLevelYears}
+	case pay+c.TaxMidLevel <= c.HardCeiling:
+		info = ExceptionInfo{Kind: "taxpayer", Label: "Taxpayer mid-level exception", MaxSalary: c.TaxMidLevel, MaxYears: c.TaxMidLevelYears}
+	default:
+		return none("Payroll is too close to the hard ceiling for any exception.", false)
+	}
+	if lg.CapRoom(teamID) >= info.MaxSalary {
+		return none("Cap room is at least as big as the exception; sign with cap room.", false)
+	}
+	return info
 }
 
 // forceSign does the signing without any rule check.
