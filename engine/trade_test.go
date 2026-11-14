@@ -11,6 +11,13 @@ import (
 func tradeLeague(seed uint64) *League {
 	lg := GenerateLeague(seed)
 	lg.UserTeamID = 0
+	// Halve every salary so all teams have cap room: the older trade tests are
+	// about value, not salary matching (contract_test.go covers that).
+	for _, t := range lg.Teams {
+		for _, p := range t.Roster {
+			p.Contract.Salary = max(Cap.MinSalary, p.Contract.Salary/2/100*100)
+		}
+	}
 	lg.Season = lg.StartSeason()
 	return lg
 }
@@ -150,6 +157,7 @@ func TestTradeWindow(t *testing.T) {
 func TestTradeSaveLoad(t *testing.T) {
 	lg := tradeLeague(5)
 	mine, theirs := sortedByOvr(lg.Teams[0]), sortedByOvr(lg.Teams[7])
+	theirs[12].Contract.Salary = mine[0].Contract.Salary // salaries must match for the trade to be legal
 	if _, err := ExecuteTrade(lg, TradeOffer{0, 7, []int{mine[0].ID}, []int{theirs[12].ID}}); err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +226,7 @@ func TestRealTrades(t *testing.T) {
 	lg.Season = lg.StartSeason()
 	mine := sortedByOvr(lg.Teams[0])
 	theirs := sortedByOvr(lg.Teams[4])
+	theirs[0].Contract.Salary = mine[len(mine)-1].Contract.Salary // keep this about value, not salary matching
 	v := EvaluateTrade(lg, TradeOffer{0, 4, []int{mine[len(mine)-1].ID}, []int{theirs[0].ID}})
 	if !v.Valid || v.Accept {
 		t.Fatalf("star for scrub: %+v", v)

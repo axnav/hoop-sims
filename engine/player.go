@@ -55,6 +55,9 @@ type Player struct {
 	// The game sim uses it; the interface never shows it directly.
 	Impact int
 
+	// Contract is the player's deal (see contract.go); zero for free agents.
+	Contract Contract
+
 	// Injury is the current injury; nil means healthy (see injury.go).
 	Injury *Injury `json:",omitempty"`
 }

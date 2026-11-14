@@ -165,7 +165,7 @@ func tradeValue(p *Player, contend float64, others []*Player) float64 {
 	if n <= 2 {
 		v *= 1.05 // fills a thin position
 	}
-	return v
+	return v * contractAdjust(p, contend)
 }
 
 // TradeValue is a player's worth to a team from visible data only, with the
@@ -311,6 +311,12 @@ func EvaluateTrade(lg *League, offer TradeOffer) TradeVerdict {
 	if d := len(offer.Get) - len(offer.Give); d > len(lg.FreeAgents) || -d > len(lg.FreeAgents) {
 		return bad("Not enough free agents to fill the short roster.")
 	}
+	if err := lg.salaryProblem(offer.FromTeam, give, get); err != nil {
+		return bad(err.Error())
+	}
+	if err := lg.salaryProblem(offer.ToTeam, get, give); err != nil {
+		return bad(err.Error())
+	}
 	cf := lg.contendFactors()
 	gives, gets, need := lg.sideEval(offer.ToTeam, get, give, cf)
 	yg, yt, _ := lg.sideEval(offer.FromTeam, give, get, cf)
@@ -442,8 +448,8 @@ func (lg *League) fixRosters(tids []int, res *TradeResult) {
 				return t.Roster[i].ID < t.Roster[j].ID
 			})
 			for _, p := range t.Roster[RosterSize:] {
-				p.TeamID = -1
-				lg.FreeAgents = append(lg.FreeAgents, p)
+				// Simplification: a released player's contract just ends (no dead money).
+				lg.releaseToFA(p)
 				res.Released = append(res.Released, TxPlayer{p.ID, p.Name, tid, -1})
 			}
 			t.Roster = t.Roster[:RosterSize]
@@ -462,9 +468,9 @@ func (lg *League) fixRosters(tids []int, res *TradeResult) {
 				}
 			}
 			p := lg.FreeAgents[bi]
-			lg.FreeAgents = append(lg.FreeAgents[:bi], lg.FreeAgents[bi+1:]...)
-			p.TeamID = tid
-			t.Roster = append(t.Roster, p)
+			// A free agent signed to fill a roster gets a one-year minimum deal
+			// (even past the hard ceiling, so a roster can always be filled).
+			lg.forceSign(tid, p, Cap.MinSalary, 1)
 			res.Signed = append(res.Signed, TxPlayer{p.ID, p.Name, -1, tid})
 		}
 	}
@@ -544,7 +550,9 @@ func (lg *League) SimAITrades(r *RNG) []TradeResult {
 		for _, c := range cands {
 			ga, gt, na := lg.sideEval(c.ta, []*Player{c.a}, []*Player{c.b}, cf)
 			ha, ht, nb := lg.sideEval(c.tb, []*Player{c.b}, []*Player{c.a}, cf)
-			if gt >= ga*na && ht >= ha*nb {
+			if gt >= ga*na && ht >= ha*nb &&
+				lg.salaryProblem(c.ta, []*Player{c.a}, []*Player{c.b}) == nil &&
+				lg.salaryProblem(c.tb, []*Player{c.b}, []*Player{c.a}) == nil {
 				valid = append(valid, c)
 				if len(valid) == 6 {
 					break

@@ -105,7 +105,7 @@ func TestLoadVersion1SaveGetsPicks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 2 || len(got.Picks) != 30*2*PickYearsAhead {
+	if got.Version != SaveVersion || len(got.Picks) != 30*2*PickYearsAhead {
 		t.Errorf("version %d, picks %d", got.Version, len(got.Picks))
 	}
 }

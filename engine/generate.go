@@ -83,6 +83,8 @@ type Team struct {
 	City   string
 	Name   string
 	Roster []*Player
+	// TaxPaid is the luxury tax the team paid, by season year (contract.go).
+	TaxPaid map[int]int `json:",omitempty"`
 }
 
 func (t *Team) FullName() string { return t.City + " " + t.Name }
@@ -199,6 +201,7 @@ func GenerateLeague(seed uint64) *League {
 	lg.NextID = id
 	lg.dealEvenly()
 	lg.initPicks()
+	lg.assignInitialContracts()
 	return lg
 }
 

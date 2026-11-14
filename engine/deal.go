@@ -247,6 +247,23 @@ func ValidateDeal(lg *League, deal Deal, userTeam int) error {
 	if !inDeal {
 		return fmt.Errorf("Deals must include your team.")
 	}
+	for _, t := range order {
+		var out, in []*Player
+		for _, m := range deal.Moves {
+			if m.Kind != PlayerAsset {
+				continue
+			}
+			if m.From == t {
+				out = append(out, lg.findRosterPlayer(m.From, m.PlayerID))
+			}
+			if m.To == t {
+				in = append(in, lg.findRosterPlayer(m.From, m.PlayerID))
+			}
+		}
+		if err := lg.salaryProblem(t, out, in); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

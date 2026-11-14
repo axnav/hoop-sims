@@ -72,6 +72,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	rep := &OffseasonReport{Year: lg.Year}
 	r := lg.dayRNG(lg.Year, offseasonOffset)
 	lg.recordSeason()
+	lg.recordTax()
 
 	// Progression.
 	before := map[int]int{}
@@ -98,6 +99,13 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 		t.Roster = keep(t.Roster)
 	}
 	lg.FreeAgents = keep(lg.FreeAgents)
+	// Contracts: one season used up. Players now at 0 years are expiring; they
+	// stay on the roster until FinishOffseason.
+	for _, t := range lg.Teams {
+		for _, p := range t.Roster {
+			p.Contract.Years = max(0, p.Contract.Years-1)
+		}
+	}
 	sort.SliceStable(rep.Retirements, func(i, j int) bool { return rep.Retirements[i].Overall > rep.Retirements[j].Overall })
 
 	// Risers and fallers.
@@ -186,6 +194,8 @@ func (lg *League) DraftPick(playerID int) error {
 	d.Made++
 	p.DraftPick = d.Made
 	p.TeamID = tid
+	round := (d.Made-1)/len(d.Order) + 1
+	p.Contract = RookieContract(d.Made, round) // draft picks always sign (see CanSign)
 	lg.Teams[tid].Roster = append(lg.Teams[tid].Roster, p)
 	pr := PickResult{d.Made, (d.Made-1)/len(d.Order) + 1, tid, p.ID, p.Name, p.Age, p.Overall(), p.Potential}
 	d.Results = append(d.Results, pr)
@@ -216,13 +226,17 @@ func (lg *League) FinishOffseason() {
 	lg.Draft = nil
 	lg.rollPicks(lg.Year)
 
+	// Contracts: computer teams re-sign who is worth it, then every player
+	// still expiring (the user's too) goes to free agency.
+	lg.reSignComputerTeams()
+	lg.releaseExpiring()
+
 	// Rosters: trim to 13, then fill from free agents.
 	for _, t := range lg.Teams {
 		sort.SliceStable(t.Roster, func(i, j int) bool { return keepScore(t.Roster[i]) > keepScore(t.Roster[j]) })
 		if len(t.Roster) > RosterSize {
 			for _, p := range t.Roster[RosterSize:] {
-				p.TeamID = -1
-				lg.FreeAgents = append(lg.FreeAgents, p)
+				lg.releaseToFA(p) // contract ends, no dead money
 			}
 			t.Roster = t.Roster[:RosterSize]
 		}
@@ -241,9 +255,7 @@ func (lg *League) FinishOffseason() {
 		for len(t.Roster) < RosterSize && len(lg.FreeAgents) > 0 {
 			sortFA()
 			p := lg.FreeAgents[0]
-			lg.FreeAgents = lg.FreeAgents[1:]
-			p.TeamID = tid
-			t.Roster = append(t.Roster, p)
+			lg.signFromPool(tid, p)
 		}
 	}
 	sortFA()

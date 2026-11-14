@@ -12,7 +12,7 @@ const SavePath = "saves/league.json"
 
 // SaveVersion is the current save format. Bump it and append one step to
 // saveUpgrades whenever a saved field is added or changes meaning.
-const SaveVersion = 2
+const SaveVersion = 3
 
 // saveUpgrades[i] upgrades a league from version i to version i+1.
 var saveUpgrades = []func(*League){
@@ -27,6 +27,17 @@ var saveUpgrades = []func(*League){
 		if len(lg.Picks) == 0 {
 			lg.initPicks()
 		}
+	},
+	// 2 -> 3: contracts and the salary cap; give everyone a contract if none has one.
+	func(lg *League) {
+		for _, t := range lg.Teams {
+			for _, p := range t.Roster {
+				if p.Contract.Years > 0 {
+					return
+				}
+			}
+		}
+		lg.assignInitialContracts()
 	},
 }
 
