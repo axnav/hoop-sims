@@ -36,10 +36,21 @@ type OffseasonReport struct {
 // Draft is a draft in progress. Picks are made one at a time.
 type Draft struct {
 	Pool    []*Player
-	Order   []int // original team IDs for one round, first pick first (each pick's owner selects)
+	Order   []int // round 1: original team IDs, first pick first (lottery applied; each pick's owner selects)
+	Order2  []int // round 2: original team IDs, worst record first (no lottery)
 	Made    int   // picks made so far
 	Total   int
 	Results []PickResult
+
+	// Lottery is the first-round lottery outcome, for the screens.
+	Lottery []LotteryRow
+
+	// Scouting (see scouting.go): fixed per-prospect errors in [-1, 1], the
+	// user's points left and each prospect's scouting level (0..3).
+	OvrErr      map[int]float64
+	PotErr      map[int]float64
+	ScoutPoints int
+	ScoutLevel  map[int]int
 }
 
 func (lg *League) allPlayers() []*Player {
@@ -145,7 +156,9 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
 		order[i], order[j] = order[j], order[i]
 	}
-	lg.Draft = &Draft{Pool: pool, Order: order, Total: c.DraftSize}
+	o1, lot := lg.lotteryOrder(lg.dayRNG(lg.Year, lotteryOffset), order, s.MadePlayoffs)
+	lg.Draft = &Draft{Pool: pool, Order: o1, Order2: order, Lottery: lot, Total: c.DraftSize}
+	lg.initScouting(lg.Draft)
 	lg.Report = rep
 	return rep
 }
@@ -158,11 +171,24 @@ func draftScore(p *Player) float64 {
 // DraftDone reports whether every pick has been made (or no draft is running).
 func (lg *League) DraftDone() bool { return lg.Draft == nil || lg.Draft.Made >= lg.Draft.Total }
 
+// slot returns the original team and round of the i-th pick (0-based).
+func (d *Draft) slot(i int) (orig, round int) {
+	n := len(d.Order)
+	if i < n {
+		return d.Order[i], 1
+	}
+	o := d.Order2
+	if len(o) != n {
+		o = d.Order
+	}
+	return o[(i-n)%n], 2
+}
+
 // DraftOnClock returns the team ID about to pick.
 func (lg *League) DraftOnClock() int {
 	d := lg.Draft
-	orig := d.Order[d.Made%len(d.Order)]
-	round := d.Made/len(d.Order) + 1
+	lg.ensureDraft()
+	orig, round := d.slot(d.Made)
 	// Order gives the slot (by original team); the pick's owner selects.
 	if owner, ok := lg.PickOwner(lg.Year, round, orig); ok {
 		return owner
@@ -177,14 +203,11 @@ func (lg *League) DraftPick(playerID int) error {
 	if lg.DraftDone() {
 		return fmt.Errorf("draft is finished")
 	}
+	lg.ensureDraft()
+	tid := lg.DraftOnClock()
 	bi := -1
 	if playerID < 0 {
-		bi = 0
-		for i, p := range d.Pool {
-			if draftScore(p) > draftScore(d.Pool[bi]) {
-				bi = i
-			}
-		}
+		bi = lg.autoChoice(tid)
 	} else {
 		for i, p := range d.Pool {
 			if p.ID == playerID {
@@ -195,16 +218,15 @@ func (lg *League) DraftPick(playerID int) error {
 			return fmt.Errorf("player %d is not available", playerID)
 		}
 	}
-	tid := lg.DraftOnClock()
 	p := d.Pool[bi]
 	d.Pool = append(d.Pool[:bi], d.Pool[bi+1:]...)
 	d.Made++
 	p.DraftPick = d.Made
 	p.TeamID = tid
-	round := (d.Made-1)/len(d.Order) + 1
+	_, round := d.slot(d.Made - 1)
 	p.Contract = RookieContract(d.Made, round) // draft picks always sign (see CanSign)
 	lg.Teams[tid].Roster = append(lg.Teams[tid].Roster, p)
-	pr := PickResult{d.Made, (d.Made-1)/len(d.Order) + 1, tid, p.ID, p.Name, p.Age, p.Overall(), p.Potential}
+	pr := PickResult{d.Made, round, tid, p.ID, p.Name, p.Age, p.Overall(), p.Potential}
 	d.Results = append(d.Results, pr)
 	lg.Report.Draft = append(lg.Report.Draft, pr)
 	return nil
@@ -238,7 +260,10 @@ func (lg *League) FinishOffseason() {
 	for lg.FA.Day < lg.FA.Days {
 		lg.AdvanceFreeAgency()
 	}
-	order := append([]int(nil), lg.Draft.Order...)
+	order := append([]int(nil), lg.Draft.Order2...)
+	if len(order) == 0 {
+		order = append(order, lg.Draft.Order...)
+	}
 	lg.Draft = nil
 	lg.FA = nil
 	lg.rollPicks(lg.Year)

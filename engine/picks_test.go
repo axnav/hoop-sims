@@ -24,8 +24,13 @@ func TestDraftOrderMatchesStandings(t *testing.T) {
 	lg := finishedSeasonLeague(4)
 	st := lg.Season.Standings()
 	lg.BeginOffseason()
+	d := lg.Draft
 	for i := 0; i < 60; i++ {
-		want := st[len(st)-1-i%30]
+		// Round 1 follows the lottery order; round 2 is pure worst-record-first.
+		want := d.Order[i%30]
+		if i >= 30 {
+			want = st[len(st)-1-i%30]
+		}
 		if got := lg.DraftOnClock(); got != want {
 			t.Fatalf("pick %d: team %d, want %d", i+1, got, want)
 		}
@@ -41,14 +46,24 @@ func TestTransferredPickSelects(t *testing.T) {
 		t.Fatal(err)
 	}
 	lg.BeginOffseason()
+	// The pick sits in whatever slot the lottery gave the original team.
+	slot := -1
+	for i, o := range lg.Draft.Order {
+		if o == first {
+			slot = i
+		}
+	}
+	for i := 0; i < slot; i++ {
+		lg.DraftPick(-1)
+	}
 	if got := lg.DraftOnClock(); got != buyer {
 		t.Errorf("on clock %d, want new owner %d", got, buyer)
 	}
 	lg.DraftPick(-1)
-	if got := lg.Report.Draft[0].TeamID; got != buyer {
+	if got := lg.Report.Draft[slot].TeamID; got != buyer {
 		t.Errorf("result team %d, want %d", got, buyer)
 	}
-	for i := 1; i < 30; i++ {
+	for i := slot + 1; i < 30; i++ {
 		lg.DraftPick(-1)
 	}
 	if got := lg.DraftOnClock(); got != first {

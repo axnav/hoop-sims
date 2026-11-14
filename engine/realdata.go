@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/csv"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"os"
 	"path/filepath"
@@ -33,6 +34,13 @@ type RealTuningT struct {
 
 	UsageInside, UsageMid, UsageThree, UsagePlay float64
 	RookieDrop                                   float64
+
+	// PotentialBlurSD is the standard deviation (rating points) of a normal
+	// draw added to a young real player's or prospect's hindsight ceiling, so
+	// the same real players do not become stars in every league. The draw is
+	// per player and per league seed (own stream, independent of everything
+	// else). 0 gives the exact hindsight peaks.
+	PotentialBlurSD float64
 }
 
 var RealTuning = RealTuningT{
@@ -41,7 +49,7 @@ var RealTuning = RealTuningT{
 	BoxWeight: 0.4, ImpactK: 1.0, ImpactMax: 5,
 	ValBPM: 0.6, ValWS48: 0.3, ValPER: 0.1,
 	UsageInside: 30, UsageMid: 22, UsageThree: 22, UsagePlay: 8,
-	RookieDrop: 4,
+	RookieDrop: 4, PotentialBlurSD: 4.0,
 }
 
 // ---------------------------------------------------------------- loading
@@ -708,7 +716,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 		}
 		p.Potential = rp.Overall
 		if p.Age < PotentialEqual() {
-			p.Potential = clamp(d.hindsightPeak(pid, season, rp.Overall), 25, 99)
+			p.Potential = clamp(blurPotential(seed, pid, d.hindsightPeak(pid, season, rp.Overall)), rp.Overall, 99)
 		}
 		return p
 	}
@@ -771,7 +779,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 		pks := years[y]
 		sort.SliceStable(pks, func(i, j int) bool { return pks[i].pick < pks[j].pick })
 		for _, pk := range pks {
-			p := d.prospect(r, pk, y)
+			p := d.prospect(r, seed, pk, y)
 			p.ID = nextID
 			nextID++
 			lg.DraftClasses[y] = append(lg.DraftClasses[y], p)
@@ -783,6 +791,20 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 	return lg, nil
 }
 
+// blurPotential adds the league's uncertainty to a hindsight ceiling. The draw
+// depends only on (league seed, player), so it is the same whatever order
+// players are built in.
+func blurPotential(seed uint64, pid string, peak int) int {
+	sd := RealTuning.PotentialBlurSD
+	if sd == 0 {
+		return peak
+	}
+	h := fnv.New64a()
+	h.Write([]byte(pid))
+	r := NewRNG(mix64(seed, 0xB1A5, h.Sum64()))
+	return peak + round(r.Normal(0, sd))
+}
+
 // PotentialEqual is the age from which Potential equals Overall.
 func PotentialEqual() int { return Progression.PotentialEqualAge }
 
@@ -792,7 +814,7 @@ func usageFromPercentile(p float64) int {
 	return clamp(30+round(p*60), 25, 90)
 }
 
-func (d *realData) prospect(r *RNG, pk draftPick, year int) *Player {
+func (d *realData) prospect(r *RNG, seed uint64, pk draftPick, year int) *Player {
 	ci := d.career[pk.pid]
 	age := 20
 	if ci.birthYear > 0 {
@@ -817,7 +839,7 @@ func (d *realData) prospect(r *RNG, pk draftPick, year int) *Player {
 	rp := d.rate(row, RealTuning.RookieDrop)
 	p.Pos, p.AltPos, p.Ratings, p.Impact = rp.Pos, rp.Alt, rp.Ratings, rp.Impact
 	p.UsageTendency = usageFromPercentile(d.model(first).usg.pct(row.usg))
-	p.Potential = clamp(d.hindsightPeak(pk.pid, first, p.Overall()), p.Overall(), 99)
+	p.Potential = clamp(blurPotential(seed, pk.pid, d.hindsightPeak(pk.pid, first, p.Overall())), p.Overall(), 99)
 	return p
 }
 

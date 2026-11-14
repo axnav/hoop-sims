@@ -96,3 +96,76 @@ func TestRealLeagueSeasonDeterministic(t *testing.T) {
 		t.Fatalf("year = %d", a.Year)
 	}
 }
+
+func realPotentials(lg *League) map[string][2]int {
+	out := map[string][2]int{}
+	for _, p := range lg.allPlayers() {
+		out[p.RealID] = [2]int{p.Potential, p.Overall()}
+	}
+	for _, cls := range lg.DraftClasses {
+		for _, p := range cls {
+			out[p.RealID] = [2]int{p.Potential, p.Overall()}
+		}
+	}
+	return out
+}
+
+func TestPotentialBlur(t *testing.T) {
+	old := RealTuning.PotentialBlurSD
+	defer func() { RealTuning.PotentialBlurSD = old }()
+
+	RealTuning.PotentialBlurSD = 0
+	l1, l2 := realLeagueOrSkip(t, 1), realLeagueOrSkip(t, 2)
+	z1, z2 := realPotentials(l1), realPotentials(l2)
+	// (A prospect with no stat row gets seeded random ratings: not compared.)
+	for _, p := range l1.allPlayers() {
+		id, v := p.RealID, z1[p.RealID]
+		if z2[id] != v {
+			t.Fatalf("blur 0 differs across seeds for %s", id)
+		}
+	}
+
+	RealTuning.PotentialBlurSD = 4
+	lg1 := realLeagueOrSkip(t, 1)
+	a, a2, b := realPotentials(lg1), realPotentials(realLeagueOrSkip(t, 1)), realPotentials(realLeagueOrSkip(t, 2))
+	diffYoung := 0
+	for id, v := range a {
+		if a2[id] != v {
+			t.Fatalf("same seed differs for %s", id)
+		}
+		if v[0] < v[1] || v[0] > 99 || v[0] < 25 {
+			t.Fatalf("%s potential %d vs overall %d", id, v[0], v[1])
+		}
+		if v[0] != z1[id][0] {
+			diffYoung++
+		}
+	}
+	if diffYoung == 0 {
+		t.Error("blur changed nothing")
+	}
+	changed := 0
+	for id, v := range a {
+		if b[id][0] != v[0] {
+			changed++
+		}
+	}
+	if changed == 0 {
+		t.Error("different seeds gave the same potentials")
+	}
+	// Players 27 and older are untouched.
+	for _, p := range lg1.allPlayers() {
+		if p.Age >= PotentialEqual() && (a[p.RealID] != b[p.RealID] || p.Potential != p.Overall()) {
+			t.Fatalf("%s (age %d) was blurred", p.Name, p.Age)
+		}
+	}
+	// A well-known young player across three seeds.
+	for _, p := range lg1.allPlayers() {
+		if p.Name == "Blake Griffin" {
+			t.Logf("Blake Griffin potential: hindsight %d", z1[p.RealID][0])
+			for _, s := range []uint64{1, 2, 3} {
+				RealTuning.PotentialBlurSD = 4
+				t.Logf("seed %d: %d", s, realPotentials(realLeagueOrSkip(t, s))[p.RealID][0])
+			}
+		}
+	}
+}
