@@ -77,6 +77,14 @@ type DealTeamVerdict struct {
 	Reason      string
 	Gives, Gets float64
 	Needed      float64
+
+	// Negotiation (negotiate.go). Mood is "accept", "close", "far" or "no".
+	// When the team does not accept, Ask is the cheapest single extra asset
+	// from the user's team that would make it accept (nil if none is enough)
+	// and AskText says so in a plain sentence.
+	Mood    string
+	Ask     *Asset
+	AskText string
 }
 
 // DealVerdict is the answer to a whole deal. Valid is false (with Problem set)
@@ -261,6 +269,18 @@ func dealTeams(deal Deal) []int {
 // vs value out, times the margin; more if it gives up a core player), with
 // draft picks valued by PickValueFor.
 func EvaluateDeal(lg *League, deal Deal, userTeam int) DealVerdict {
+	v := evaluateDealBase(lg, deal, userTeam)
+	if v.Valid {
+		cf := lg.contendFactors()
+		for i := range v.Teams {
+			lg.negotiate(&v.Teams[i], deal, userTeam, cf)
+		}
+	}
+	return v
+}
+
+// evaluateDealBase is EvaluateDeal without the negotiation fields.
+func evaluateDealBase(lg *League, deal Deal, userTeam int) DealVerdict {
 	if err := ValidateDeal(lg, deal, userTeam); err != nil {
 		return DealVerdict{Problem: err.Error()}
 	}
@@ -330,7 +350,7 @@ func EvaluateDeal(lg *League, deal Deal, userTeam int) DealVerdict {
 // ExecuteDeal validates and evaluates the deal and, if every computer team
 // accepts, carries it out and logs it in lg.Transactions.
 func ExecuteDeal(lg *League, deal Deal, userTeam int) (TradeResult, error) {
-	v := EvaluateDeal(lg, deal, userTeam)
+	v := evaluateDealBase(lg, deal, userTeam)
 	if !v.Valid {
 		return TradeResult{}, fmt.Errorf("%s", v.Problem)
 	}

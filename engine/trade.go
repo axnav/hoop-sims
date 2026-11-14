@@ -10,7 +10,7 @@ import (
 const (
 	TradeMargin        = 0.05 // the computer needs to receive 5% more value than it gives
 	UntouchableMargin  = 0.25 // ... and 25% more to move one of its top 2 players
-	TradeDeadlineDay   = 55   // trades are open while at most this many days are played
+	TradeDeadlineDay   = 50   // trades are open while at most this many days are played (about 50 of 82 games)
 	MaxTradePlayers    = 3    // players per side
 	tradeOffset        = 7000 // RNG stream for offseason AI trades (see FinishOffseason)
 	MidSeasonTradeStep = 7500 // suggested RNG offset for a mid-season SimAITrades call

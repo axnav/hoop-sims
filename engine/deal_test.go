@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -196,7 +197,7 @@ func TestDealDeterministic(t *testing.T) {
 	theirs := sortedByOvr(lg.Teams[5])
 	d := Deal{[]Move{pk(0, 5, lg.Year, 1, 0), pl(5, 0, theirs[4].ID)}}
 	a, b := EvaluateDeal(lg, d, 0), EvaluateDeal(lg, d, 0)
-	if len(a.Teams) != 1 || a.Teams[0] != b.Teams[0] || a.Accept != b.Accept {
+	if len(a.Teams) != 1 || !reflect.DeepEqual(a.Teams[0], b.Teams[0]) || a.Accept != b.Accept {
 		t.Fatalf("%+v vs %+v", a, b)
 	}
 }

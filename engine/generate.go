@@ -150,6 +150,17 @@ type League struct {
 
 	// Transactions is the log of executed trades, oldest first.
 	Transactions []TradeResult `json:",omitempty"`
+
+	// Proposals are trade offers from computer teams waiting for the user
+	// (negotiate.go). NextProposalID numbers them. DeadlineStopYear is the
+	// season in which the deadline pause already fired. All zero in old saves.
+	Proposals        []Proposal `json:",omitempty"`
+	NextProposalID   int        `json:",omitempty"`
+	DeadlineStopYear int        `json:",omitempty"`
+	Options          Options
+
+	// newProposals counts proposals created on the most recent SimDay (not saved).
+	newProposals int
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

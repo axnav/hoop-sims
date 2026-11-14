@@ -180,6 +180,7 @@ func (lg *League) SimDay() bool {
 	if s.Done() {
 		return false
 	}
+	lg.newProposals = 0
 	r := lg.dayRNG(s.Year, s.Day)
 	for i := s.Day * GamesPerDay; i < (s.Day+1)*GamesPerDay; i++ {
 		g := &s.Games[i]
@@ -201,6 +202,7 @@ func (lg *League) SimDay() bool {
 	if s.Done() {
 		s.computeAwards()
 	}
+	lg.updateProposals()
 	return true
 }
 

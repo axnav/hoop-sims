@@ -123,7 +123,7 @@ func TestTradeWindow(t *testing.T) {
 	}
 	lg.Season.Day = TradeDeadlineDay
 	if ok, _ := TradeWindowOpen(lg); !ok {
-		t.Fatal("closed on day 55")
+		t.Fatal("closed on the deadline day")
 	}
 	lg.Season.Day = TradeDeadlineDay + 1
 	ok, why := TradeWindowOpen(lg)
