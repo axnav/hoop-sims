@@ -50,6 +50,18 @@ type TradeResult struct {
 	Moved        []TxPlayer
 	Released     []TxPlayer
 	Signed       []TxPlayer
+
+	// Added by deals (deal.go). Empty for plain two-team player trades, so old
+	// saves load unchanged. Teams lists every team in a deal (TeamA and TeamB
+	// are the first two); Picks lists the draft picks that changed hands.
+	Teams []int    `json:",omitempty"`
+	Picks []TxPick `json:",omitempty"`
+}
+
+// TxPick is a draft pick in a transaction (From/To are team IDs).
+type TxPick struct {
+	Year, Round, Original int
+	From, To              int
 }
 
 // TradeAsset is a player on a team's trade block.
@@ -400,8 +412,17 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 	for _, p := range get {
 		p.TeamID = a
 	}
+	lg.fixRosters([]int{a, b}, &res)
+	lg.Transactions = append(lg.Transactions, res)
+	return res
+}
+
+// fixRosters trims any listed team above RosterSize (releasing its least
+// valuable players to free agency) and fills any below it from the free
+// agents, recording both in res.
+func (lg *League) fixRosters(tids []int, res *TradeResult) {
 	cf := lg.contendFactors()
-	for _, tid := range []int{a, b} {
+	for _, tid := range tids {
 		t := lg.Teams[tid]
 		if len(t.Roster) > RosterSize {
 			sort.SliceStable(t.Roster, func(i, j int) bool {
@@ -433,8 +454,6 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 			res.Signed = append(res.Signed, TxPlayer{p.ID, p.Name, -1, tid})
 		}
 	}
-	lg.Transactions = append(lg.Transactions, res)
-	return res
 }
 
 // ExecuteTrade re-validates the offer, requires the computer team to accept
