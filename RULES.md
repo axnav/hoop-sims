@@ -54,7 +54,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
    | 60000 | Draft lottery |
    | 70000 to 70004 | Scouting errors, computer draft noise, repair of old mid-draft saves |
 
-   Take the next free ten-thousand (80000) for a new feature and add it here and to
+   | 80000 + step | In-season development (hashed per player, steps 1 to 4) |
+
+   Take the next free ten-thousand (90000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

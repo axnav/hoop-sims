@@ -167,11 +167,11 @@ func (s *server) player(r *http.Request) (any, error) {
 	}
 	addInjury(out, p)
 	addContract(out, p)
-	if !s.inPool(p.ID) && p.Dev != nil {
+	if d, _ := devChange(p); !s.inPool(p.ID) && d != nil {
 		addDev(out, p)
 		rc := M{}
 		for _, k := range engine.RatingKeys() {
-			v, _ := engine.GetRating(p.Dev.Ratings, k.Key)
+			v, _ := engine.GetRating(d.Ratings, k.Key)
 			rc[k.Key] = v
 		}
 		out["ratingChanges"] = rc

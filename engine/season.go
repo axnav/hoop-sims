@@ -182,6 +182,7 @@ func (lg *League) SimDay() bool {
 	}
 	lg.newProposals = 0
 	lg.newInjuries = nil
+	lg.newDev = nil
 	ir := lg.dayRNG(s.Year, injuryOffset+s.Day)
 	r := lg.dayRNG(s.Year, s.Day)
 	for i := s.Day * GamesPerDay; i < (s.Day+1)*GamesPerDay; i++ {
@@ -203,6 +204,9 @@ func (lg *League) SimDay() bool {
 		lg.afterGame(ir, res)
 	}
 	s.Day++
+	if c := &Progression; !lg.Options.NoInSeasonDev && s.Day%c.InSeasonEvery == 0 && s.Day/c.InSeasonEvery <= c.InSeasonSteps {
+		lg.inSeasonDev(s.Day / c.InSeasonEvery)
+	}
 	if s.Done() {
 		s.computeAwards()
 	}

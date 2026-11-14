@@ -172,7 +172,7 @@ Written 2026-11-14 from the main session's general knowledge of console franchis
 
 **Ideas to improve player progression, in recommended order:**
 1. Show it: save each player's last yearly change and show it beside the overall on every screen (being built). Then a per-season overall line on the player page.
-2. In-season progression: split the yearly change into monthly steps so ratings move during the season (needs its own random stream and a re-check of the "55 to 65% reach potential" target).
+2. In-season progression: done 2026-11-14 (four steps a season; see the update log).
 3. Training focus: the user picks a focus per player (shooting, defense, body) that tilts which ratings get the growth, not how much.
 4. Performance-based growth: playing above expectation adds a little, for all ages (today only minutes count, and only for ages 24 and under).
 5. Different peak ages per player (late bloomers, early decliners) from a hidden per-player number, which would also help problem 1 (star variety).
@@ -180,6 +180,14 @@ Written 2026-11-14 from the main session's general knowledge of console franchis
 7. Injuries that cost development time (a long absence slows that year's growth).
 
 ## Update log (newest first)
+
+### 2026-11-14, in-season progression
+- Owner asked for it (idea 2 in section 11). Design chosen by the main session: four steps a season (after days 16, 32, 48, 64), half of the expected yearly trend arrives in them, and the offseason subtracts what already arrived, so the yearly total keeps its average. Own random stream 80000 (hashed per player). Switch `NoInSeasonDev` on the Settings page. New saved field `Player.SeasonDev` (nil in old saves, no version bump). Old saves get the feature from their next step day.
+- Arrows now show this season's change once the first step has happened, otherwise last year's total (`changeScope`). The sim window lists the user's players who moved ("Development"). Live game got a 64x speed. Risers and fallers in the offseason report now use the whole-year change.
+- New measuring mode kept in the repository: `go run ./cmd/sim -mode develop -seasons 16` (flag `-noinseason` to compare). It prints the share of top-10 picks whose best overall ends within 4 points of draft-day potential, over 4 leagues.
+- Verified by the main session: `go vet`, `go test ./... -count=1`, web build. Measurement (seeds 1 to 4, 16 seasons, 320 picks): ON 63.4% within 4 points (per seed 59, 66, 60, 69), OFF 68.4% (72, 75, 64, 62); 90+ players at the end 4 to 10 ON, 7 to 9 OFF; average overall 63.6 to 65.7 ON, 63.2 to 65.0 OFF. The gap between ON and OFF is inside the seed-to-seed spread; no drift seen. Note this metric uses the best overall reached, which may not be exactly how the original 55 to 65% target was measured (OFF reads 68%). API pass on port 8097: no changes before day 16, six user players moved on day 16, year total equals season plus offseason, no hidden number. Browser: Development box in the sim window, Settings switch shown, no console errors.
+- Helper change to a test fixture (reported, read by the main session): `TestFreeAgencyFlowAndOffers` (seed 21) could no longer find a suitable star free agent because the league evolves differently, so its fixture league now runs with `NoInSeasonDev` on. No assertion or number was changed.
+- Not tried: toggling the Settings switch by hand, the arrow tooltips, a mid-season old save, real-data mode, a commissioner edit mid-season (it is not counted in `SeasonDev`), more than four seeds. A serious injury's rating drop is included in the year total shown.
 
 ### 2026-11-14, progression arrows, live game in the sim window, offers in the sim window
 - Owner decisions: the live game plays inside the sim window (not the full viewer); the +/- shows last offseason's change; in-season progression is the next progression piece, not built yet. Section 11 (GM-mode gap list and progression ideas) was added as a reference.

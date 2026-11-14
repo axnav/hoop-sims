@@ -164,6 +164,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
 | `progression.go` | Yearly development, retirement, rookie generation | `Player.Progress`, `ProgressMinutes`, `RetireChance`, `TrueCeiling`, `MinutesAdjust`, `GenerateRookie` | `Progression` (also roster and draft sizes, `FreeAgentPool`) |
+| `inseason.go` | In-season development: after days 16, 32, 48 and 64 `SimDay` calls `inSeasonDev`, which gives every player a small step (half of the expected yearly trend over the four steps). The steps are an advance: `ProgressMinutes` starts from the season-start overall and subtracts the in-season gain, so the yearly total keeps its average. `expectedTrend` is the one copy of the yearly formula | `DevLine`, `DevChangesLastDay` | `Progression.InSeason...`; switch `Options.NoInSeasonDev` |
 
 ### Saving
 
@@ -227,7 +228,8 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 | `Impact` | The hidden number, roughly -8 to +8. Used by `Effective` in the game sim and by progression. Never sent to the browser |
 | `Contract` | `Contract{Salary, Years}`; `Years` counts seasons left including the current one, 0 means none or expiring in the offseason |
 | `Injury` | `*Injury{Name, GamesLeft, Serious}`; nil means healthy |
-| `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. Sent as `ovrChange`, `potChange`, `ratingChanges` by `addDev` in `cmd/web/admin.go` |
+| `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. It is the whole year (in-season steps plus the offseason) |
+| `SeasonDev` | `*DevChange`: change so far this season from in-season steps; nil before the first step, cleared by `ProgressMinutes`. `addDev` in `cmd/web/admin.go` sends `SeasonDev` if present (`changeScope` "season"), else `Dev` ("year"), as `ovrChange`, `potChange`, `ratingChanges` |
 
 ### Lineup
 
@@ -253,7 +255,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### Options
 
-`Options{NoDeadlineStop, NoOfferStop, NoInjuries, Commissioner}`. Each flag is named so that `false` (the zero value) is the old default behaviour. `Commissioner` allows `EditPlayer` (never for prospects, and never touches `Impact`).
+`Options{NoDeadlineStop, NoOfferStop, NoInjuries, NoInSeasonDev, Commissioner}`. Each flag is named so that `false` (the zero value) is the old default behaviour. `Commissioner` allows `EditPlayer` (never for prospects, and never touches `Impact`).
 
 ### What the browser never receives
 
@@ -331,6 +333,7 @@ Streams in the code today:
 | 70000 | Per-prospect scouting errors, drawn once in pool order | `initScouting` |
 | 70001, 70003 | Hashed streams (no draw order): computer team draft noise per team and prospect (70001), per-rating scouting errors (70003) | `computerDraftScore`, `ScoutRatings` |
 | 70004 | Hashed stream used only to repair an old save's missing scouting errors | `ensureDraft` |
+| 80000 + step | Hashed stream per player for in-season development steps 1 to 4 | `inSeasonDev` |
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 

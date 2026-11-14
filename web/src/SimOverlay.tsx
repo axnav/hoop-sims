@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, type DayResult, type GameEvents, type GameState, type InjuryLine, type SimPause, type Team } from './api'
-import { AnimatedNumber, TeamBadge, WL } from './ui'
+import { api, type DayResult, type DevLine, type GameEvents, type GameState, type InjuryLine, type SimPause, type Team } from './api'
+import { AnimatedNumber, Delta, TeamBadge, WL } from './ui'
 import { LiveGame } from './LiveGame'
 import { OfferList, useOffers } from './OffersCard'
 
@@ -40,6 +40,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
   const nav = useNavigate()
   const remaining = useRef(0)
   const [hurt, setHurt] = useState<InjuryLine[]>([])
+  const [dev, setDev] = useState<DevLine[]>([])
   const [pause, setPause] = useState<SimPause | null>(null)
   const [noStop, setNoStop] = useState(false)
   const closeBtn = useRef<HTMLButtonElement>(null)
@@ -74,6 +75,13 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
         }
         setResults((p) => [...p, ...r.days])
         if (r.injuries?.length) setHurt((p) => [...p, ...r.injuries])
+        if (r.development?.length) {
+          setDev((p) => {
+            const m = new Map(p.map((d) => [d.playerId, d]))
+            for (const d of r.development!) { const o = m.get(d.playerId); m.set(d.playerId, o ? { ...d, change: o.change + d.change } : d) }
+            return [...m.values()]
+          })
+        }
         if (r.strip) setStrip(r.strip)
         qc.setQueryData(['state'], r.state)
         if (r.days.length > 0) remaining.current--
@@ -163,6 +171,14 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
                 <div className="h2 mb-1 text-loss">Injured</div>
                 <ul className="max-h-24 space-y-0.5 overflow-y-auto">
                   {hurt.map((h, i) => <li key={i}>{h.name}, {h.injury}, out {h.gamesLeft} {h.gamesLeft === 1 ? 'game' : 'games'}</li>)}
+                </ul>
+              </div>
+            )}
+            {dev.length > 0 && (done || pause) && (
+              <div className="mt-2 rounded-lg border border-accent/50 bg-panel2 p-3 text-[13px]">
+                <div className="h2 mb-1 text-accent">Development</div>
+                <ul className="max-h-24 space-y-0.5 overflow-y-auto">
+                  {dev.map((d) => <li key={d.playerId}>{d.name} {d.ovr}<Delta value={d.change} scope="season" /></li>)}
                 </ul>
               </div>
             )}

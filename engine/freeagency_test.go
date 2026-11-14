@@ -10,8 +10,13 @@ import (
 // draftDoneLeague plays a season and the draft, stopping before free agency.
 func draftDoneLeague(seed uint64) *League { return draftDoneLeagueFor(seed, 0) }
 
-func draftDoneLeagueFor(seed uint64, user int) *League {
+func draftDoneLeagueFor(seed uint64, user int) *League { return draftDoneLeagueOpt(seed, user, false) }
+
+// draftDoneLeagueOpt is draftDoneLeagueFor with in-season development
+// optionally off (for tests whose fixture depends on one seed's outcome).
+func draftDoneLeagueOpt(seed uint64, user int, noInSeasonDev bool) *League {
 	lg := GenerateLeague(seed)
+	lg.Options.NoInSeasonDev = noInSeasonDev
 	lg.UserTeamID = user
 	lg.StartSeason()
 	lg.SimRegularSeason()
@@ -47,7 +52,9 @@ func makeRoom(lg *League, n int) {
 }
 
 func TestFreeAgencyFlowAndOffers(t *testing.T) {
-	lg := draftDoneLeague(21)
+	// In-season development off: the test needs a free agent with an ask of
+	// 8000 to 30000, which seed 21 only has without it (fixture, not a rule).
+	lg := draftDoneLeagueOpt(21, 0, true)
 	wantPhase(t, lg, true, PhaseDraftDone, "begin_free_agency")
 	u := lg.Teams[lg.UserTeamID]
 	exp := u.Roster[0]

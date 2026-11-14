@@ -31,8 +31,8 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
         <TierChip tier={p.tier} />
       </span>
       <span className="w-8 text-right text-xs text-muted tabular-nums">{p.age}y</span>
-      <span className="w-10 text-right tabular-nums"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} /></span>
-      <span className="w-10 text-right text-muted tabular-nums">{p.pot}<Delta value={p.potChange} /></span>
+      <span className="w-10 text-right tabular-nums"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} scope={p.changeScope} /></span>
+      <span className="w-10 text-right text-muted tabular-nums">{p.pot}<Delta value={p.potChange} scope={p.changeScope} /></span>
       <span className="w-14 text-right text-xs tabular-nums" title={`${p.years} years left`}>{money(p.salary)}</span>
       <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2" title={`Trade value ${p.value}`}>
         <span className="block h-full rounded bg-accent" style={{ width: `${Math.max(4, (100 * p.value) / maxV)}%` }} />

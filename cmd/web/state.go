@@ -202,6 +202,7 @@ func (s *server) sim(r *http.Request) (any, error) {
 	multi := in.Auto || in.Days > 1 || in.ToEnd
 	days := []M{}
 	newInj := []engine.InjuryLine{}
+	dev := []M{}
 	created := 0
 	var pause M
 	for i := 0; i < n && !lg.Season.Done(); i++ {
@@ -217,6 +218,9 @@ func (s *server) sim(r *http.Request) (any, error) {
 				newInj = append(newInj, l)
 			}
 		}
+		for _, l := range lg.DevChangesLastDay() {
+			dev = append(dev, M{"playerId": l.PlayerID, "name": l.Name, "ovr": l.Overall, "change": l.Change})
+		}
 		k := lg.ProposalsCreatedLastDay()
 		created += k
 		if multi && k > 0 && !lg.Options.NoOfferStop {
@@ -229,7 +233,7 @@ func (s *server) sim(r *http.Request) (any, error) {
 		}
 	}
 	out := M{"days": days, "strip": s.strip(), "state": s.state(), "newOffers": created,
-		"injuries": s.injuryLines(newInj)}
+		"injuries": s.injuryLines(newInj), "development": dev}
 	if pause != nil {
 		out["pause"] = pause
 	}

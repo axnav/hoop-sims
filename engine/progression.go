@@ -58,6 +58,15 @@ type ProgressionConfigT struct {
 	MinutesDevBonus   float64
 	MinutesDevPenalty float64
 
+	// In-season development: an advance on the yearly change. InSeasonShare of
+	// the expected yearly trend arrives in InSeasonSteps equal steps, one after
+	// every InSeasonEvery-th day played; the offseason then only adds the rest.
+	// Each step also gets Normal(0, InSeasonNoiseSD) overall points of noise.
+	InSeasonShare   float64
+	InSeasonEvery   int
+	InSeasonSteps   int
+	InSeasonNoiseSD float64
+
 	// Visible Potential estimate.
 	PotentialLearnRate float64 // share of the gap to true ceiling closed per year
 	PotentialEqualAge  int     // from this age Potential == Overall
@@ -142,6 +151,11 @@ var Progression = ProgressionConfigT{
 	MinutesDevBonus:   0.8,
 	MinutesDevPenalty: 0.6,
 
+	InSeasonShare:   0.5,
+	InSeasonEvery:   16,
+	InSeasonSteps:   4,
+	InSeasonNoiseSD: 0.25,
+
 	PotentialLearnRate: 0.20,
 	PotentialEqualAge:  27,
 
@@ -218,22 +232,24 @@ func (p *Player) Progress(r *RNG) { p.ProgressMinutes(r, -1) }
 func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 	c := &Progression
 	oldOvr, oldPot, oldRt := p.Overall(), p.Potential, p.Ratings
-	ovr := float64(p.Overall())
-	imp := float64(p.Impact)
-	var delta float64
+	// In-season changes already made this season came ahead of the yearly
+	// change: the formula starts from the season-start overall and the
+	// offseason delta is reduced by what has already arrived.
+	gain := 0.0
+	var seasonDev DevChange
+	if p.SeasonDev != nil {
+		seasonDev = *p.SeasonDev
+		gain = float64(seasonDev.Overall)
+	}
+	ovr := float64(p.Overall()) - gain
+	delta := expectedTrend(p, ovr)
 	switch {
 	case p.Age < c.PrimeStartAge:
-		rate := c.RateAge26
-		if p.Age <= 21 {
-			rate = c.RateAge21
-		} else if p.Age <= 24 {
-			rate = c.RateAge24
-		}
-		delta = (p.TrueCeiling()-ovr)*rate + r.Normal(0, c.GrowthNoiseSD)
+		delta += r.Normal(0, c.GrowthNoiseSD)
 	case p.Age < c.DeclineStartAge:
-		delta = r.Normal(0, c.PrimeNoiseSD) + imp*c.PrimeImpactMult
+		delta += r.Normal(0, c.PrimeNoiseSD)
 	default:
-		delta = -float64(p.Age-c.DeclineBaseAge)*c.DeclinePerYear + r.Normal(0, c.DeclineNoiseSD) + imp*c.DeclineImpactMult
+		delta += r.Normal(0, c.DeclineNoiseSD)
 	}
 	if p.Age < c.LeapMaxAge {
 		x := r.Float64()
@@ -250,21 +266,9 @@ func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 	} else {
 		delta += adj
 	}
-	declining := p.Age >= c.DeclineStartAge
+	delta -= gain
 	apply := func(v int, idx int) int {
-		d := delta + r.Normal(0, c.RatingNoiseSD)
-		switch idx {
-		case 6: // athleticism
-			if declining {
-				d *= c.AthleticismDeclineMult
-			} else if p.Age >= c.AthleticismGrowthStop && d > 0 {
-				d = 0
-			}
-		case 1, 2: // mid, three
-			if declining {
-				d *= c.ShootingDeclineMult
-			}
-		}
+		d := ratingStep(p.Age, idx, delta+r.Normal(0, c.RatingNoiseSD))
 		return clamp(v+round(d), 25, 99)
 	}
 	a := p.Ratings.array()
@@ -287,8 +291,14 @@ func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 	for i := range d {
 		d[i] = n[i] - o[i]
 	}
-	p.Dev = &DevChange{Overall: newOvr - oldOvr, Potential: p.Potential - oldPot,
+	// The change shown is the whole year: season start to now.
+	sd := seasonDev.Ratings.array()
+	for i := range d {
+		d[i] += sd[i]
+	}
+	p.Dev = &DevChange{Overall: newOvr - oldOvr + seasonDev.Overall, Potential: p.Potential - oldPot + seasonDev.Potential,
 		Ratings: Ratings{d[0], d[1], d[2], d[3], d[4], d[5], d[6]}}
+	p.SeasonDev = nil
 }
 
 // RetireChance is the probability the player retires this offseason.

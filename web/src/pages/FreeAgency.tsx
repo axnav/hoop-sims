@@ -75,7 +75,7 @@ function Players({ d, onData }: { d: FreeAgencyData; onData: (r: FreeAgencyData)
                   <td><PlayerLink id={p.id} name={p.name} /><TierChip tier={p.tier} /><InjuryTag injury={p.injury} /></td>
                   <td>{p.pos}</td>
                   <td>{p.age}</td>
-                  <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} /><span className="text-muted">/{p.pot}</span><Delta value={p.potChange} /></td>
+                  <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} scope={p.changeScope} /><span className="text-muted">/{p.pot}</span><Delta value={p.potChange} scope={p.changeScope} /></td>
                   <td>{money(p.askSalary)} for {yrs(p.askYears)}</td>
                   <td>{p.interest > 0 ? `${p.interest} ${p.interest === 1 ? 'team' : 'teams'}` : '-'}</td>
                   <td>{p.myOffer ? <span className="font-semibold text-accent">{money(p.myOffer.salary)}, {yrs(p.myOffer.years)} <span className="font-normal text-muted">(day {p.myOffer.day})</span></span> : '-'}</td>

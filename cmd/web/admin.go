@@ -20,11 +20,26 @@ func addInjury(row M, p *engine.Player) {
 	}
 }
 
-// addDev puts "ovrChange" and "potChange" on a non-prospect player row, once
-// the player has had a yearly progression.
+// devChange picks the change to show: this season's in-season change if there
+// is one (scope "season"), else the last yearly change (scope "year").
+func devChange(p *engine.Player) (*engine.DevChange, string) {
+	if p == nil {
+		return nil, ""
+	}
+	if p.SeasonDev != nil {
+		return p.SeasonDev, "season"
+	}
+	if p.Dev != nil {
+		return p.Dev, "year"
+	}
+	return nil, ""
+}
+
+// addDev puts "ovrChange", "potChange" and "changeScope" on a non-prospect
+// player row, once the player has had any progression.
 func addDev(row M, p *engine.Player) {
-	if p != nil && p.Dev != nil {
-		row["ovrChange"], row["potChange"] = p.Dev.Overall, p.Dev.Potential
+	if d, scope := devChange(p); d != nil {
+		row["ovrChange"], row["potChange"], row["changeScope"] = d.Overall, d.Potential, scope
 	}
 }
 

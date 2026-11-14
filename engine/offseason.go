@@ -89,9 +89,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	lg.recordTax()
 
 	// Progression.
-	before := map[int]int{}
 	for _, p := range lg.allPlayers() {
-		before[p.ID] = p.Overall()
 		mpg := -1.0
 		if ps := lg.Season.statsFor(p.ID); ps != nil {
 			mpg = float64(ps.Min) / SeasonGames
@@ -105,7 +103,6 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 		for _, p := range ps {
 			if r.Chance(p.RetireChance()) {
 				rep.Retirements = append(rep.Retirements, Retiree{p.ID, p.Name, p.Age, p.Overall(), p.TeamID})
-				delete(before, p.ID)
 				lg.Retired = append(lg.Retired, p)
 				continue
 			}
@@ -129,7 +126,8 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	// Risers and fallers.
 	var ch []Change
 	for _, p := range lg.allPlayers() {
-		ch = append(ch, Change{p.ID, p.TeamID, p.Name, p.Age, before[p.ID], p.Overall()})
+		// Whole-year change: in-season steps plus the offseason step.
+		ch = append(ch, Change{p.ID, p.TeamID, p.Name, p.Age, p.Overall() - p.Dev.Overall, p.Overall()})
 	}
 	sort.SliceStable(ch, func(i, j int) bool {
 		di, dj := ch[i].NewOvr-ch[i].OldOvr, ch[j].NewOvr-ch[j].OldOvr

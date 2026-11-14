@@ -181,6 +181,8 @@ type League struct {
 	newProposals int
 	// newInjuries lists injuries from the most recent day (not saved).
 	newInjuries []InjuryLine
+	// newDev lists user-team overall changes from the most recent day (not saved).
+	newDev []DevLine
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

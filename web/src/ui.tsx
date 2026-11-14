@@ -200,8 +200,9 @@ export function TierChip({ tier }: { tier: string }) {
 }
 
 // Small green/red change marker for a progression delta. Nothing when unknown or zero.
-export function Delta({ value, title = 'Change in the last offseason' }: { value?: number; title?: string }) {
+export function Delta({ value, scope }: { value?: number; scope?: 'season' | 'year' }) {
   if (!value) return null
+  const title = scope === 'season' ? 'Change this season' : 'Change over the last year'
   return (
     <span title={title} className={`ml-1 text-[10px] font-semibold tabular-nums ${value > 0 ? 'text-win' : 'text-loss'}`}>
       {value > 0 ? '\u25B2' : '\u25BC'}{Math.abs(value)}

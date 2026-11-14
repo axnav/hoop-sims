@@ -1470,3 +1470,48 @@ func TestDevChangeAndLiveReplay(t *testing.T) {
 		t.Fatal("no roster row has ovrChange after a full offseason")
 	}
 }
+
+func TestInSeasonDevAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 4, "team": 1}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	o := c.call("POST", "/api/options", M{"noInSeasonDev": true}, 200)
+	if o["noInSeasonDev"] != true {
+		t.Fatalf("options: %v", o)
+	}
+	o = c.call("POST", "/api/options", M{"noInSeasonDev": false}, 200)
+	if o["noInSeasonDev"] != false || c.call("GET", "/api/options", nil, 200)["noInSeasonDev"] != false {
+		t.Fatalf("options: %v", o)
+	}
+	r := c.call("POST", "/api/sim", M{"days": 16}, 200)
+	dev, ok := r["development"].([]any)
+	if !ok {
+		t.Fatalf("development is not a list: %v", r["development"])
+	}
+	for _, d := range dev {
+		row := d.(M)
+		if row["name"] == nil || num(row["change"]) == 0 {
+			t.Fatalf("bad development row: %v", row)
+		}
+	}
+	team := c.call("GET", "/api/team/1", nil, 200)
+	season := false
+	var pid int
+	for _, row := range team["roster"].([]any) {
+		if row.(M)["changeScope"] == "season" {
+			season, pid = true, num(row.(M)["id"])
+		}
+	}
+	if !season {
+		t.Fatalf("no roster row with changeScope season")
+	}
+	pl := c.call("GET", "/api/player/"+itoa(pid), nil, 200)
+	if pl["changeScope"] != "season" || pl["ratingChanges"] == nil {
+		t.Fatalf("player page: %v", pl["changeScope"])
+	}
+	// Days that are not a step give an empty list, not null.
+	r = c.call("POST", "/api/sim", M{"days": 1}, 200)
+	if l, ok := r["development"].([]any); !ok || len(l) != 0 {
+		t.Fatalf("development after a plain day: %v", r["development"])
+	}
+}

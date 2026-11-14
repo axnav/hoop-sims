@@ -3,7 +3,7 @@ import type { GameEvents } from './api'
 import { Replay, clockLabel, periodLabel } from './replay'
 import { AnimatedNumber, TeamBadge } from './ui'
 
-const SPEEDS = [1, 4, 16]
+const SPEEDS = [1, 4, 16, 64]
 
 // Plays one recorded game inside the sim window. Calls onDone once, about a second after the final event
 // (or at once after "Skip to final"). Pure replay logic comes from replay.ts.

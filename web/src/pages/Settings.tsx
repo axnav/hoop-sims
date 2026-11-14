@@ -41,6 +41,7 @@ export default function Settings() {
             <Switch label="Pause the sim the day before the trade deadline" checked={!o.noDeadlineStop} disabled={save.isPending} onChange={(v) => set({ noDeadlineStop: !v })} />
             <Switch label="Pause the sim when a team makes you an offer" checked={!o.noOfferStop} disabled={save.isPending} onChange={(v) => set({ noOfferStop: !v })} />
             <Switch label="Injuries" note="Players who are already injured still heal when this is off." checked={!o.noInjuries} disabled={save.isPending} onChange={(v) => set({ noInjuries: !v })} />
+            <Switch label="In-season progression" note="Ratings also move in small steps during the season. Off means they only change in the offseason." checked={!o.noInSeasonDev} disabled={save.isPending} onChange={(v) => set({ noInSeasonDev: !v })} />
             <Switch label="Commissioner mode" note="Allows editing any player's ratings, age and potential." checked={o.commissioner} disabled={save.isPending} onChange={(v) => set({ commissioner: v })} />
           </Card>
         )}</Q>

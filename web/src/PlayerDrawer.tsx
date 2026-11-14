@@ -177,7 +177,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
             </div>
           </div>
           {!p.prospect && (!!p.ovrChange || !!p.potChange) && (
-            <div className="mt-2 text-sm text-muted">Last offseason: OVR<Delta value={p.ovrChange} /> POT<Delta value={p.potChange} /></div>
+            <div className="mt-2 text-sm text-muted">{p.changeScope === 'season' ? 'This season' : 'Last year'}: OVR<Delta value={p.ovrChange} scope={p.changeScope} /> POT<Delta value={p.potChange} scope={p.changeScope} /></div>
           )}
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
@@ -199,7 +199,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
                   <motion.div className="h-full rounded" style={{ background: ovrColor(r.value) }} initial={{ width: 0 }} animate={{ width: `${r.value}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
                 </div>
                 <span className="w-7 text-right font-bold tabular-nums">{r.value}</span>
-                <span className="w-8"><Delta value={p.ratingChanges?.[r.key]} /></span>
+                <span className="w-8"><Delta value={p.ratingChanges?.[r.key]} scope={p.changeScope} /></span>
               </div>
             ))}
           </div>

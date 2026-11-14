@@ -18,7 +18,7 @@ function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
               {r.kind === 'player' && <InjuryTag injury={r.injury} />}
               <TierChip tier={r.tier} />
             </span>
-            {r.kind === 'player' && <span className="text-xs text-muted tabular-nums">{r.pos} · {r.age}y · {r.ovr}<Delta value={r.ovrChange} />/{r.pot}<Delta value={r.potChange} /></span>}
+            {r.kind === 'player' && <span className="text-xs text-muted tabular-nums">{r.pos} · {r.age}y · {r.ovr}<Delta value={r.ovrChange} scope={r.changeScope} />/{r.pot}<Delta value={r.potChange} scope={r.changeScope} /></span>}
             {r.kind === 'player' && <span className="text-xs tabular-nums" title={`${r.years} years left`}>{money(r.salary)}</span>}
             <span className="w-10 text-right text-xs text-muted tabular-nums" title="Trade value">{r.value}</span>
           </li>

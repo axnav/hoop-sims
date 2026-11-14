@@ -27,16 +27,25 @@ func printBox(b *engine.TeamBox) {
 	w.Flush()
 }
 
+// noInSeasonDev is set by -noinseason and copied into every league built here.
+var noInSeasonDev bool
+
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
 	mode := flag.String("mode", "sanity", "sanity, seasons, or ratings")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
+	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
 	flag.Parse()
+	noInSeasonDev = *noInSeason
 
 	if *mode == "seasons" {
 		runSeasons(*seed, *seasons, *reveal)
+		return
+	}
+	if *mode == "develop" {
+		runDevelop(*seed, *seasons, 4)
 		return
 	}
 	if *mode == "ratings" {
@@ -165,6 +174,7 @@ type snap struct {
 
 func runSeasons(seed uint64, n int, reveal bool) {
 	lg := engine.GenerateLeague(seed)
+	lg.Options.NoInSeasonDev = noInSeasonDev
 	// Track the three highest-potential players under 22.
 	var prospects []*engine.Player
 	for _, t := range lg.Teams {

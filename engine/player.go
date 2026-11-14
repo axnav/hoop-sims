@@ -64,6 +64,10 @@ type Player struct {
 	// Dev is the change in the latest yearly progression; nil = never
 	// progressed (or an old save).
 	Dev *DevChange `json:",omitempty"`
+
+	// SeasonDev is the in-season change so far this season (new minus
+	// season-start values, see inseason.go); nil = none yet (or an old save).
+	SeasonDev *DevChange `json:",omitempty"`
 }
 
 // Positions lists every position the player can play, primary first.

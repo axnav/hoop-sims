@@ -79,6 +79,7 @@ type Options struct {
 	NoDeadlineStop bool // true: multi-day sims do not pause before the deadline
 	NoOfferStop    bool // true: multi-day sims do not pause when an offer arrives
 	NoInjuries     bool // true: nobody gets hurt (existing injuries still heal)
+	NoInSeasonDev  bool // true: ratings change only in the offseason (inseason.go)
 	Commissioner   bool // true: EditPlayer is allowed (commissioner.go)
 }
 
