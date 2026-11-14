@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 
@@ -39,8 +40,8 @@ func (s *server) playoffAction(r *http.Request) (any, error) {
 	what := r.PathValue("action")
 	out := M{}
 	if what == "start" {
-		if s.phase() != "regular_done" {
-			return nil, conflict("the regular season is not finished")
+		if err := lg.CanPlayoffAction(what, s.reportSeen); err != nil {
+			return nil, conflict("%v", err)
 		}
 		if err := lg.StartPlayoffs(); err != nil {
 			return nil, conflict("%v", err)
@@ -48,16 +49,16 @@ func (s *server) playoffAction(r *http.Request) (any, error) {
 		out["state"] = s.state()
 		return out, nil
 	}
-	if s.phase() != "playoffs" {
-		return nil, conflict("no playoffs to sim")
+	if err := lg.CanPlayoffAction(what, s.reportSeen); err != nil {
+		if errors.Is(err, engine.ErrUnknownPlayoffAction) {
+			return nil, bad("%v", err)
+		}
+		return nil, conflict("%v", err)
 	}
 	switch what {
 	case "day":
 		lg.SimPlayoffDay()
 	case "series":
-		if s.userSeries() == nil {
-			return nil, conflict("your team has no series in progress")
-		}
 		lg.SimUserSeries()
 	case "round":
 		lg.SimRound()
@@ -65,9 +66,6 @@ func (s *server) playoffAction(r *http.Request) (any, error) {
 		lg.SimAllPlayoffs()
 	case "watch":
 		i := lg.UserSeriesIdx()
-		if i < 0 {
-			return nil, conflict("your team has no game to watch")
-		}
 		lg.SimPlayoffDay()
 		sr := lg.Season.Series[i]
 		out["boxId"] = sr.Games[len(sr.Games)-1].Box
@@ -108,8 +106,8 @@ func (s *server) offseasonReport(r *http.Request) (any, error) {
 }
 
 func (s *server) offseasonBegin(r *http.Request) (any, error) {
-	if s.phase() != "playoffs_done" {
-		return nil, conflict("the playoffs are not finished")
+	if err := s.lg.CanBeginOffseason(s.reportSeen); err != nil {
+		return nil, conflict("%v", err)
 	}
 	s.lg.BeginOffseason()
 	s.reportSeen = false
@@ -117,16 +115,16 @@ func (s *server) offseasonBegin(r *http.Request) (any, error) {
 }
 
 func (s *server) offseasonToDraft(r *http.Request) (any, error) {
-	if s.lg.Draft == nil {
-		return nil, conflict("no offseason in progress")
+	if err := s.lg.CanGoToDraft(); err != nil {
+		return nil, conflict("%v", err)
 	}
 	s.reportSeen = true
 	return s.state(), nil
 }
 
 func (s *server) offseasonFinish(r *http.Request) (any, error) {
-	if s.phase() != "draft_done" {
-		return nil, conflict("the draft is not finished")
+	if err := s.lg.CanFinishOffseason(s.reportSeen); err != nil {
+		return nil, conflict("%v", err)
 	}
 	s.lg.FinishOffseason()
 	s.lg.StartSeason()
@@ -165,8 +163,8 @@ func (s *server) draftState(r *http.Request) (any, error) {
 }
 
 func (s *server) needDraft() error {
-	if s.lg.Draft == nil || !s.reportSeen {
-		return conflict("no draft in progress")
+	if err := s.lg.CanDraft(s.reportSeen); err != nil {
+		return conflict("%v", err)
 	}
 	return nil
 }
@@ -182,8 +180,8 @@ func (s *server) draftPick(r *http.Request) (any, error) {
 		return nil, err
 	}
 	lg := s.lg
-	if lg.DraftDone() || lg.DraftOnClock() != lg.UserTeamID {
-		return nil, conflict("you are not on the clock")
+	if err := lg.CanUserPick(); err != nil {
+		return nil, conflict("%v", err)
 	}
 	if err := lg.DraftPick(in.PlayerID); err != nil {
 		return nil, bad("%v", err)

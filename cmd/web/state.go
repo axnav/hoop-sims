@@ -8,38 +8,11 @@ import (
 	"hoopsim/engine"
 )
 
-const homePattern = "HHAAHAH" // mirrors the engine's playoff home-court pattern
+func (s *server) rank(id int) int { return s.lg.Season.ConferenceRank(id) }
 
-func (s *server) rank(id int) int {
-	for i, t := range s.lg.Season.ConferenceStandings(engine.Conference(id)) {
-		if t == id {
-			return i + 1
-		}
-	}
-	return 0
-}
+func (s *server) phase() string { return string(s.lg.Phase(s.reportSeen)) }
 
-func (s *server) phase() string {
-	lg := s.lg
-	st := lg.Season
-	switch {
-	case lg.Draft != nil && !s.reportSeen:
-		return "offseason"
-	case lg.Draft != nil && lg.DraftDone():
-		return "draft_done"
-	case lg.Draft != nil:
-		return "draft"
-	case !st.PlayoffsStarted && !st.Done():
-		return "regular"
-	case !st.PlayoffsStarted:
-		return "regular_done"
-	case st.Champion >= 0:
-		return "playoffs_done"
-	}
-	return "playoffs"
-}
-
-func act(id, label string) M { return M{"id": id, "label": label} }
+func act(a engine.Action) M { return M{"id": a.ID, "label": a.Label} }
 
 func (s *server) userSeries() *engine.Series {
 	if i := s.lg.UserSeriesIdx(); i >= 0 {
@@ -81,7 +54,7 @@ func (s *server) state() M {
 			opp, myWins, oppWins = sr.High, sr.LowWins, sr.HighWins
 		}
 		g := len(sr.Games)
-		home := (sr.High == u) != (homePattern[g] == 'A')
+		home := sr.HostOf(g) == u
 		next = M{"kind": "playoff", "opp": s.team(opp), "home": home, "oppW": oppWins, "oppL": myWins,
 			"label": fmt.Sprintf("%s, game %d", engine.RoundName(sr.Round), g+1), "seriesMe": myWins, "seriesThem": oppWins}
 	}
@@ -103,7 +76,7 @@ func (s *server) state() M {
 	// playoffs
 	if st.PlayoffsStarted {
 		po := M{"active": st.PlayoffsActive(), "round": st.CurrentRound(), "roundName": engine.RoundName(st.CurrentRound()),
-			"userAlive": s.userSeries() != nil, "userResult": s.userResult()}
+			"userAlive": s.userSeries() != nil, "userResult": lg.UserPlayoffResult()}
 		if st.Champion >= 0 {
 			po["champion"] = s.team(st.Champion)
 			po["finalsMvp"] = s.award(st.Awards.FinalsMVP)
@@ -115,13 +88,8 @@ func (s *server) state() M {
 		out["playoffs"] = po
 	}
 	if ph == "regular_done" {
-		seed := 0
-		for i, id := range st.ConferenceStandings(engine.Conference(u)) {
-			if id == u {
-				seed = i + 1
-			}
-		}
-		out["summary"] = M{"w": st.Wins[u], "l": st.Losses[u], "rank": seed, "madePlayoffs": seed <= 8,
+		seed := st.ConferenceRank(u)
+		out["summary"] = M{"w": st.Wins[u], "l": st.Losses[u], "rank": seed, "madePlayoffs": st.MadePlayoffs(u),
 			"mvp": s.award(st.Awards.MVP), "scoringLeader": s.award(st.Awards.ScoringLeader)}
 	}
 	if lg.Draft != nil {
@@ -136,64 +104,16 @@ func (s *server) state() M {
 	// next action and menu
 	var na M
 	var menu []M
-	switch ph {
-	case "regular":
-		na = act("sim_day", "Sim next day")
-		menu = []M{act("sim_week", "Sim week"), act("sim_to_end", "Sim to end of season")}
-	case "regular_done":
-		na = act("start_playoffs", "Start playoffs")
-	case "playoffs":
-		na = act("playoff_day", "Sim next playoff day")
-		if s.userSeries() != nil {
-			menu = append(menu, act("playoff_watch", "Watch my next game"), act("playoff_series", "Sim my series"))
-		}
-		menu = append(menu, act("playoff_round", "Sim round"), act("playoff_all", "Sim all playoffs"))
-	case "playoffs_done":
-		na = act("begin_offseason", "Begin offseason")
-	case "offseason":
-		na = act("go_draft", "Go to the draft")
-	case "draft":
-		if lg.DraftOnClock() == u {
-			na = act("make_pick", fmt.Sprintf("Make your pick (#%d)", lg.Draft.Made+1))
-		} else {
-			na = act("draft_run", "Run the draft")
-		}
-		menu = []M{act("draft_auto", "Auto-draft the rest")}
-	case "draft_done":
-		na = act("start_season", fmt.Sprintf("Start the %d season", lg.Year+1))
+	nx, more := lg.NextActions(s.reportSeen)
+	if nx != (engine.Action{}) {
+		na = act(nx)
+	}
+	for _, m := range more {
+		menu = append(menu, act(m))
 	}
 	out["nextAction"] = na
 	out["actions"] = menu
 	return out
-}
-
-// userResult says how the user's playoff run went.
-func (s *server) userResult() string {
-	st := s.lg.Season
-	u := s.lg.UserTeamID
-	if !st.PlayoffsStarted {
-		return ""
-	}
-	best := 0
-	lost := false
-	for _, sr := range st.Series {
-		if sr.High != u && sr.Low != u {
-			continue
-		}
-		if sr.Round >= best {
-			best = sr.Round
-			lost = sr.Done && sr.Winner != u
-		}
-	}
-	switch {
-	case st.Champion == u:
-		return "Champions"
-	case best == 0:
-		return "Missed the playoffs"
-	case lost:
-		return "Eliminated in " + engine.RoundName(best)
-	}
-	return "Still alive in " + engine.RoundName(best)
 }
 
 func (s *server) award(a engine.Award) any {
@@ -263,8 +183,8 @@ func (s *server) sim(r *http.Request) (any, error) {
 		return nil, err
 	}
 	lg := s.lg
-	if s.phase() != "regular" {
-		return nil, conflict("no regular-season days left to sim")
+	if err := lg.CanSimDay(s.reportSeen); err != nil {
+		return nil, conflict("%v", err)
 	}
 	n := in.Days
 	if in.ToEnd {
