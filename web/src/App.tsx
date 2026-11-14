@@ -19,6 +19,7 @@ import Offseason from './pages/Offseason'
 import Draft from './pages/Draft'
 import History from './pages/History'
 import Trade from './pages/Trade'
+import Settings from './pages/Settings'
 
 function Shell() {
   const { state, error, run, busy, actionError } = useFlow()
@@ -53,6 +54,7 @@ function Shell() {
           <Route path="/roster" element={<Navigate to={`/team/${state.user.team.id}`} replace />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/team/:id" element={<TeamPage />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/leaders" element={<Leaders />} />
           <Route path="/schedule" element={<Schedule />} />

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -428,4 +429,122 @@ func TestOfferFlow(t *testing.T) {
 		}
 	}
 	t.Fatal("no seed produced two offer pauses")
+}
+
+func TestInjuriesAndCommissioner(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 11, "team": 2}, 200)
+
+	o := c.call("GET", "/api/options", nil, 200)
+	for _, k := range []string{"noDeadlineStop", "noOfferStop", "noInjuries", "commissioner"} {
+		if o[k] != false {
+			t.Fatalf("option %s default: %v", k, o)
+		}
+	}
+	o = c.call("POST", "/api/options", M{"noInjuries": true}, 200)
+	if o["noInjuries"] != true || o["commissioner"] != false || o["noOfferStop"] != false {
+		t.Fatalf("options: %v", o)
+	}
+	o = c.call("POST", "/api/options", M{"noInjuries": false, "commissioner": true}, 200)
+	if o["noInjuries"] != false || o["commissioner"] != true {
+		t.Fatalf("options: %v", o)
+	}
+	c.call("POST", "/api/options", M{"commissioner": false, "noOfferStop": true, "noDeadlineStop": true}, 200)
+
+	// a player to edit, before any injuries
+	team := c.call("GET", "/api/team/2", nil, 200)
+	pid := num(team["roster"].([]any)[0].(M)["id"])
+	path := "/api/player/" + strconv.Itoa(pid)
+	admin := "/api/admin/player/" + strconv.Itoa(pid)
+	base := c.call("GET", path, nil, 200)
+	wantKeys := []string{"inside", "mid", "three", "playmaking", "rebounding", "defense", "athleticism"}
+	rs := base["ratings"].([]any)
+	if len(rs) != 7 || base["editable"] != false || base["limits"] == nil {
+		t.Fatalf("player: %v", base)
+	}
+	for i, k := range wantKeys {
+		if rs[i].(M)["key"] != k {
+			t.Fatalf("rating order: %v", rs)
+		}
+	}
+
+	// refused with commissioner off
+	c.call("POST", admin, M{"age": 30}, 409)
+	c.call("POST", "/api/options", M{"commissioner": true}, 200)
+	c.call("POST", "/api/admin/player/999999", M{"age": 30}, 404)
+	c.call("POST", admin, M{"ratings": M{"inside": 500}}, 400)
+	c.call("POST", admin, M{"ratings": M{"nonsense": 50}}, 400)
+	same := c.call("GET", path, nil, 200)
+	if num(same["age"]) != num(base["age"]) || num(same["pot"]) != num(base["pot"]) {
+		t.Fatalf("failed edit changed player")
+	}
+	got := c.call("POST", admin, M{"age": 31, "potential": 99, "ratings": M{"inside": 77, "three": 66}}, 200)
+	chk := c.call("GET", path, nil, 200)
+	for _, v := range []M{got, chk} {
+		r := v["ratings"].([]any)
+		if num(v["age"]) != 31 || num(v["pot"]) != 99 || num(r[0].(M)["value"]) != 77 || num(r[2].(M)["value"]) != 66 || v["editable"] != true {
+			t.Fatalf("edit not applied: %v", v)
+		}
+	}
+	c.call("POST", "/api/options", M{"commissioner": false}, 200)
+	if c.call("GET", path, nil, 200)["editable"] != false {
+		t.Fatalf("editable should follow option")
+	}
+
+	// injuries
+	var inj []any
+	for i := 0; i < 40 && len(inj) == 0; i++ {
+		r := c.call("POST", "/api/sim", M{"days": 5}, 200)
+		if _, ok := r["injuries"].([]any); !ok {
+			t.Fatalf("sim lacks injuries array: %v", r)
+		}
+		inj = c.call("GET", "/api/injuries?team=all", nil, 200)["injuries"].([]any)
+	}
+	if len(inj) == 0 {
+		t.Fatal("no injuries in 200 days")
+	}
+	first := inj[0].(M)
+	tid := num(first["team"].(M)["id"])
+	tp := c.call("GET", "/api/team/"+strconv.Itoa(tid), nil, 200)
+	found := false
+	for _, r := range tp["roster"].([]any) {
+		row := r.(M)
+		if num(row["id"]) == num(first["playerId"]) {
+			found = true
+			if row["injury"] == nil || num(row["injury"].(M)["gamesLeft"]) != num(first["gamesLeft"]) {
+				t.Fatalf("roster row injury: %v", row)
+			}
+		} else if _, has := row["injury"]; has && row["injury"] == nil {
+			t.Fatalf("nil injury key")
+		}
+	}
+	if !found {
+		t.Fatal("injured player not on team page")
+	}
+	prev := 1 << 30
+	for _, x := range inj {
+		g := num(x.(M)["gamesLeft"])
+		if g > prev {
+			t.Fatalf("injuries not sorted")
+		}
+		prev = g
+	}
+	mine := c.call("GET", "/api/injuries", nil, 200)["injuries"].([]any)
+	if st := c.call("GET", "/api/state", nil, 200); num(st["injured"]) != len(mine) {
+		t.Fatalf("state.injured %v vs %d", st["injured"], len(mine))
+	}
+	c.call("GET", "/api/injuries?team=x", nil, 400)
+	c.call("GET", "/api/trade/block/"+strconv.Itoa(tid), nil, 200)
+	c.call("GET", "/api/offers", nil, 200)
+
+	// heal
+	ip := "/api/player/" + strconv.Itoa(num(first["playerId"]))
+	if c.call("GET", ip, nil, 200)["injury"] == nil {
+		t.Fatal("player page lacks injury")
+	}
+	c.call("POST", "/api/options", M{"commissioner": true}, 200)
+	healed := c.call("POST", "/api/admin/player/"+strconv.Itoa(num(first["playerId"])), M{"heal": true}, 200)
+	if _, has := healed["injury"]; has {
+		t.Fatalf("still injured: %v", healed)
+	}
 }

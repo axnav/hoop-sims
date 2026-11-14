@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Team } from './api'
+import type { Injury, Team } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -184,5 +184,16 @@ export function TierChip({ tier }: { tier: string }) {
   const top = tier === 'Franchise' || tier === 'Lottery pick'
   return (
     <span className={`ml-1.5 shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ${top ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : 'bg-panel2 text-muted'}`}>{tier}</span>
+  )
+}
+
+export const injuryText = (i: Injury) => `${i.name}, out ${i.gamesLeft} ${i.gamesLeft === 1 ? 'game' : 'games'}${i.serious ? ' (serious)' : ''}`
+
+// Red "INJ" tag shown next to an injured player's name.
+export function InjuryTag({ injury }: { injury?: Injury }) {
+  if (!injury) return null
+  return (
+    <span title={injuryText(injury)} aria-label={`Injured: ${injuryText(injury)}`}
+      className="ml-1.5 shrink-0 rounded bg-loss/20 px-1.5 py-px align-middle text-[10px] font-extrabold tracking-wide text-loss ring-1 ring-loss/50">INJ</span>
   )
 }

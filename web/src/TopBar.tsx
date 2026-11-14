@@ -92,8 +92,8 @@ export function TopBar() {
   if (!s) return null
   const u = s.user
   const offseason = s.phase === 'offseason' || s.phase === 'draft' || s.phase === 'draft_done'
-  const link = (to: string, label: string, badge = 0) => (
-    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}{badge > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 py-px text-[10px] font-bold text-black tabular-nums" aria-label={`${badge} offers`}>{badge}</span>}</NavLink>
+  const link = (to: string, label: string, badge = 0, red = false) => (
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}{badge > 0 && <span className={`ml-1.5 rounded-full ${red ? 'bg-loss text-white' : 'bg-accent text-black'} px-1.5 py-px text-[10px] font-bold tabular-nums`} aria-label={`${badge} ${red ? 'injured' : 'offers'}`}>{badge}</span>}</NavLink>
   )
   return (
     <header
@@ -122,7 +122,7 @@ export function TopBar() {
       </div>
       <nav className="mx-auto flex max-w-[1400px] items-center gap-1 overflow-x-auto px-2 py-1.5 whitespace-nowrap min-[1000px]:px-4 [&>a]:shrink-0">
         {link('/', 'Dashboard')}
-        {link(`/team/${u.team.id}`, 'Roster')}
+        {link(`/team/${u.team.id}`, 'Roster', s.injured, true)}
         {link('/standings', 'Standings')}
         {link('/leaders', 'Leaders')}
         {link('/schedule', 'Schedule')}
@@ -131,6 +131,7 @@ export function TopBar() {
         {offseason && link('/draft', 'Draft')}
         {link('/history', 'History')}
         {link('/trade', 'Trades', s.offers)}
+        {link('/settings', 'Settings')}
       </nav>
     </header>
   )

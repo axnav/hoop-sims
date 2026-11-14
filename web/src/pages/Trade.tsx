@@ -7,7 +7,7 @@ import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type 
 import { useFlow } from '../flow'
 import { TxItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { Card, ErrorBox, Page, PlayerLink, Q, Spinner, TeamBadge, TierChip, ovrColor } from '../ui'
+import { Card, ErrorBox, Page, InjuryTag, PlayerLink, Q, Spinner, TeamBadge, TierChip, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
@@ -26,7 +26,7 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
     >
       <span className="w-7 text-xs text-muted">{p.pos}</span>
       <span className="min-w-0 flex-1 truncate font-medium">
-        <PlayerLink id={p.id} name={p.name} />
+        <PlayerLink id={p.id} name={p.name} /><InjuryTag injury={p.injury} />
         {p.untouchable && <Lock size={12} className="ml-1.5 inline text-accent" aria-label="Core player" />}
         <TierChip tier={p.tier} />
       </span>

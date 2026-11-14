@@ -2,6 +2,8 @@ export type Team = {
   id: number; abbr: string; city: string; name: string; fullName: string
   primary: string; secondary: string; conf: number; confName: string
 }
+export type Injury = { name: string; gamesLeft: number; serious: boolean }
+export type InjuryLine = { playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
 export type Award = { playerId: number; name: string; team: Team; gp: number; ppg: number; rpg: number; apg: number } | null
 export type Action = { id: string; label: string }
 export type Phase = 'regular' | 'regular_done' | 'playoffs' | 'playoffs_done' | 'offseason' | 'draft' | 'draft_done'
@@ -29,6 +31,7 @@ export type GameState = {
   nextAction: Action
   actions: Action[] | null
   offers: number
+  injured: number
 }
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
@@ -41,12 +44,14 @@ export type Leaders = { minGP: number; pts: Leader[]; reb: Leader[]; ast: Leader
 export type RosterRow = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; starter: boolean
   gp: number; mpg: number; ppg: number; rpg: number; apg: number
+  injury?: Injury
 }
 export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[] }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
   role: string; usage: number
+  injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
   ratings: { key: string; label: string; value: number }[]; experience: number; draftYear: number; draftPick: number
   season: StatLine; playoffs: StatLine
   career: { year: number; team: Team; age: number; ovr: number; pot: number; gp: number; ppg: number; rpg: number; apg: number }[]
@@ -78,7 +83,7 @@ export type OffseasonReport =
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
-export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string }
+export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
 export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[] }
 export type DealMove =
@@ -92,7 +97,7 @@ export type DealVerdict = {
   }[]
 }
 export type AssetRow =
-  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string }
+  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury }
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
 export type Offer = {
   id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
@@ -101,9 +106,10 @@ export type Offer = {
 export type SimPause = { reason: 'offer' | 'deadline'; text: string }
 export type SimResult = {
   days: DayResult[]; strip: { rank: number; team: Team; w: number; l: number }[]; state: GameState
-  newOffers: number; pause?: SimPause
+  newOffers: number; pause?: SimPause; injuries: InjuryLine[]
 }
-export type Options = { noDeadlineStop: boolean; noOfferStop: boolean }
+export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; commissioner: boolean }
+export type AdminEdit = { age?: number; potential?: number; ratings?: Record<string, number>; heal?: boolean }
 export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
 export type TradeOfferIn = { team: number; give: number[]; get: number[] }
 export type TradeVerdict = {
@@ -190,5 +196,7 @@ export const api = {
   offerReject: (id: number) => post<{ ok: true; offers: Offer[] }>(`/api/offers/${id}/reject`),
   options: () => get<Options>('/api/options'),
   setOptions: (o: Partial<Options>) => post<Options>('/api/options', o),
+  injuries: (team?: number | 'all') => get<{ injuries: InjuryLine[] }>('/api/injuries' + (team === undefined ? '' : `?team=${team}`)),
+  adminEditPlayer: (id: number, b: AdminEdit) => post<PlayerPage>(`/api/admin/player/${id}`, b),
   draftAuto: () => post<GameState>('/api/draft/auto'),
 }

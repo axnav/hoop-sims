@@ -268,6 +268,8 @@ func (s *server) routes() *http.ServeMux {
 	p("/api/offers/{id}/reject", true, s.offerReject)
 	g("/api/options", true, s.optionsGet)
 	p("/api/options", true, s.optionsSet)
+	g("/api/injuries", true, s.injuries)
+	p("/api/admin/player/{id}", true, s.adminPlayer)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, M{"error": "not found"})
 	})

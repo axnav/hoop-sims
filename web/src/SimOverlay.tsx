@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, type DayResult, type GameState, type SimPause, type Team } from './api'
+import { api, type DayResult, type GameState, type InjuryLine, type SimPause, type Team } from './api'
 import { AnimatedNumber, TeamBadge, WL } from './ui'
 
 export type SimPlan = { days: number; toEnd: boolean }
@@ -19,6 +19,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
   const started = useRef(false)
   const nav = useNavigate()
   const remaining = useRef(0)
+  const [hurt, setHurt] = useState<InjuryLine[]>([])
   const [pause, setPause] = useState<SimPause | null>(null)
   const [noStop, setNoStop] = useState(false)
   const closeBtn = useRef<HTMLButtonElement>(null)
@@ -30,6 +31,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
       while (remaining.current > 0 && !stop.current) {
         const r = await api.sim({ days: 1, auto: true })
         setResults((p) => [...p, ...r.days])
+        if (r.injuries?.length) setHurt((p) => [...p, ...r.injuries])
         if (r.strip) setStrip(r.strip)
         qc.setQueryData(['state'], r.state)
         if (r.days.length > 0) remaining.current--
@@ -105,6 +107,14 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
               </AnimatePresence>
             </ul>
             {error && <div className="mt-2 text-loss">{error}</div>}
+            {hurt.length > 0 && (done || pause) && (
+              <div className="mt-2 rounded-lg border border-loss/50 bg-panel2 p-3 text-[13px]">
+                <div className="h2 mb-1 text-loss">Injured</div>
+                <ul className="max-h-24 space-y-0.5 overflow-y-auto">
+                  {hurt.map((h, i) => <li key={i}>{h.name}, {h.injury}, out {h.gamesLeft} {h.gamesLeft === 1 ? 'game' : 'games'}</li>)}
+                </ul>
+              </div>
+            )}
             {pause && (
               <div className="mt-2 rounded-lg border border-accent/60 bg-panel2 p-3" role="alertdialog" aria-label="Sim paused">
                 <div className="font-semibold">{pause.text}</div>

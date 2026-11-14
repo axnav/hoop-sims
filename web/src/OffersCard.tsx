@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { api, type AssetRow } from './api'
 import { useFlow } from './flow'
-import { Card, ErrorBox, TeamBadge, TierChip } from './ui'
+import { Card, ErrorBox, InjuryTag, TeamBadge, TierChip } from './ui'
 
 function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
   return (
@@ -15,6 +15,7 @@ function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
           <li key={i} className="flex items-center gap-1 border-b border-line/50 py-1 text-[13px]">
             <span className="min-w-0 flex-1 truncate font-medium">
               {r.kind === 'player' ? r.name : r.label}
+              {r.kind === 'player' && <InjuryTag injury={r.injury} />}
               <TierChip tier={r.tier} />
             </span>
             {r.kind === 'player' && <span className="text-xs text-muted tabular-nums">{r.pos} · {r.age}y · {r.ovr}/{r.pot}</span>}

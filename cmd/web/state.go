@@ -57,8 +57,8 @@ func (s *server) state() M {
 	ph := s.phase()
 	out := M{
 		"year": lg.Year, "phase": ph, "day": st.Day, "totalDays": engine.SeasonDays,
-		"offers": len(lg.PendingProposals()),
-		"mode":   map[bool]string{true: "real", false: "fictional"}[s.isReal()], "conferences": confNames,
+		"offers": len(lg.PendingProposals()), "injured": len(lg.InjuryReport(u)),
+		"mode": map[bool]string{true: "real", false: "fictional"}[s.isReal()], "conferences": confNames,
 		"user": M{"team": s.team(u), "w": st.Wins[u], "l": st.Losses[u], "pd": st.PointDiff[u],
 			"confRank": s.rank(u), "confName": confNames[engine.Conference(u)]},
 	}
@@ -275,6 +275,7 @@ func (s *server) sim(r *http.Request) (any, error) {
 	}
 	multi := in.Auto || in.Days > 1 || in.ToEnd
 	days := []M{}
+	newInj := []engine.InjuryLine{}
 	created := 0
 	var pause M
 	for i := 0; i < n && !lg.Season.Done(); i++ {
@@ -285,6 +286,11 @@ func (s *server) sim(r *http.Request) (any, error) {
 		d := lg.Season.Day
 		lg.SimDay()
 		days = append(days, s.dayResult(d))
+		for _, l := range lg.NewInjuriesLastDay() {
+			if l.TeamID == lg.UserTeamID {
+				newInj = append(newInj, l)
+			}
+		}
 		k := lg.ProposalsCreatedLastDay()
 		created += k
 		if multi && k > 0 && !lg.Options.NoOfferStop {
@@ -296,7 +302,8 @@ func (s *server) sim(r *http.Request) (any, error) {
 			break
 		}
 	}
-	out := M{"days": days, "strip": s.strip(), "state": s.state(), "newOffers": created}
+	out := M{"days": days, "strip": s.strip(), "state": s.state(), "newOffers": created,
+		"injuries": s.injuryLines(newInj)}
 	if pause != nil {
 		out["pause"] = pause
 	}

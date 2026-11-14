@@ -84,6 +84,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		if ps := lg.Season.Stats[p.ID]; ps != nil && ps.GP > 0 {
 			row["gp"], row["mpg"], row["ppg"], row["rpg"], row["apg"] = ps.GP, float64(ps.Min)/float64(ps.GP), ps.PPG(), ps.RPG(), ps.APG()
 		}
+		addInjury(row, p)
 		roster = append(roster, row)
 	}
 	st := lg.Season
@@ -138,19 +139,24 @@ func (s *server) player(r *http.Request) (any, error) {
 		}
 	}
 	rt := p.Ratings
-	ratings := []M{{"key": "inside", "label": "Inside", "value": rt.Inside}, {"key": "mid", "label": "Mid-range", "value": rt.Mid},
-		{"key": "three", "label": "Three", "value": rt.Three}, {"key": "playmaking", "label": "Playmaking", "value": rt.Playmaking},
-		{"key": "rebounding", "label": "Rebounding", "value": rt.Rebounding}, {"key": "defense", "label": "Defense", "value": rt.Defense},
-		{"key": "athleticism", "label": "Athleticism", "value": rt.Athleticism}}
+	ratings := []M{}
+	for _, k := range engine.RatingKeys() {
+		v, _ := engine.GetRating(rt, k.Key)
+		ratings = append(ratings, M{"key": k.Key, "label": k.Label, "value": v})
+	}
 	career := []M{}
 	for _, c := range lg.Careers[p.ID] {
 		career = append(career, M{"year": c.Year, "team": s.team(c.TeamID), "age": c.Age, "ovr": c.Overall, "pot": c.Potential,
 			"gp": c.GP, "ppg": c.PPG, "rpg": c.RPG, "apg": c.APG})
 	}
-	return M{"id": p.ID, "name": p.Name, "age": p.Age, "pos": p.PosLabel(), "ovr": p.Overall(), "pot": p.Potential,
+	out := M{"id": p.ID, "name": p.Name, "age": p.Age, "pos": p.PosLabel(), "ovr": p.Overall(), "pot": p.Potential,
 		"status": status, "team": team, "role": p.ScoringRole(), "usage": p.ShotUsage(),
 		"ratings": ratings, "experience": p.Experience, "draftYear": p.DraftYear, "draftPick": p.DraftPick,
-		"season": statLine(lg.Season.Stats[p.ID]), "playoffs": statLine(lg.Season.PlayoffStats[p.ID]), "career": career}, nil
+		"season": statLine(lg.Season.Stats[p.ID]), "playoffs": statLine(lg.Season.PlayoffStats[p.ID]), "career": career,
+		"editable": lg.Options.Commissioner,
+		"limits":   M{"minRating": engine.MinRating, "maxRating": engine.MaxRating, "minAge": engine.MinAge, "maxAge": engine.MaxAge}}
+	addInjury(out, p)
+	return out, nil
 }
 
 func (s *server) schedule(r *http.Request) (any, error) {

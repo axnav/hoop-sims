@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Card, DataTable, Page, PlayerLink, Q, TeamBadge, f1, ovrColor, type Col } from '../ui'
+import { Card, DataTable, Page, InjuryTag, PlayerLink, Q, TeamBadge, f1, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -11,7 +11,7 @@ export default function TeamPage() {
   const open = useOpenPlayer()
   const cols: Col<RosterRow>[] = [
     { accessorKey: 'starter', header: '', cell: (i) => (i.getValue() ? <Star size={12} className="fill-accent text-accent" /> : null), sortingFn: 'basic' },
-    { accessorKey: 'name', header: 'Player', cell: (i) => <PlayerLink id={i.row.original.id} name={i.getValue()} />, sortDescFirst: false },
+    { accessorKey: 'name', header: 'Player', cell: (i) => <><PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} /></>, sortDescFirst: false },
     { accessorKey: 'pos', header: 'Pos', sortDescFirst: false },
     { accessorKey: 'age', header: 'Age', num: true },
     { accessorKey: 'ovr', header: 'OVR', num: true, cell: (i) => <b style={{ color: ovrColor(i.getValue()) }}>{i.getValue()}</b> },

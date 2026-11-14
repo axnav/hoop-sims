@@ -1,11 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { api, type StatLine } from './api'
+import { api, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { Q, Ring, TeamBadge, ovrColor, f1 } from './ui'
+import { ErrorBox, InjuryTag, Q, Ring, TeamBadge, injuryText, ovrColor, f1 } from './ui'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
   if (!s) return null
@@ -45,10 +45,70 @@ function Line({ data }: { data: { year: number; ovr: number; pot: number }[] }) 
   )
 }
 
+function EditForm({ p, onDone }: { p: PlayerPage; onDone: () => void }) {
+  const qc = useQueryClient()
+  const L = p.limits
+  const [ratings, setRatings] = useState<Record<string, string>>(() => Object.fromEntries(p.ratings.map((r) => [r.key, String(r.value)])))
+  const [age, setAge] = useState(String(p.age))
+  const [pot, setPot] = useState(String(p.pot))
+  const [heal, setHeal] = useState(false)
+  const save = useMutation({
+    mutationFn: (b: Parameters<typeof api.adminEditPlayer>[1]) => api.adminEditPlayer(p.id, b),
+    onSuccess: (np) => {
+      qc.setQueryData(['player', p.id], np)
+      for (const k of ['team', 'trade-block', 'leaders', 'injuries', 'state']) qc.invalidateQueries({ queryKey: [k] })
+      onDone()
+    },
+  })
+  const submit = () => {
+    const body: Parameters<typeof api.adminEditPlayer>[1] = {}
+    const changed: Record<string, number> = {}
+    for (const r of p.ratings) {
+      const v = Number(ratings[r.key])
+      if (ratings[r.key] !== '' && v !== r.value) changed[r.key] = v
+    }
+    if (Object.keys(changed).length) body.ratings = changed
+    if (age !== '' && Number(age) !== p.age) body.age = Number(age)
+    if (pot !== '' && Number(pot) !== p.pot) body.potential = Number(pot)
+    if (heal) body.heal = true
+    save.mutate(body)
+  }
+  const num = (v: string, set: (s: string) => void, min: number, max: number, label: string) => (
+    <input type="number" inputMode="numeric" min={min} max={max} value={v} aria-label={label} onChange={(e) => set(e.target.value)}
+      className="w-16 rounded border border-line bg-panel2 px-2 py-1 text-right tabular-nums" />
+  )
+  return (
+    <div className="mt-4 rounded-lg border border-accent/50 bg-panel2/50 p-3">
+      <div className="h2 mb-2">Edit player</div>
+      <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {p.ratings.map((r) => (
+          <label key={r.key} className="flex items-center justify-between gap-2">
+            <span className="text-muted">{r.label}</span>
+            {num(ratings[r.key], (s) => setRatings((m) => ({ ...m, [r.key]: s })), L.minRating, L.maxRating, r.label)}
+          </label>
+        ))}
+        <label className="flex items-center justify-between gap-2"><span className="text-muted">Age</span>{num(age, setAge, L.minAge, L.maxAge, 'Age')}</label>
+        <label className="flex items-center justify-between gap-2"><span className="text-muted">Potential</span>{num(pot, setPot, L.minRating, L.maxRating, 'Potential')}</label>
+      </div>
+      {p.injury && (
+        <label className="mt-3 flex items-center gap-2 text-[13px]">
+          <input type="checkbox" checked={heal} onChange={(e) => setHeal(e.target.checked)} />Heal injury
+        </label>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn btn-accent" disabled={save.isPending} onClick={submit}>Save</button>
+        <button className="btn" disabled={save.isPending} onClick={onDone}>Cancel</button>
+      </div>
+      {save.isError && <ErrorBox error={save.error} />}
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
   const { state } = useFlow()
+  const [editing, setEditing] = useState(false)
   const ts = useQuery({ queryKey: ['trade-status', state?.phase, state?.day], queryFn: api.tradeStatus })
   return (
     <Q q={q} minH={300}>
@@ -56,7 +116,8 @@ function Body({ id, close }: { id: number; close: () => void }) {
         <div className="p-5">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-extrabold">{p.name}</h2>
+              <h2 className="text-2xl font-extrabold">{p.name}<InjuryTag injury={p.injury} /></h2>
+              {p.injury && <div className="mt-1 text-sm font-semibold text-loss">Injured: {injuryText(p.injury)}</div>}
               <div className="mt-1 flex items-center gap-2 text-muted">
                 <span>{p.pos}</span><span>Age {p.age}</span><span>{p.status}</span>
               </div>
@@ -75,6 +136,8 @@ function Body({ id, close }: { id: number; close: () => void }) {
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
+          {p.editable && !editing && <button className="btn mt-3 ml-2" onClick={() => setEditing(true)}>Edit</button>}
+          {p.editable && editing && <EditForm p={p} onDone={() => setEditing(false)} />}
           <div className="mt-4 space-y-1.5">
             {p.ratings.map((r) => (
               <div key={r.key} className="flex items-center gap-3">

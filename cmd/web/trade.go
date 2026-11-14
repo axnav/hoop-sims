@@ -55,8 +55,10 @@ func (s *server) playerRow(owner int, a engine.TradeAsset) M {
 			break
 		}
 	}
-	return M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
+	row := M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
 		"value": round1(a.Value), "untouchable": a.Untouchable, "tier": tier}
+	addInjury(row, s.lg.FindPlayer(a.PlayerID))
+	return row
 }
 
 func (s *server) pickLabelFor(owner, year, round, original int) string {

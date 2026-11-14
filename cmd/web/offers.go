@@ -34,8 +34,12 @@ func (s *server) assetRow(m engine.Move) M {
 		for _, a := range engine.TradeBlock(s.lg, owner) {
 			if a.PlayerID == m.PlayerID {
 				r := s.playerRow(owner, a)
-				return M{"kind": "player", "playerId": a.PlayerID, "name": r["name"], "pos": r["pos"], "age": r["age"],
+				row := M{"kind": "player", "playerId": a.PlayerID, "name": r["name"], "pos": r["pos"], "age": r["age"],
 					"ovr": r["ovr"], "pot": r["pot"], "value": r["value"], "tier": r["tier"]}
+				if inj, ok := r["injury"]; ok {
+					row["injury"] = inj
+				}
+				return row
 			}
 		}
 		return M{"kind": "player", "playerId": m.PlayerID, "name": "?", "pos": "", "age": 0, "ovr": 0, "pot": 0, "value": 0.0, "tier": ""}
@@ -115,13 +119,16 @@ func (s *server) offerReject(r *http.Request) (any, error) {
 
 func (s *server) optionsGet(r *http.Request) (any, error) {
 	o := s.lg.Options
-	return M{"noDeadlineStop": o.NoDeadlineStop, "noOfferStop": o.NoOfferStop}, nil
+	return M{"noDeadlineStop": o.NoDeadlineStop, "noOfferStop": o.NoOfferStop,
+		"noInjuries": o.NoInjuries, "commissioner": o.Commissioner}, nil
 }
 
 func (s *server) optionsSet(r *http.Request) (any, error) {
 	var in struct {
 		NoDeadlineStop *bool `json:"noDeadlineStop"`
 		NoOfferStop    *bool `json:"noOfferStop"`
+		NoInjuries     *bool `json:"noInjuries"`
+		Commissioner   *bool `json:"commissioner"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -131,6 +138,12 @@ func (s *server) optionsSet(r *http.Request) (any, error) {
 	}
 	if in.NoOfferStop != nil {
 		s.lg.Options.NoOfferStop = *in.NoOfferStop
+	}
+	if in.NoInjuries != nil {
+		s.lg.Options.NoInjuries = *in.NoInjuries
+	}
+	if in.Commissioner != nil {
+		s.lg.Options.Commissioner = *in.Commissioner
 	}
 	return s.optionsGet(r)
 }

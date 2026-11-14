@@ -6,6 +6,7 @@ import { api, type Award } from '../api'
 import { useFlow } from '../flow'
 import { InlineContinue, useOpenPlayer } from '../Inline'
 import { OffersCard } from '../OffersCard'
+import { InjuriesCard } from '../InjuriesCard'
 import { Card, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1 } from '../ui'
 
 function Hero({ children, tone = 'accent' }: { children: React.ReactNode; tone?: 'accent' | 'gold' }) {
@@ -137,6 +138,7 @@ export default function Dashboard() {
       <Interlude />
       <OffseasonTrades />
       <OffersCard />
+      <InjuriesCard />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Next game" className="min-h-[150px]">
           {s.next ? (
