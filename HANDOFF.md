@@ -155,6 +155,12 @@ Done: engine, interface, save/load, interactive playoffs, real-data mode. Recomm
 
 ## Update log (newest first; overrides anything above that conflicts)
 
+### 2026-11-14, night: merged to main, save versioning, plan agreed
+- Owner agreed the order of work below and gave standing permission to commit and merge to `main` locally when the code is correct. Pushing still needs a yes. Owner also asked that checks (`go vet`, `go test`, web build) run only once per finished piece of work, not between small steps.
+- `main` now holds the roles/usage/rookie/UI work (commit `89afcee`), checked by the main session with vet, test and web build; not play-tested in a browser.
+- Save versioning (step 1, branch `feat/save-version`): `League.Version`, `SaveVersion = 1` and the `saveUpgrades` step list in `engine/save.go`; a save with no version is treated as 0 and upgraded on load, a newer save is refused. Tests in `engine/save_test.go`. Helper ran vet and tests (pass); main session read the diff only. Rule from now on: any new or changed saved field bumps `SaveVersion` and appends one upgrade step.
+- Next: step 2a, draft picks as owned objects (engine only), then 2b multi-team asset trades, then 2c API and trade screen. Defaults chosen by the main session, owner may change: picks tradeable four drafts ahead, two rounds, no protections or swaps yet, at most three teams in a trade, simple cap later.
+
 ### 2026-11-14, late: investigations only (no code changed), decisions pending
 All findings below are helper reports; the main session only spot-checked three rows of the measurement output.
 - Why the same players always star in real mode: young players' Potential comes from their real later peak (`hindsightPeak`, realdata.go), growth pulls toward that ceiling, there are no injuries or situation effects, and the default seed is 1. Measured over 10 seeds x 10 seasons: Rose ends 85-95 every time, Harden is #1 in 7 of 10, per-player spread 2.5-5 points, below-average youngsters reach 80+ in 2.9% of cases. Ryan Anderson reaches 86-94 every seed (Impact +5 doubled into the ceiling; looks wrong, not traced). Throwaway measuring program was in the session scratchpad, not kept.

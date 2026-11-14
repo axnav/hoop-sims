@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -9,8 +10,23 @@ import (
 // SavePath is where the web game keeps its save, relative to the working directory.
 const SavePath = "saves/league.json"
 
+// SaveVersion is the current save format. Bump it and append one step to
+// saveUpgrades whenever a saved field is added or changes meaning.
+const SaveVersion = 1
+
+// saveUpgrades[i] upgrades a league from version i to version i+1.
+var saveUpgrades = []func(*League){
+	// 0 -> 1: saves from before versioning; make sure Careers exists.
+	func(lg *League) {
+		if lg.Careers == nil {
+			lg.Careers = map[int][]CareerRow{}
+		}
+	},
+}
+
 // Save writes the whole league as JSON, creating the folder if needed.
 func (lg *League) Save(path string) error {
+	lg.Version = SaveVersion
 	data, err := json.Marshal(lg)
 	if err != nil {
 		return err
@@ -35,8 +51,15 @@ func Load(path string) (*League, error) {
 	if err := json.Unmarshal(data, lg); err != nil {
 		return nil, err
 	}
-	if lg.Careers == nil {
-		lg.Careers = map[int][]CareerRow{}
+	if lg.Version > SaveVersion {
+		return nil, fmt.Errorf("save is version %d but this game only understands up to version %d: it was made by a newer build", lg.Version, SaveVersion)
 	}
+	if lg.Version < 0 {
+		return nil, fmt.Errorf("save has invalid version %d", lg.Version)
+	}
+	for v := lg.Version; v < SaveVersion; v++ {
+		saveUpgrades[v](lg)
+	}
+	lg.Version = SaveVersion
 	return lg, nil
 }

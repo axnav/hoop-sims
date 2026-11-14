@@ -117,6 +117,9 @@ func (t *Team) Rotation() []*Player {
 }
 
 type League struct {
+	// Version is the save format version, stamped by Save (see SaveVersion).
+	Version int `json:"version"`
+
 	Seed       uint64
 	Year       int
 	NextID     int // next unused player ID
