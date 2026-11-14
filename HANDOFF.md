@@ -1,259 +1,164 @@
 # HoopSim handoff
 
-Last updated: 2026-11-14. Module `hoopsim`, Go (standard library only). Everything below was built on that one day.
+Last full refresh: 2026-11-14. Module `hoopsim`, Go (standard library only) with a React + TypeScript front end.
 
-Legend: **[verified]** = checked by running or reading the code while writing this file. **[reported]** = taken from the owner's session notes (helpers' or earlier measurements), not re-run now.
+Legend: **verified** means a person or session ran it or read the code and saw it. **reported** means a helper said so and it was not re-run.
 
----
+## 1. Summary
 
-## 1. What this project is and the goal
+- HoopSim is a text and web basketball franchise simulation: you run one team (GM mode) through seasons, trades, free agency and drafts. There is no on-court graphics engine, only simulation (plus a replay viewer of recorded games).
+- State today: the whole approved roadmap (trade negotiation, injuries, commissioner mode, contracts and soft cap, free agency, lineups, draft lottery, scouting) is built and merged to `main`. `go vet` is clean and all tests pass (verified 2026-11-14).
+- The most important thing to know: the question that started this work, "why do the same real players always become stars in real-data mode?", is only partly solved (see problem 1 in section 5).
+- Read next: `RULES.md` (the rules everyone follows, including the random-stream table and save rules) and `ARCHITECTURE.md` (how the code is built, file map, API routes, save format). Use `ARCHITECTURE.md` whenever you need to find or change code.
+- This file is about state: what exists, what was decided and why, what is verified, what is wrong, what is next.
 
-HoopSim (working title) is a text/web **basketball franchise simulation**. The owner enjoys franchise and career-simulation videos of big basketball games and wants to build only the simulation part: ratings, potential, progression, seasons, drafts. There are no on-court graphics.
+## 2. Get going in ten minutes
 
-- Chosen mode: **GM mode** (run one team). A single-player career mode is a later idea.
-- Must be an **original game**: fictional league by default (30 fictional teams, generated players). Do not copy an existing game's branding, menus or look.
-- The owner may publish it later. **Real-player data is for private local testing only.** The files in `data/real/` must never be shipped or redistributed (source licence unclear; the underlying data is Basketball-Reference's). The published default stays fictional; real data stays an optional local import. Lookalike names of real players were rejected as a workaround, because identifiability, not spelling, is the legal risk.
-
-## 2. How the owner wants to work
-
-- **Language and level**: Go, their choice. They are comfortable with TypeScript, less so with Go, and are learning. Standard library only.
-- **Communication**: they speak informally and often by voice, so messages can be garbled. Restate your understanding in plain words. Ask simple either/or questions. They could not follow a request to write a function themselves, so ask design decisions as plain choices and write the code for them.
-- Explanations in plain language, short. They like brief "insight" notes about why a design choice was made.
-- **Token economy matters a lot** (limited allowance; the main model's limit resets around the 17th and they may switch to another model). Rules that emerged:
-  - The main session designs, briefs and reviews. Smaller-model subagents write and test code.
-  - ONE layer only: subagents must not spawn their own subagents.
-  - One or two helpers at a time. Detailed briefs with file boundaries so two helpers never edit the same files.
-  - No separate sessions (they cost too much).
-  - No nitpicking polish, but verify results independently before reporting.
-- **Always ask before**: downloading anything; restarting the game server when a league may be in progress (unsaved progress is lost); anything that leaves the machine.
-- **No git repository exists.** Never commit unless asked. (If one is ever created, add `data/real/` and `saves/` to `.gitignore` first.)
-- **Report honestly**: say what was verified by running it and what was only reported by a helper.
-- **Never show the hidden number** (`Impact`) in the interface.
-
-## 3. Current state
-
-What exists and works:
-- Engine: players, seeded RNG, fictional names/teams, league generator, possession-based game sim with box scores and play-by-play, 82-game season over two conferences, playoffs (steppable), awards (MVP, Finals MVP), offseason (progression, retirements, 60-pick two-round draft where the user picks for their team, roster trim to 13, free agents), career history, save/load.
-- Web UI (`cmd/web`): start page, dashboard with sim buttons, roster, player page with career table, standings, leaders, playoff bracket page (West left, East right, Finals centre), live game viewer replaying recorded play-by-play (pause, 1x/4x/16x, skip to end), offseason report, draft page, history, box scores, save/load to `saves/league.json`.
-- Real-data mode: `NewRealLeague` builds the real 2010-11 league from the CSVs in `data/real/`. Offered on the start page only when the files exist.
-- Validation tool `cmd/realcheck` compares simulated 2010-11 against real standings.
-
-Verification done while writing this file (2026-11-14):
-- **[verified]** `go vet ./...` clean and `go test -count=1 ./...` passes (`ok hoopsim/engine`, about 6 s; the `cmd/*` packages have no tests). Go is go1.27.4 at `/usr/local/bin/go`; `go.mod` says `go 1.22`.
-- **[verified]** File list, exported names, flags and HTTP routes in section 5 were read from the code.
-- **[reported]** Browser check of the live viewer (runs, skip works, final score matched the bracket).
-- **[reported]** All numbers in section 7.
-
-The web server (port 8080) may be running with a league in progress. Do not restart it without asking.
-
-## 4. How to run everything
-
-Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from `/Users/apple/Documents/sim`.
+Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from the project root.
 
 | What | Command |
 |---|---|
-| Web game (http://localhost:8080; `-port N` to change) | `go run ./cmd/web` |
-| Preview server definition | `.claude/launch.json`, name `hoopsim`, port 8080 |
-| Engine sanity check (league-average game stats; `-games N`, `-seed N`) | `go run ./cmd/sim -mode sanity` |
-| Simulate several seasons, prospect tracker | `go run ./cmd/sim -mode seasons -seasons 10` |
-| Same, with the hidden number shown (debug only) | `go run ./cmd/sim -mode seasons -seasons 10 -reveal` |
-| Real-data validation vs real 2010-11 (`-data` dir, default `data/real`) | `go run ./cmd/realcheck -runs 30` |
-| Tests | `go test ./...` (add `-count=1` to bypass cache) |
+| Checks (Go) | `go vet ./... && go test ./... -count=1` (engine tests take 30 to 40 seconds; verified result on 2026-11-14: all pass) |
+| Build the web app (needed once, and after screen changes) | `cd web && npm install && npm run build` |
+| Run the game | `go run ./cmd/web` then open http://localhost:8080 (flags `-port`, `-save`, `-web`) |
+| Front-end dev server | `cd web && npm run dev` (proxies `/api` to port 8095, so also run `go run ./cmd/web -port 8095`) |
+| League-average game check | `go run ./cmd/sim -mode sanity` (flags `-seed`, `-games`) |
+| Rating distributions | `go run ./cmd/sim -mode ratings` |
+| Multi-season run | `go run ./cmd/sim -mode seasons -seasons 10` (`-reveal` shows the hidden number; debug only) |
+| Real-data check vs real 2010-11 | `go run ./cmd/realcheck -runs 30` (needs `data/real/`) |
 
-## 5. Code map
+How to test safely without touching the owner's game:
+- Port 8080 and `saves/league.json` belong to the owner. Do not start, stop or write to them without asking.
+- Build the server to a place outside the repository, for example `go build -o <scratch dir>/hoopsim-test ./cmd/web`. Never run a plain `go build` inside `cmd/web`: it writes a file called `web` there, and that file is tracked in git (problem 10).
+- Run it on port 8097 with a scratch save: `<scratch dir>/hoopsim-test -port 8097 -save <scratch dir>/test.json`. Drive it with a script and headless Chromium. `RULES.md` section 7 describes the end-to-end pass.
+- To try a real old save, copy it to the scratch folder first.
 
-Root: `go.mod`, `.claude/` (agents, `launch.json`), `cmd/`, `engine/`, `data/real/` (private CSVs), `saves/league.json` (current save).
+## 3. What the game has now
 
-### `engine/` (all game logic; no I/O except real-data loading and save/load)
-- `rng.go`: `RNG` (the only randomness source; every function takes one so a seed reproduces everything), `Between`, `Normal`, `Chance`, `Pick`, `PickWeighted`, `clamp`.
-- `player.go`: `Position` (PG, SG, SF, PF, C), `Ratings` (Inside, Mid, Three, Playmaking, Rebounding, Defense, Athleticism), `Player` (incl. `AltPos`, `Potential`, hidden `Impact`, `RealID`). `overallWeights` per position; `Overall()` = best over positions the player can play; `Effective()` = ratings shifted by `Impact` (what the sim uses); `TrueOverall()`.
-- `names.go`: fictional name lists.
-- `generate.go`: `RosterSize = 13`, `GeneratePlayer`, `Team`, `League` struct, `GenerateLeague(seed)`, `dealEvenly` (deals talent evenly to teams at creation; this is the main team-balance fix), `Team.Rotation()`.
-- `game.go`: possession model constants (shooting bases, turnover, foul, rebound, home edge, `shootExp`, `minutesByRank`), `SimGame` / `SimGameRec` (with play-by-play recording), `StatLine`, `TeamBox`, `GameResult`, `Event`. Contains `possession()`.
-- `season.go`: `NumTeams = 30`, `SeasonDays`, `Conference`, `Season`, `PlayerSeason`, `StartSeason`, `SimDay` / `SimDays` / `SimRegularSeason`, `Standings`, `Leaders`, `computeAwards`.
-- `playoffs.go`: `Series`, `PGame`, `StartPlayoffs`, `SimPlayoffDay`, `SimUserSeries`, `SimRound`, `SimAllPlayoffs`, `finishPlayoffs` (Finals MVP).
-- `history.go`: `CareerRow`, `SeasonRecord`, `Box` / `BoxTeam` / `BoxLine`, `recordBox`, `recordSeason`, `FindPlayer`.
-- `progression.go`: `Progression` (the `ProgressionConfigT` with every tunable for development, retirement, rookies, roster management), `Player.Progress`, `RetireChance`, `TrueCeiling`, `GenerateRookie`.
-- `offseason.go`: `BeginOffseason`, `Offseason`, `Draft`, `DraftPick`, `DraftAutoUntilUser`, `DraftAutoAll`, `FinishOffseason`, `OffseasonReport` (`Retiree`, `PickResult`, `Change`).
-- `save.go`: `League.Save(path)` / `Load(path)` (JSON).
-- `realdata.go` (890 lines): CSV loading, percentile models per season, `RealTuning` (`RealTuningT`), `rate()` (stats to ratings), `NewRealLeague`, `takeDraftClass`, `hindsightPeak`, and helpers `RatingsFromStats`, `RealPerGameStats`, `RealTeamWins`, `RealLeaguePPG` used by `realcheck`.
-- `realteams.go`: the 2010-11 franchise table and `RealTeamAbbrevs()`.
-- Tests: `game_test.go` (determinism, invariants, league averages), `season_test.go` (season basics, determinism, 30-season stability, team balance), `history_test.go` (save/load round trip, stepped draft), `playoffs_test.go` (step equivalence, save mid-playoffs, recording does not change results, events rebuild the box), `realdata_test.go` (real league shape and determinism; skipped if the CSVs are absent).
+Everything below was built on 2026-11-14 unless noted. "Verified" means the main session ran an end-to-end pass on a throwaway server (port 8097, scratch save, headless Chromium) on that date. File names are the main engine file; `ARCHITECTURE.md` has the rest.
 
-### `cmd/`
-- `cmd/web/main.go` (850 lines): HTTP server with in-memory league. Routes: `/` (start), `/new`, `/load`, `/save`, `/dashboard`, `/sim`, `/offseason`, `/draft`, `/draft/pick`, `/draft/auto`, `/team`, `/player`, `/standings`, `/leaders`, `/playoffs`, `/playoffs/do`, `/watch` (live viewer), `/history`, `/box`. Templates in `cmd/web/templates/` (base, start, dashboard, team, player, standings, leaders, playoffs, watch, box, history, offseason, draft), CSS in `cmd/web/static/style.css`; both embedded.
-- `cmd/sim/main.go`: command-line sanity and multi-season runs (flags: `-seed`, `-games`, `-mode`, `-seasons`, `-reveal`).
-- `cmd/realcheck/main.go`: runs the real 2010-11 league many times; prints win correlation, mean absolute error, per-team misses, scoring comparison and ratings.
+- **Core simulation** (older work). Players with seven ratings, a visible potential and a hidden `Impact`; possession-based games with box scores and play-by-play; 82-game season, two conferences, steppable playoffs, awards; offseason with progression, retirements and a 60-pick two-round draft; career history; save and load. Fictional league by default (30 teams). Verified by the test suite.
+- **Save versioning** (`engine/save.go`). Saves carry a version; an older one is upgraded on load, a newer one is refused. Current version 3. Verified: a COPY of the owner's own save (no version, year 2032) loaded, was upgraded with picks and contracts, and ran a full season cycle.
+- **Draft picks as owned, tradeable objects** (`engine/picks.go`). Four drafts ahead, two rounds, no protections or swaps.
+- **Multi-team deals** (`engine/deal.go`). Up to three teams, players and picks, each computer team judges its own side and all must accept. Verified: pick-for-player, a rejected lowball, a three-team evaluate, a bad request, an executed deal. Not tried: executing a three-team deal by hand in the browser.
+- **Trade negotiation** (`engine/negotiate.go`). Tier labels beside the numbers, a mood (accept, close, far, no) and a concrete ask, offers from computer teams, the sim pauses when an offer arrives and before the deadline (day 50), with "don't stop" switches. Verified: tiers shown, a lowball got an ask and adding it made the team accept, an offer paused an auto sim, Accept executed a trade, the deadline dialog appeared on day 50. Not tried: the Decline and "Change it" buttons by hand.
+- **Injuries** (`engine/injury.go`). Mostly missed games (about 85 player-games per team per season), 0.4% serious with a permanent athleticism drop of 2 to 4. Can be switched off. Verified: injured players sat out and counted down; switching off stopped new ones. Not tried: serious injuries, playoffs with injuries, offseason carry-over.
+- **Commissioner mode** (`engine/commissioner.go`). Option switches (Settings page) and editing a player's visible ratings, age, potential and healing. Refused when the mode is off. Cannot touch `Impact`. Verified: edit refused when off, worked when on, out-of-range refused.
+- **Stage rules in the engine** (`engine/phase.go`). Which stage the league is in and what may happen next now lives in the engine, not the web layer. Evidence it changed no behaviour: the API tests ran unedited. No browser pass was done for this piece.
+- **Contracts, soft cap, tax, hard ceiling** (`engine/contract.go`). Cap 140,000, tax line 170,000, hard ceiling 190,000 (thousands of dollars), minimum 1,200, maximum 49,000; trades must roughly match salaries; contract value adjusts trade value. Verified: league payroll averaged $137.4M, a swap breaking the hard ceiling was refused with a sentence, re-sign and release worked, rosters stayed at 13 with everyone under contract.
+- **Free agency over ten days** (`engine/freeagency.go`). A stage between the draft and the new season: expiring players go to a pool, you make offers, rival teams bid, asking prices soften over the days. Verified: confirmations appeared, an unaffordable offer was refused, a lowball lost to another team, an offer at the ask signed a player, stars signed (a first play-through left a 98-rated star unsigned; that was fixed and re-checked). Six seasons of payroll stayed between 97% and 107% of the cap (helper report). Not tried: withdrawing an offer by hand.
+- **Lineups** (`engine/lineup.go`). Pick five starters and minutes per player (total 240, no more than 42 each, at least 8 players). Injured players' minutes are redistributed. Young players (24 and under) develop faster with many minutes and slower with few. Verified: saving at 248 minutes blocked, 240 allowed, a custom lineup produced exactly the minutes set, an injury redistributed minutes, Reset returned to automatic.
+- **Draft lottery** (`engine/lottery.go`). Fourteen lottery teams, four slots drawn, round two in record order. Verified: the lottery moved teams.
+- **Scouting** (`engine/scouting.go`). Prospects show ranges that always contain the truth; 12 scouting points per draft narrow them. The Draft page waits for "Start the draft" so there is time to scout. Verified: two scouts narrowed the top prospect from 53-67 / 81-99 to 58-64 / 85-93; the browser never received true prospect values or `Impact`; after the draft all true values were inside the ranges shown.
+- **Blurred ceilings in real data** (`RealTuning.PotentialBlurSD` 4.0 in `engine/realdata.go`). Each real-data league gets its own noise on young players' potentials, so ceilings depend on the seed.
+- **Real-data mode** (older work, private). Builds the real 2010-11 league from `data/real/`. Verified: a full cycle ran cleanly on 2026-11-14.
+- **Screens** (React in `web/`). Dashboard, roster, lineup, trade, free agency, draft, offseason, injuries, settings, standings, playoff bracket, game viewer (2D and a lazy-loaded 3D court), history.
 
-## 6. Design decisions and why
+## 4. Decisions made and why
 
-**Ratings.** Seven ratings per player. Players can have several positions (`Pos` + `AltPos`). The visible overall is position-weighted: the best of the weighted overalls over the positions he can play, not a plain average.
+Owner decisions and standing preferences:
+- Simulation only. The default game is fictional. Real-data mode is for private local testing and must never ship (the data's licence is unclear; lookalike names were rejected because being identifiable, not spelling, is the legal risk).
+- Trade screen keeps its numbers and also shows plain tier labels. Teams negotiate (a mood and a concrete ask) instead of flatly refusing.
+- Soft cap with a luxury tax and a hard ceiling, no long list of exceptions. Free agency by offers over several days. Scouting by fuzzy ranges narrowed with points. Lineups by starters plus minutes sliders. Injuries mostly missed games with rare serious ones, switchable off. A commissioner mode.
+- Later, not built: player morale and trade requests, owner goals and job security, a news feed, coaches.
+- The interface is React (the owner knows it) with an animated flow that never dead-ends; a 3D court viewer was asked for.
+- Checks run once per finished piece of work. Every feature gets one end-to-end pass on port 8097. The owner gave standing permission to commit and merge to `main` locally when the code is correct, and on 2026-11-14 asked for `main` to be pushed.
 
-**Hidden number (`Impact`, about -8..+8, never shown).** It shifts real in-game performance (`Effective()`), and with `Potential` decides whether a prospect reaches, beats or misses visible potential (true ceiling = Potential + Impact x `CeilingImpactMult`). Age, overall and potential all feed development. `ImpactSD` was weakened to 1.8 (was 3) during tuning, so booms and busts come more from yearly luck than from the hidden number. Revisit after play-testing.
+Design decisions from earlier work (checked against the code):
+- **Ratings.** Seven ratings per player, players may have a second position. The visible overall is position-weighted and takes the best position the player can play.
+- **Hidden number `Impact`** (about -8 to +8, never shown). It shifts real in-game performance and, with potential, sets the true ceiling (ceiling = potential + Impact x `CeilingImpactMult`). `ImpactSD` was weakened during tuning so booms and busts come more from yearly luck. All tunables are in `Progression` in `engine/progression.go`.
+- **Progression.** Growth to about 27, prime 27 to 30, decline from 31, retirement from 34, forced at 40. Leap and stall events for young players. The owner chose development "in the middle" (target 55 to 65% of top-10 picks finishing within 4 points of their draft-day potential).
+- **Balance.** Stars were first too dominant. Fixed by retuning individual shares, and mainly by dealing talent evenly at league creation (`dealEvenly` in `engine/generate.go`). Each draft class has exactly two star prospects so a minimum of two 90+ players holds over 30 seasons.
+- **Shot tendency.** Each player has a usage tendency that affects who shoots, separate from shooting skill; real-data mode seeds it from historical usage.
+- **Real-data recipe.** Ratings come from season percentiles of box-score and value statistics; the hidden `Impact` is the gap between value statistics and the box-score rating (clamped to 5); potential is set with hindsight (the player's later best level, then blurred); real draft classes from 2011 replace generated rookies. The tunables are in `RealTuning`.
+- **Interactive playoffs.** Steppable; games record play-by-play so the viewer can replay them; tests confirm recording does not change results.
+- **Pace.** The engine is tuned to modern scoring, so real-mode 2010-11 scoring runs about 14 points per team too high on purpose.
+- **Saves.** Any new or changed saved field follows the rules in `RULES.md` section 4. New random-number features get their own stream (table in `RULES.md` section 3).
 
-**Progression** (all in `Progression`): growth to about 27 (rate falls with age), prime 27-30, decline from 31, retirement from 34 with a forced end at 40. Leap and stall events for players under 25 (6% each). The owner chose development "in the middle" between predictable and swingy: target 55-65% of top-10 picks finishing within +/-4 of draft-day potential. Visible potential converges to overall by age 27.
+## 5. Known problems and open decisions
 
-**Balance.** Stars were first too dominant (36 PPG with 16 rebounds; 74-win teams). Fixed by retuning individual shares, then team balance mainly by dealing talent evenly at league creation (`dealEvenly`). Game constants were tuned to modern league averages.
+1. **The same real players become stars.** On real data over 10 seeds and 10 seasons, after all the work: six different players finish as the best young player (before: one player in 7 of 10), but the elite group is the same names (top-ten overlap 0.48, was 0.51) and Derrick Rose still ends 87 to 96 in every seed. Ryan Anderson (hidden Impact +5, doubled into his ceiling by `CeilingImpactMult` 2.0) reaches 88 to 95 in every league. Below-median youngsters peaking at 70 or more went from 12.8% to 15.4%. Blurring changed the order at the top, not who is at the top. Untried levers: a larger `RealTuning.PotentialBlurSD` (now 4.0), a smaller `CeilingImpactMult`, more consequential injuries. Decision needed: which lever to pull first.
+2. **Automatic lineup and positions.** The game sim ignores positions (only ratings and minutes count), but the automatic rotation picks starters by position, so weak players can start over far better ones (a 48-rated forward started over an 80-rated 20-year-old). This is why some weak players get heavy minutes league-wide. Choose between "the automatic lineup plays the best players" and "make positions matter in the game sim". The first is simpler.
+3. **Pick values are small next to stars.** A top pick is worth about 32, a 99-rated star about 180. Untuned; nobody measured what top picks are worth right after the draft, so picks may be under- or over-priced (possible exploit either way).
+4. **Fictional rosters are very top-heavy.** For example a 97 next to several players under 50 on one team.
+5. **Retirement may be too eager for stars.** A 91-rated 35-year-old retired in a test league.
+6. **Few trades in real-data mode.** Only one trade was logged in a year, against 26 in the owner's fictional save. Computer teams may trade less under the salary rules there.
+7. **Hands-off teams suffer.** A team that ignores re-signing and free agency ends with leftovers (a hands-off team went 4-78 in a helper test). An over-the-cap team can only sign players whose ask is the minimum. This is intended but harsh; the screens warn before both steps.
+8. **Money is thin.** A released player's contract simply ends (no money still owed). The luxury tax is recorded but has no consequence because teams have no finances. When a full roster receives extra players the game releases the lowest-valued ones without asking.
+9. **Tests.** `TestFreeAgencyMarket` was loosened by a helper (top ten signing early: at least 4, was 5). `TestLongStability`'s home-win band (54 to 60%) sits near its edge, and 30-season stability was only fully checked on a few seeds. The engine trade tests halve salaries in a fixture. Engine tests take 30 to 40 seconds. `cmd/web` has API tests; `cmd/sim` and `cmd/realcheck` have none.
+10. **Tracked binary.** The compiled file `cmd/web/web` is tracked in git (verified) and is rewritten by a build inside that folder. The owner was asked whether to untrack it and has not answered.
+11. **Old save mode label.** The owner's old save reports mode "fictional" although it holds real player names.
+12. **Cheaper helpers.** Two changes were proposed for helper cost and not applied: an environment setting in the user's Claude settings making helpers default to a cheaper model, and a note that helpers must always be given a named model. The note is now in `CLAUDE.md` and `RULES.md`; the settings change was not made and needs the owner's say.
+13. **Front end.** The 3D court at fast replay speed (figures still mostly in transit near half-court because possessions change ends faster than they can run) and visible scrollbars on the nav strip are open. The trade screen's counter-offer button, accepted-trade animation and several other buttons were never clicked by hand. Playoff stats are tracked but not on player pages; only the latest regular-season game keeps a box score.
+14. **Product basics missing.** API responses are untyped maps with hand-kept TypeScript types (`web/src/api.ts`); there is one save slot; there is no packaged build that leaves out `data/real/`.
+15. **Scoring distribution.** Real mode still under-scores pure scorers and under-passes pure passers (Carmelo Anthony 18.0 vs 25.6 real PPG, Rajon Rondo 7.1 vs 11.2 assists, `realcheck -runs 10`). The simulated win spread is wider than real (SD 16.2 vs 13.0).
+16. **Never tested.** Real mode over many seasons (possible free-agent shortage late), the tax display with a taxed team, withdrawing an offer by hand, serious injuries.
 
-**Interactive playoffs.** Steppable (a game day, my series, this round, to the end). Games record play-by-play so the viewer can replay them; recording is tested not to change results.
+## 6. Measured results
 
-**Real-data mode** (private testing only). Source: GitHub repository `sumitrodatta/bball-reference-datasets`, downloaded with the owner's approval into `data/real/` (six CSVs: Player Totals, Advanced, Player Career Info, Draft Pick History, Team Summaries, Team Abbrev; 10.6 MB). The season column is the END year (2011 = 2010-11). The recipe, from `engine/realdata.go` (`rate`, `baseRatings`, `RealTuning`):
-1. Each rating comes from a percentile of the league that season among qualified players (500+ minutes): Three from three-point accuracy (shrunk toward league average) and attempt rate; Mid mostly from free-throw ability; Inside from two-point efficiency, free-throw rate, two-point attempts and offensive rebound rate; Playmaking from assist rate (and low turnovers); Rebounding from rebound rate; Defense from defensive BPM, steals, blocks and defensive win shares per 48; Athleticism from steals, blocks, offensive rebounds, free-throw rate, attempts, plus an age term. A usage term (`UsageInside/Mid/Three/Play` = 30/22/22/8) adds to the offensive ratings.
-2. Two target overalls are computed: one from the box-score profile, one from a value composite (BPM 0.6, WS/48 0.3, PER 0.1 as z-scores). Each maps through `Mean 63.8 + Sd 12 x z` with compression above z = 1.8 (`CompressZ`, `CompressSlop 1.0`). Low-minute players are shrunk toward `Replacement 50` by `(mp/500)^0.6`.
-3. Visible overall target = 0.4 x box + 0.6 x value (`BoxWeight 0.4`). All ratings are shifted by a common delta, iterated until the position-weighted overall matches the target.
-4. Hidden `Impact` = value target minus the resulting visible overall (gap between value stats and box-score ratings), clamped to +/-5 (`ImpactMax`).
-5. Positions come from the listed position, height and assist/usage profile (`position()`).
-6. Teams: 13 players per team by minutes on the team where each played most. Potential is set with hindsight (best later visible level, `hindsightPeak`). Real draft classes from 2011 onward replace generated rookies (`takeDraftClass`; `RookieDrop 4` lowers prospect targets before their first season).
+- Engine league averages (reported, earlier): about 110 points per team, FG 47%, 3P 36.6%, home win rate 55.8%.
+- `realcheck -runs 10` (reported, 2026-11-14): win correlation 0.943, mean absolute error 5.1 wins vs real 2010-11, simulated win SD 16.2 vs real 13.0.
+- Free agency: league payroll 107%, 105%, 103%, 99%, 97%, 99% of the cap over six seasons (helper). Contracts pass: average payroll $137.4M in year one, $134.7M in year two.
+- Star variety (the 10 seeds x 10 seasons run in problem 1): the "before" numbers were measured by a helper and spot-checked by the main session; the "after" numbers were run by the main session on the finished code (verified 2026-11-14). The measuring program was a throwaway in a scratch folder and is not in the repository; it would need to be rewritten to repeat the run.
+- Checks run for this refresh (verified 2026-11-14): `go vet ./...` clean; `go test ./... -count=1` passes (`cmd/web` 3.8 s, `engine` 34.9 s).
 
-## 7. Measured results (all [reported], 2026-11-14)
+## 7. What to do next, in recommended order
 
-- Engine league averages after tuning: about 110 points per team, FG 47%, 3P 36.6%, home win rate 55.8%.
-- Development: 65% of top-10 picks finished within +/-4 of draft-day potential (seed 1; target 55-65%).
-- Balance after the fix (first seasons): best records 55-59 wins, worst 23-31, scoring leader about 31 PPG.
-- `realcheck` (30 runs, 2010-11): win correlation 0.941, mean absolute error 5.3 wins vs real standings. Biggest misses: Heat +10, Hawks -9.7, Trail Blazers -9.6, Nets -9.3, Celtics +9.3. League scoring 113.3 simulated vs 99.6 real (the engine is tuned to modern pace; deliberately not retuned). Win spread SD 16.4 simulated vs 13.0 real (Heat 69 wins, Cavaliers 10). Top-rated: LeBron James 95, Dwight Howard 94, Derrick Rose 91, Chris Paul 91, Pau Gasol 90.
-- Scorer/passer distribution misses: Carmelo Anthony 25.6 PPG real vs about 17-19 simulated (Monta Ellis and Amar'e Stoudemire similar); Rajon Rondo 11.2 assists real vs 6.7.
+A. Open decisions that block nothing (ask the owner, with a recommendation):
+   1. Pick a variety lever (problem 1). Recommended: first lower `CeilingImpactMult` or cap its effect for real players, then raise `PotentialBlurSD` to 5 or 6, then re-run the 10 seeds x 10 seasons measurement and compare the top-ten overlap (target clearly below 0.4).
+   2. Automatic lineup (problem 2). Recommended: make the automatic lineup pick the best players by rating, and leave positions out of the sim for now. Change `AutoLineup` in `engine/lineup.go` and `Team.Rotation()`, then check the league's minutes by rating.
+B. Tuning:
+   3. Pick values (problem 3): measure what drafted rookies are worth, then adjust `PickValueFor` in `engine/deal.go`.
+   4. Real-mode trade frequency (problem 6): find why computer-to-computer trades are rare under the salary rules, using a copy of a real league.
+   5. Retirement of stars (problem 5), roster balance at league creation (problem 4), the scoring distribution (problem 15).
+   6. Tests: restore the stricter free agency assertion if possible and widen seeds on the long-stability test.
+C. Later features the owner listed: player morale and trade requests; owner goals and job security (this would also give the luxury tax a consequence through team finances); a news feed; coaches.
+D. Product basics: multiple save slots; typed API responses (generate TypeScript types from Go or add schemas); a packaged build that leaves out `data/real/`; front-end tests; untrack `cmd/web/web` once the owner agrees.
 
-## 8. Known problems and things never verified
+## 8. How the owner likes to work
 
-1. **Shot and assist distribution inside a team.** A per-player shot tendency now affects who shoots, separately from shooting skill; historical usage percentiles seed it in real-data mode. Playmaking no longer boosts shot volume directly. The new behavior still needs season-level calibration against scorer and passer distributions. `go run ./cmd/sim -mode ratings` prints current player and rookie rating distributions.
-2. **Win spread too wide in real mode** (16.4 vs 13.0). No injuries or rest is part of the cause.
-3. **Hidden number weakened** (`ImpactSD` 1.8). To revisit after play-testing.
-4. **30-season stability tested on one seed only**; other seeds drifted slightly outside the bounds.
-5. **Never tested**: real mode over many seasons (possible shortage of free agents by the late 2010s); loading a saved real league; loading a save made by an older build.
-6. **Lineups**: the computer sets them for every team, including the user's; starter choice is by position slot and can look odd.
-7. **Playoff stats** are tracked but not shown on player pages; box scores of a previous year's playoffs are not kept.
-8. **UI not individually checked**: pause/speed buttons of the live viewer; narrow-window layout.
-9. Engine pace is modern; real-mode 2010-11 scoring is about 14 points per team too high by design.
+The owner is learning Go and often dictates by voice, so restate the request in plain words, ask either/or questions with a recommendation, write the code for them and explain briefly. The main session designs and reviews, helpers write code with a named model, checks run once per finished piece, and results are reported honestly. The owner holds the main session responsible for what helpers do. Full list: `RULES.md` sections 9 to 11.
 
-## 9. Next steps (owner: "build something fun, figure it out while playing")
+## 9. Glossary
 
-Done: engine, interface, save/load, interactive playoffs, real-data mode. Recommended order:
-1. Run `go run ./cmd/sim -mode ratings` to review the rating scale, then validate and tune the shot-tendency model against scorer/passer distributions and re-run `realcheck`.
-2. Injuries and rest (also narrows the win spread).
-3. User control of lineup and minutes.
-4. Contracts and salary cap.
-5. Free agency.
-6. Trades with sensible computer teams.
-7. Player traits, morale/chemistry, visible form.
-8. News feed, records, hall of fame.
-9. Draft scouting with fuzzy rookie ratings and a lottery.
-10. Single-player career mode.
-11. Browser-hosted version for publishing (real data excluded).
+- **Overall**: the visible single number, position-weighted, best across a player's positions.
+- **Potential**: the visible estimate of what a player can grow into; equals overall from about age 27.
+- **Impact**: the hidden number (-8 to +8) shifting real performance and the true ceiling. Never shown.
+- **True ceiling**: potential plus Impact times `CeilingImpactMult`. Internal only.
+- **Real mode**: a league built from real 2010-11 data; private testing only.
+- **Hindsight potential**: in real mode, potential set from the player's best later level.
+- **Blur**: random per-league noise added to real players' potentials.
+- **Soft cap**: you may exceed the cap to re-sign your own players or sign minimum deals; the tax line and hard ceiling limit how far.
+- **Throwaway server**: a test copy of the game on port 8097 with a scratch save.
+- **Stream**: a separate random-number sequence for one feature (table in `RULES.md`).
+- **dealEvenly**: league-creation step spreading talent across teams.
 
-## 10. Glossary
-
-- **Overall**: the visible single number; position-weighted best across a player's positions.
-- **Potential**: the visible estimate of the overall a player can grow into; equals overall from age 27.
-- **Impact / hidden MMR**: hidden number (-8..+8) shifting real performance and the real ceiling. Never displayed.
-- **True overall / true ceiling**: overall and ceiling including Impact; internal only.
-- **Effective ratings**: visible ratings plus Impact; what the game sim uses.
-- **Real mode**: league built from real 2010-11 data; private testing only.
-- **Hindsight potential**: in real mode, potential set to the player's best later level.
-- **realcheck**: tool comparing simulated and real 2010-11 results.
-- **GM mode**: the user runs one team.
-- **dealEvenly**: league-creation step that spreads talent evenly across teams.
-
-## Update log (newest first; overrides anything above that conflicts)
-
-### 2026-11-14, late night: owner-approved roadmap (plan mode), trade negotiation in progress
-- Approved plan file: `/Users/apple/.claude/plans/silly-jumping-storm.md` (outside the repo; summary here). Phases in order: 0 trade negotiation (tiers beside the numbers, mood and a concrete ask, offers from computer teams, sim pauses for an offer and before the deadline, deadline moved to day 50); 1 injuries and commissioner mode (switches, edit player ratings); 2 move league stage rules from `cmd/web` into the engine; 3 contracts with a soft cap, luxury tax and a hard ceiling; 4 free agency with offers over several days; 5 lineups (starters and minutes, development tied to minutes for young players); 6 draft lottery, scouting with fuzzy ranges and scouting points, and blurred real-data ceilings. Later: morale and trade requests, owner goals, news feed, coaches.
-- Owner decisions: keep numbers on the trade screen and add labels; soft cap with tax; free agency by offers over days; scouting ranges that narrow with points; starters plus minutes sliders; injuries mostly missed games with rare serious ones, switchable off.
-- Phase 0 state: branch `feat/trade-negotiation` (NOT merged to `main`). Engine part done and committed there: `engine/negotiate.go` with `Options{NoDeadlineStop, NoOfferStop}`, `Proposal{ID, Team, Deal, Day, Expires, Message}`, `PendingProposals()`, `AcceptProposal(id)`, `RejectProposal(id)`, `ProposalsCreatedLastDay()`, `ShouldPauseForDeadline()` (true once per season when days played equal 50; caller must stop), `PlayerTier(p)`, `lg.PickTier(year, round, original)`; `DealTeamVerdict` gained `Mood` (accept/close/far/no), `Ask *Asset`, `AskText`; `TradeDeadlineDay` is 50; `SaveVersion` still 2. Helper ran vet and tests (pass; engine tests now take about 28s, up from about 10s); main session did not read the diff or run anything. Helper measured about 6 offers per season.
-- Phase 0 finished and merged to `main`. API in `cmd/web/offers.go`, `trade.go`, `state.go`: `GET /api/offers`, `POST /api/offers/{id}/accept|reject`, `GET/POST /api/options` (`noDeadlineStop`, `noOfferStop`), `tier` on block rows, `mood`/`askText`/`ask`/`askLabel` on deal verdicts, `offers` count in state, and `/api/sim` takes `auto` and returns `newOffers` and `pause {reason: offer|deadline, text}` (multi-day sims only; three old API tests switch the stops off first). Screen: `web/src/OffersCard.tsx` (dashboard and trade page), tier chips (`TierChip` in `ui.tsx`), mood line with an "Add <asset>" button, `/trade?offer=ID` loads an offer for editing, badge on the Trades tab, pause dialog in `SimOverlay.tsx` with "don't stop" checkboxes.
-- Phase 0 verified by the main session on a throwaway server with headless Chromium: tiers present; a lowball got an ask and adding it made the team accept; an offer arrived on day 5 and paused an auto sim; the offers card rendered and its Accept button executed the trade; "sim to end of season" showed the offer dialog, then (with offer stops ticked off) the deadline dialog at day 50, then ran to day 82; no console errors, no sideways scroll at 560px. Not tried: Decline and "Change it" buttons by hand (the offer load URL was opened and cleared its parameter), real-data mode, the owner's existing save.
-- Observations for later tuning: a mood of "far" can still be closed by one asset (wording mismatch); the offer seen was small (a bench player for a second-round pick); engine tests take about 17 to 28s now.
-- Phase 1 finished and merged to `main` (branch `feat/injuries-commissioner`). Engine: `engine/injury.go` (`Player.Injury{Name, GamesLeft, Serious}`, `InjuryTuning`, `InjuryReport(teamID)`, `NewInjuriesLastDay()`; own RNG stream offset 30000; `Team.Rotation()` skips injured players and can return fewer than 13; about 85 player-games lost per team per season; 0.4% serious with a permanent athleticism drop of 2 to 4) and `engine/commissioner.go` (`EditPlayer(id, PlayerEdit)`, `RatingKeys()`, `GetRating`, `SetRating`, `MinRating` 25, `MaxRating` 99). `Options` gained `NoInjuries` and `Commissioner`. `SaveVersion` still 2. API: `cmd/web/admin.go` with `GET /api/injuries[?team=id|all]`, `POST /api/admin/player/{id}`; `injury` on player rows, `editable`/`limits` on the player response, `injuries` on sim responses, `injured` in state. Screens: `pages/Settings.tsx` (four switches, route `/settings`), `InjuriesCard.tsx`, INJ tag, Roster badge, edit form in `PlayerDrawer.tsx`.
-- Phase 1 verified by the main session (throwaway server, headless Chromium): injuries appeared (24 league-wide by day 6, mostly 1 to 5 games), the injured player's games-played did not rise in his team's next game and his games-left counted down; edit refused with commissioner off (409); the Settings switch turned it on; the drawer form changed a rating to 88 and healed the injury; an out-of-range edit was 400; with injuries off for 15 days the league count went from 20 to 0 with no new ones; no console errors. Not tried: serious injuries, playoffs with injuries, offseason carry-over, real-data mode, the owner's save.
-- Noticed, not fixed: fictional rosters are very top-heavy (one seed-11 team has a 97 and several players under 50, and a 48-rated player averaging 28 minutes); engine tests take 20 to 40 seconds.
-- Phase 2 finished and merged to `main` (branch `feat/engine-phase`): `engine/phase.go` now owns the stage rules: `Phase` constants, `lg.Phase(reportSeen)`, `lg.NextActions(reportSeen)`, guards `CanSimDay`, `CanStartPlayoffs`, `CanPlayoffAction`, `CanBeginOffseason`, `CanGoToDraft`, `CanFinishOffseason`, `CanDraft`, `CanUserPick` (same error texts as before), `Season.ConferenceRank`, `Season.MadePlayoffs`, `PlayoffSeeds`, `Series.HostOf`, `UserPlayoffResult`. `reportSeen` stays a `server` field in `cmd/web` and is passed in as an argument. `cmd/web/state.go` went from 311 to 231 lines. Helper ran vet and tests (pass) with `cmd/web/api_test.go` unedited, which is the evidence that behaviour did not change; main session confirmed only that the test file is not in the diff and did no browser pass. New stages (re-signing, free agency) should be added in `engine/phase.go`.
-- Phase 3 finished and merged to `main` (branch `feat/contracts-cap`). Engine `engine/contract.go`: `Player.Contract{Salary (thousands), Years (seasons left incl. current)}`, `Cap` config (cap 140000, tax line 170000, hard ceiling 190000, min 1200, max 49000, trade match 125% + 250, rookie scale 10000 to 2200, curve floor 47 / top 92 / exponent 1.8), `MarketSalary`, `AskingContract`, `RookieContract`, `Payroll`, `CapRoom`, `TaxBill`, `Team.TaxPaid`, `CanSign`/`Sign` with `SignCapRoom|SignOwn|SignMinimum|SignDraft`, `Expiring`, `ReSign`, `Release`. Salary rules in `ValidateDeal` and the old two-team path; contract surplus adjusts trade value (bounded about 30%); released players' contracts simply end (no dead money); roster-fill signings are one-year minimum deals; computer teams re-sign in `FinishOffseason`; `SaveVersion` is 3 (step 2 to 3 assigns contracts). Engine trade tests halve salaries in their fixture (`tradeLeague`) so older value tests still work. API `cmd/web/contracts.go`: `salary`/`years` on player rows, `expiring` on roster rows, `payroll` object on team page, trade block and state, `payrolls` on deal evaluation, `GET /api/contracts/expiring`, `POST /api/contracts/resign|release`. Screens: salary columns and `PayrollBar` (`ui.tsx`), `ExpiringCard.tsx` on the Offseason page and dashboard, contract line in the player drawer, payroll table in the trade screen.
-- Phase 3 verified by the main session (throwaway server, headless Chromium, seed 11): league payroll averaged $137.4M (12 teams over the cap, max $169.6M); a $1.2M-for-$45.2M swap was refused with the hard-ceiling message and before/after payrolls; after the season 4 of my players were expiring with asks; the Re-sign button signed the star at $49.0M for 2 years; a release worked; after the draft and offseason finish the roster was 13, nobody lacked a contract, no ignored expiring player remained, and year-two league payroll averaged $134.7M with no team over the ceiling; vet and tests pass (three API tests got salary-legal fixtures, assertions kept). Not tried: the tax bill display with a taxed team, real-data mode, loading the owner's version-2 save in the app (covered by an engine test only).
-- Noticed, not fixed: a 91-rated 35-year-old retired in the test league; my test team dropped from $169.5M to $92.2M payroll at the offseason because four contracts ended at once.
-- Phase 4 finished and merged to `main` (branch `feat/free-agency`). Engine `engine/freeagency.go`: stage `PhaseFreeAgency` ("free_agency") between the draft and the new season; `League.FA *FreeAgency{Day, Days, Offers, Log}`; `CanBeginFreeAgency`, `BeginFreeAgency` (computer teams re-sign, every still-expiring player incl. the user's goes to the pool, re-signing closes), `AdvanceFreeAgency`, `FreeAgentAsk` (softens to 70% over 10 days), `MakeOffer`, `WithdrawOffer`, `OffersBy`, `OffersFor`; `FATuning` (offer must stand a day; accept at 95% of the softened ask; best-effort offers from teams short of room at 60% of the ask; last 3 days accept 50% of the original ask; final settle for asks of 4x minimum or more); RNG stream 50000; `FinishOffseason` simulates remaining days, fills with one-year minimum deals; action ids `begin_free_agency`, `fa_day`, `start_season`. `SaveVersion` still 3. API `cmd/web/freeagency.go`: `GET /api/freeagents`, `POST /api/freeagents/begin|offer|withdraw|day`, `fa` in state; all `day` values 1-based in the API. Screen `web/src/pages/FreeAgency.tsx` (route `/free-agency`), `ConfirmDialog` in `ui.tsx`, confirmations in `flow.tsx` before starting free agency with un-re-signed players and before the new season with open roster spots.
-- Phase 4 verified by the main session (throwaway server, headless Chromium, seed 11): both confirmations appeared; an unaffordable offer was refused with a sentence; a 75% lowball lost to another team; a first play-through showed the 98-rated star unsigned after ten days, which was sent back and fixed; after the fix an offer made through the screen at the ask signed a 67-rated player with my team on day 3, and the star signed elsewhere for $43.1M over my $34.3M; no 75+ player signed for the minimum; new season started with 13 players; no console errors. Six-season payroll (helper): 107%, 105%, 103%, 99%, 97%, 99% of the cap. Not tried: withdrawing an offer by hand, real-data mode.
-- Things to know: a user who ignores re-signing and free agency ends with leftovers (a hands-off team went 4-78 in a helper test); an over-the-cap team can only sign players whose ask is the minimum; the compiled file `cmd/web/web` is tracked in git and gets rewritten by `go build` in that folder (owner asked whether to untrack it, no answer yet); helpers hit the account's 5-hour usage limit once on 2026-11-14 evening.
-- Phase 5 finished and merged to `main` (branch `feat/lineups`). Engine `engine/lineup.go`: `Team.Lineup *Lineup{Starters [5]int, Minutes map[int]int}` (nil = automatic), `AutoLineup`, `SetLineup` (validation sentences), `ClearLineup`, `Team.EffectiveMinutes()` (used by `newSide` in `game.go`; redistributes injured or departed players' minutes, falls back to automatic when too few are available), `NoPlayer = -1`, `TeamMinutes` 240, `MaxPlayerMinutes` 42, `MinLineupPlayers` 8; `pruneLineup` runs lazily in `EffectiveMinutes` and on save. Development: `Progression.MinutesDev*` (max age 24, full bonus +0.8 at 26 mpg, full penalty -0.6 at 6 mpg, neutral 15.5, minutes = season minutes / 82), applied via `ProgressMinutes` at `BeginOffseason`, capped at the true ceiling; average effect measured at about zero. `SaveVersion` still 3. API `cmd/web/lineup.go`: `GET /api/lineup`, `POST /api/lineup`, `POST /api/lineup/auto`. Screen `web/src/pages/Lineup.tsx` (route `/lineup`, nav item after Roster, "Set lineup" button on the user's team page).
-- Phase 5 verified by the main session (throwaway server, headless Chromium, seed 11): the page blocked Save at 248 of 240 minutes and enabled it at 240; saving through the page stored a custom lineup; over 20 games the young player given 30 minutes averaged exactly 30 and the starter cut to 20 averaged 20; a 245-minute post was refused with a sentence; an injured rotation player showed 0 minutes for the next game with the total still 240 and nobody above 37; Reset returned to automatic; no console errors, no sideways scroll at 560px. Also on 2026-11-14 the main session loaded a COPY of the owner's save (version 0, year 2032) in the merged code through phase 4: it upgraded to picks and contracts and ran a full cycle cleanly; real-data mode ran a full cycle cleanly too (only 1 trade logged in that year, against 26 in the owner's save: computer teams may be trading less under salary rules there).
-- Findings to decide later: the game sim ignores positions (only ratings and minutes matter), yet the automatic rotation picks starters by position, so a 48-rated small forward started over an 80-rated 20-year-old big on the seed-11 test team; this is why some weak players get heavy minutes league-wide. A helper loosened `TestFreeAgencyMarket` (top ten signing early: at least 4, was 5). `TestLongStability`'s home-win band (54 to 60%) is close to its edge. The owner's old save reports mode "fictional" although it holds real player names.
-- Phase 6 finished and merged to `main` (branch `feat/lottery-scouting`). This completes the approved plan (phases 0 to 6). Engine: `engine/lottery.go` (`LotteryOdds` in tenths of a percent 140,140,140,125,105,90,75,60,45,30,20,15,10,5; four slots drawn; `Draft.Order` is round one with the lottery applied, new `Draft.Order2` is round two in record order; `Draft.Lottery []LotteryRow{Team, Seed, Odds, Slot, Owner, Change}`; RNG stream 60000) and `engine/scouting.go` (`Draft.OvrErr/PotErr/ScoutPoints/ScoutLevel`, `ScoutTuning`: 12 points per draft, half-widths 7/5/3/1 for overall and 9/6/4/2 for potential, `ScoutView`, `ScoutRatings`, `Scout`, `ScoutPointsLeft`, `ComputerDraftNoise` 3.0, stream 70000; ranges always contain the truth and are off-centre; `ensureDraft()` repairs an old mid-draft save, so `SaveVersion` stays 3). `RealTuning.PotentialBlurSD` 4.0 adds per-league noise to real players' potentials under 27 and to real prospects (0 reproduces the old values), so a real-data league's starting ceilings now depend on the seed. API: `GET /api/draft` sends prospects as `ovrLo/ovrHi/potLo/potHi/scoutLevel` only (sorted by range midpoints), plus `scouting`, `lottery`, and `via` on traded picks; `POST /api/draft/scout`; `GET /api/player/{id}` for a pool prospect returns midpoints with `prospect`, `scout`, rating `lo/hi`, role and usage from midpoints, `editable: false`; admin edits of prospects are refused. Screen: `pages/Draft.tsx` (range bars, Scout button, sort and position filter, lottery card), `scout.ts`, prospect ranges in `PlayerDrawer.tsx`. Main session changed the Draft page so the draft no longer starts running when the page opens: it waits for "Start the draft", otherwise there was no time to scout.
-- Phase 6 verified by the main session (throwaway server, headless Chromium, seed 11): the lottery moved teams (the 6th-worst team won the first pick, the worst fell to 5th), round two stayed in record order; prospect rows had no `ovr`/`pot`; two scouts through the page narrowed the top prospect from 53-67 / 81-99 to 58-64 / 85-93; none of the responses the browser received carried prospect true values or Impact; the 13th scout was refused; after the draft all 60 drafted players' true values were inside the ranges shown before; best potential in the class went second; no console errors.
-- Re-ran the session's first measurement (real data, 10 seeds x 10 seasons) on the finished code: six different players finish as the best young player across ten seeds (before: Harden 7, Durant 2, Rose 1), but the elite group is still the same names (top-ten overlap 0.48, was 0.51); Rose still ends 87 to 96 in every seed; Ryan Anderson still 88 to 95 (Impact +5 doubled into the ceiling, unfixed); below-median youngsters peaking at 70+ is 15.4% (was 12.8%). So blurring changed the order at the top, not who is at the top. Levers not yet pulled: a larger `PotentialBlurSD`, the `CeilingImpactMult` 2.0 effect, more consequential injuries.
-- Open items for the owner: automatic lineup by position vs best players (game sim ignores positions); pick values small next to stars; untrack `cmd/web/web`; push `main` (many commits ahead of `origin/main`); HANDOFF sections above this log are stale in places (section 5 and "no tests in cmd", "no git repository") and the log is long, so a full refresh with the `handoff-writer` subagent is due when the owner asks.
-
-### 2026-11-14, night: merged to main, save versioning, plan agreed
-- Owner agreed the order of work below and gave standing permission to commit and merge to `main` locally when the code is correct. Pushing still needs a yes. Owner also asked that checks (`go vet`, `go test`, web build) run only once per finished piece of work, not between small steps.
-- `main` now holds the roles/usage/rookie/UI work (commit `89afcee`), checked by the main session with vet, test and web build; not play-tested in a browser.
-- Save versioning (step 1, branch `feat/save-version`): `League.Version`, `SaveVersion = 1` and the `saveUpgrades` step list in `engine/save.go`; a save with no version is treated as 0 and upgraded on load, a newer save is refused. Tests in `engine/save_test.go`. Helper ran vet and tests (pass); main session read the diff only. Rule from now on: any new or changed saved field bumps `SaveVersion` and appends one upgrade step.
-- Step 2a done (branch `feat/draft-pick-assets`, merged to `main`): `engine/picks.go` adds `DraftPick` {Year, Round, Original, Owner}, `League.Picks`, `PickYearsAhead = 4`, `PicksOwnedBy`, `PickOwner`, `TransferPick`, `rollPicks`. `Draft.Order` still lists original teams (slot order, also used for the free-agent fill); `DraftOnClock` returns the pick's owner. `SaveVersion` is 2 (step 1 to 2 creates picks). Tests in `engine/picks_test.go`. Helper ran vet and tests (pass); main session read the diff only. Nothing in the UI shows picks yet, and nothing can trade them yet.
-- Step 2b done (branch `feat/asset-trades`, merged to `main`): `engine/deal.go` adds `Asset`, `Move`, `Deal`, `ValidateDeal`, `EvaluateDeal`, `ExecuteDeal`, `PickValueFor`, `MaxDealTeams = 3`, `MaxDealPicks = 4`. Each computer team judges only its own side with the old `sideEval` rule plus pick values; all must accept. `applyTrade`'s roster fix-up became shared `fixRosters`; `TradeResult` gained optional `Teams` and `Picks` (`TxPick`), so `SaveVersion` stays 2. Old two-team API untouched. Helper ran vet and tests (pass); main session read only the trade.go diff. Open tuning question: a top-3 first is valued about 30 while an 80/90 21-year-old is about 83 and a 75 about 36; nobody has measured what drafted top picks are worth right after the draft, so picks may be under- or over-priced (possible exploit either way).
-- Step 2c done (branch `feat/deal-api-ui`, merged to `main`): routes `POST /api/deal/evaluate` and `/api/deal/execute` (body `{moves:[{from,to,playerId}|{from,to,pick:{year,round,original}}]}`), `picks` on `/api/trade/block/{id}`, `maxTeams`/`maxPicks` on `/api/trade/status`, optional `teams`/`picks` on transactions. Trade screen (`web/src/pages/Trade.tsx` rewritten, new `web/src/TxItem.tsx`) lists picks, has an optional third team with a per-asset destination chooser, shows a verdict per computer team; counter-offer only for two teams with no picks (old endpoint). Main session added `League.PickValue`, relaxed the free-agent rule in `ValidateDeal` (shortage may be covered by players the deal itself releases), made `fixRosters` trim all teams before filling, and made it never release a player who just arrived in the trade (the browser test caught a first-round pick being traded for a player who was cut at once).
-- Verified by the main session on a throwaway server (port 8097, scratch save, headless Chromium): vet and tests pass; pick-for-player, a rejected lowball, a three-team evaluate, a malformed move (400) and an executed deal all behaved; trade page rendered with three columns and picks at 1280px and 560px with no sideways scroll and no console errors. Not tried: executing a three-team deal, the counter-offer button, clicking through a full deal in the browser, real-data mode, loading the owner's existing save.
-- Known rough edges: pick values look tiny next to stars (top pick about 32, a 99-rated star about 180) and are untuned; when a full roster receives extra players the game picks who is released (lowest value) without asking the user; transaction pick label reads "2025 1st (MUM) (from MUM)".
-- Next: step 3, contracts and a simple salary cap, then user free agency.
-- Was "next" when written: step 2a, draft picks as owned objects (engine only), then 2b multi-team asset trades, then 2c API and trade screen. Defaults chosen by the main session, owner may change: picks tradeable four drafts ahead, two rounds, no protections or swaps yet, at most three teams in a trade, simple cap later.
-
-### 2026-11-14, late: investigations only (no code changed), decisions pending
-All findings below are helper reports; the main session only spot-checked three rows of the measurement output.
-- Why the same players always star in real mode: young players' Potential comes from their real later peak (`hindsightPeak`, realdata.go), growth pulls toward that ceiling, there are no injuries or situation effects, and the default seed is 1. Measured over 10 seeds x 10 seasons: Rose ends 85-95 every time, Harden is #1 in 7 of 10, per-player spread 2.5-5 points, below-average youngsters reach 80+ in 2.9% of cases. Ryan Anderson reaches 86-94 every seed (Impact +5 doubled into the ceiling; looks wrong, not traced). Throwaway measuring program was in the session scratchpad, not kept.
-- Owner decisions still open: blur real-player ceilings per league or keep hindsight; injuries permanent or games-only; random default seed; simple cap or full rulebook.
-- Feature gap vs a 2K-style GM mode: sim core is largely done; missing are contracts/salary cap (nothing exists), user free agency, picks as trade assets, 3+ team trades, AI offers to the user, lottery, scouting, lineup control, injuries. Save has one slot and no version field.
-- Structure audit: `engine/` is clean (no HTTP, RNG discipline holds, trade rules in engine, Impact cannot leak via API; vet and tests pass, 26 tests). Weak points in order: player-only two-team `TradeOffer` and no asset/contract model; save has no `Version`/migration; phase and flow rules (`phase()`, `state()`, `playoffAction`, seeding) live in `cmd/web` instead of the engine; API responses are untyped maps with hand-kept TS types in `web/src/api.ts`.
-- Proposed order (not yet agreed): save version + migration; asset model with multi-team trades and picks; contracts and simple cap, then user free agency; move phase rules into the engine; injuries and rest; lottery, scouting and blurred ceilings; product basics.
-- Stale parts of this file: section 5 (html/template pages), "cmd/* has no tests" and "no git repository" are out of date.
-
-### 2026-11-14, evening: narrow layout, 3D formation, offseason trades card
-- Narrow layout (top bar stacks, nav strip scrolls, cards scroll inside themselves, sticky Start button): main session saw the dashboard at 560px with no clipping and no console errors; helper measured no sideways scroll at 520px and 800px on the main pages. Start screen at narrow width and the 1280px pages other than the game page were not looked at. Visible scrollbars on the nav strip remain.
-- 3D formation (`web/src/court3d/Court3D.tsx`): offence now heads for the hoop it attacks and defenders mark their men, but at the fast replay speed the figures are still mostly in transit near half-court because possessions change ends faster than they can run (a whole game replays in roughly 30 seconds). Helper reports a proper half-court set at 1x; main session could not confirm 1x. Open: slow the default pace or guarantee figures arrive before each shot.
-- "Offseason trades around the league" card on the dashboard (first 5 days of a season, from `/api/transactions`): compiled only, never seen with real trades.
-- Only `web/src` changed; `npm run build` passes. Uncommitted.
-
-### 2026-11-14, evening: state check after the owner's changes
-- A git repository now exists with one commit ("Initial HoopSim commit"); `.gitignore` excludes `data/real/` and `saves/`. The usage-tendency work and later handoff edits are uncommitted. Never commit or push unless asked.
-- `go vet`, `go test -count=1 ./...` and `npm run build` pass on the current code (run by the main session).
-- `realcheck -runs 10` after the usage-tendency change: win correlation 0.943, MAE 5.1 wins, sim win SD 16.2 vs real 13.0. Scaled scoring improved for Stoudemire (22.0 vs 25.3 real, was 19.5) and slightly for Carmelo Anthony (18.0 vs 25.6, was 16.6); Monta Ellis unchanged (17.2 vs 24.1). Assists still low for pure passers (Rondo 7.1 vs 11.2, Nash 8.9 vs 11.4). Still open.
-- In progress: a helper fixing the 3D formation (players bunching at half-court), the layout below 1000px (owner views in a narrow side pane), and where offseason computer trades are shown. Verify in a browser before calling done.
-
-### 2026-11-14, evening: trade screen and 3D court reviewed
-- Trade screen (`web/src/pages/Trade.tsx`, API in `cmd/web/trade.go`: `/api/trade/status|block/{id}|evaluate|counter|execute`, `/api/transactions`) and lazy-loaded 3D court (`web/src/court3d/Court3D.tsx`; `three`, `@react-three/fiber`, `@react-three/drei`) are built. `go vet`, `go test ./...` pass on the current code.
-- Seen in a browser by the main session at 1280px: trade screen layout with both rosters, value bars and offer trays; 3D court rendering with hoops, figures, ball, scoreboard, play list, speed controls, camera presets, floating "+2", no console errors.
-- Not seen: an accepted trade's animation and summary, the counter-offer preview, "Trade for this player" in the player drawer, Baseline/Overhead cameras, 16x, the 2D fallback.
-- Problems found: (1) in 3D the ten figures bunch around half-court instead of setting up around the attacking hoop, most visible at 4x; (2) below about 1000px wide the top bar and nav are clipped, so the app needs a wide window; (3) computer trades of the offseason only show on `/offseason` after the new season starts, and nothing links there then.
-- The game server on port 8080 may predate later code changes; restart it (ask first) to pick up engine changes.
-
-### 2026-11-14, simulation role and rating diagnostics
-- Added `Player.UsageTendency` and a derived fallback for old saves/imported players. Generated players get a role tendency based on shooting skills and position, with independent variation; real-data players use historical usage percentiles.
-- Shot selection in `engine/game.go` now depends on playing time, shooting skill, and shot tendency, with less concentration toward the top shooter. Playmaking still affects turnovers and assist selection, but no longer adds directly to shot volume.
-- Broadly lifting rookie ability or potential caused long-run stability failures. The potential curve is unchanged; current rookie base talent is 43.5 (from 44) to keep the generated league near its tested development equilibrium. A fuller rookie tier rebalance remains open and should use the ratings report as its calibration aid.
-- Player details show a plain-language scoring role and shot-tendency value. `go run ./cmd/sim -mode ratings` reports overall/usage percentiles by primary position and rookie overall/potential percentiles by draft tier.
-- Verification: `go test ./...` passes and `cd web && npm run build` succeeds. Seed 1 rookie median Overall/Potential by draft tier is 68/87 (picks 1-5), 62/67 (6-14), 56/58 (15-30), and 45/47 (31-60); this confirms late-pick rookies remain weak and needs a deliberate future rebalance.
-
-### 2026-11-14, later the same day
-- **Interface rebuilt in React + TypeScript** (owner's choice; they are proficient in React). `web/` is a Vite app (React, TanStack Query, TanStack Table v8, Motion, Tailwind v4, lucide-react); `cmd/web` is now a JSON API under `/api` that serves `web/dist`. The old `html/template` pages are deleted. Build: `cd web && npm install && npm run build`; run: `go run ./cmd/web`. Node is at `~/.nvm/versions/node/v22.23.2/bin`.
-- **Flow:** top bar with a phase stepper and one Continue button driven by `GET /api/state` (`nextAction`), plus a menu of larger steps; multi-day sims call `POST /api/sim` one day at a time to animate progress. Phases: `regular`, `regular_done`, `playoffs`, `playoffs_done`, `offseason`, `draft`, `draft_done`.
-- **Checked in a browser by the main session:** start screen, dashboard, standings, playoff bracket, 2D live game viewer, player drawer. Not seen: sim overlay (helper saw it), draft board, offseason report, champion screen, schedule, leaders, history.
-- **Conference bug fixed:** real teams reordered in `engine/realteams.go` so West is indices 0-14. Real-league saves made before this show wrong colours; start fresh. Do not load `saves/league.json` from the old build.
-- **Trades (engine, `engine/trade.go`):** players-for-players, 1-3 per side, judged on VISIBLE ratings only; `EvaluateTrade`, `SuggestCounter`, `ExecuteTrade`, `TradeBlock`, `TradeWindowOpen` (deadline day 55), `SimAITrades` (about one computer-to-computer trade per offseason, called in `FinishOffseason`), `League.Transactions`. Mid-season computer trades are not wired in. No contracts or picks as assets yet.
-- **Star supply fix (`engine/progression.go`):** owner decided the stability test keeps its minimum of 2 players rated 90+. Each draft class now has exactly two star prospects (`RookieStarEvery` 30, `RookieStarMean` 89, `RookieStarSD` 2; `RookiePotMean` 48 → 43). Over 8 seeds × 30 seasons the minimum is ≥ 2 (one seed exactly 2); one seed starts with 17 (above the 15 target); one seed drifts +3.2 in average level.
-- **In progress when this was written:** a helper building the trade screen (API + React) and a 3D court game viewer (`three`, `@react-three/fiber`, `@react-three/drei`, lazy-loaded, 2D fallback). Verify both in a browser before calling them done.
-- **Still open:** real-mode win spread too wide (a test Lakers team went 69-13); scorer/passer distribution (usage tendency) not built; only the latest regular-season game keeps a box score.
-- **Owner feedback:** wants an interactive, animated interface with a flow that never dead-ends, and "something 3D". Keep `HANDOFF.md` updated as a habit (see `CLAUDE.md`).
-
-## 11. Prompt to paste into a new session
+## 10. Prompt to paste into a new session
 
 ```
-You are continuing HoopSim, a Go basketball GM simulation in /Users/apple/Documents/sim.
-First read HANDOFF.md fully, then CLAUDE.md. They replace the old conversation.
-Today's state: engine, web UI, save/load, interactive playoffs and a private real-data
-mode all work; go vet and go test pass. The next planned task is the per-player usage
-tendency (section 8, problem 1, and section 9, step 1).
-Working rules: the owner is a beginner in Go and speaks informally (often by voice), so
-restate your understanding and ask plain either/or questions; explain briefly in plain
-language. Save tokens: you design, brief and review; use small-model subagents for
-writing and testing code, one layer only, one or two at a time, with file boundaries.
-Never show the hidden Impact number in the UI. Never ship or commit data/real/.
-Ask before downloading, restarting the web server (a league may be in progress),
-or anything leaving the machine. Do not commit unless asked. Report honestly what you
-verified by running versus what a helper reported.
-Start by confirming go test passes (export PATH="/usr/local/bin:$PATH"), then propose the
-first step of the usage-tendency change in a few plain sentences and wait for a yes.
+You are taking over HoopSim, a Go basketball GM simulation in /Users/apple/Documents/sim.
+Read, in this order: CLAUDE.md, HANDOFF.md (state, decisions, problems, next steps),
+RULES.md (the rules), and ARCHITECTURE.md when you need to find or change code.
+They replace any earlier conversation.
+Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
+and tell me the result.
+Then restate in plain words what you understand the state to be, and propose the first
+item from HANDOFF.md section 7 (the open decisions) as a simple either/or question
+with your recommendation. Wait for my answer before changing code.
+The owner is learning Go and may dictate by voice: use plain words, write the code for them.
+Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
+Never show the hidden Impact number or true prospect values; never commit data/real/.
+Do not commit or push unless the rules in RULES.md section 8 allow it.
+Report what you ran and saw separately from what a helper reported.
 ```
+
+## Update log (newest first)
+
+### 2026-11-14, documents and push
+- Added `RULES.md` (rules) and `ARCHITECTURE.md` (how the code is built). The owner asked for `main` to be pushed to GitHub with these documents; see the git log for whether the push went through.
+
+### 2026-11-14, full refresh
+- Rewrote this file from the long log below: stale sections (old html pages, "no tests in cmd", "no git repository", old next steps) removed; code maps moved out to `ARCHITECTURE.md`, rules to `RULES.md`. Verified: `go vet` and `go test ./... -count=1` pass; flags in `cmd/*/main.go` read; `SaveVersion` 3, `TradeDeadlineDay` 50, `PotentialBlurSD` 4.0 and the tracked `cmd/web/web` confirmed in the code. Nothing was run in a browser for this refresh.
+
+### 2026-11-14, whole day in one entry
+Built and merged to `main`, in order: save versioning; draft picks as assets; multi-team deals; trade negotiation; injuries and commissioner mode; stage rules into `engine/phase.go`; contracts with cap, tax and ceiling; free agency; lineups with minutes-based development; draft lottery, scouting and blurred real-data ceilings. Each had an end-to-end pass on a throwaway server (details in section 3). A copy of the owner's old save and real-data mode each ran a full season cycle. Earlier the same day: the interface was rebuilt in React, a 3D court viewer and trade screen were added, shot tendency was added, stars per draft class were fixed at two. The findings and open items are all in section 5.

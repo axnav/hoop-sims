@@ -1,36 +1,43 @@
 # HoopSim
 
-Text/web basketball GM simulation in Go (module `hoopsim`, standard library only). Simulation only, no on-court graphics. Mode: GM (run one team). Original game: fictional league by default. Full briefing: **read `HANDOFF.md` first** (state, code map, design decisions, known problems, next steps).
+Text/web basketball GM simulation in Go (module `hoopsim`, standard library only) with a React + TypeScript front end. Simulation only, no on-court graphics. Mode: GM (run one team). The default league is fictional.
 
-## Standing rules
-- The owner is learning Go, speaks informally (often by voice). Restate your understanding in plain words, ask simple either/or design questions, write the code for them. Short plain-language explanations; brief "insight" notes on why.
-- Save tokens: the main session designs, briefs and reviews; small-model subagents write and test code. ONE layer only (subagents never spawn subagents), one or two at a time, briefs name the files each may edit so two never touch the same file. No separate sessions. No nitpicking polish, but verify results independently.
-- Ask before: downloading anything; restarting the web server (port 8080; a league may be in progress and unsaved progress is lost); anything that leaves the machine.
-- A git repository exists (one initial commit; `data/real/` and `saves/` are ignored). Never commit or push unless asked.
-- Report honestly: what you ran and saw vs what a helper reported.
-- Keep the handoff current: after each finished piece of work or owner decision, add a few lines to the "Update log" in `HANDOFF.md` yourself (cheap, no subagent). Run the `handoff-writer` subagent only for a full refresh when the owner asks or the log gets long.
+Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RULES.md` (the full rules). Open `ARCHITECTURE.md` when you need to find or change code.
+
+## Standing rules (short; full text in RULES.md)
+- The owner is learning Go and often dictates by voice. Restate the request in plain words, ask simple either/or design questions with a recommendation, write the code for them, keep explanations short.
+- The main session designs, briefs and reviews. Helpers write code. ALWAYS give a helper a named model: small for searching and measuring, mid-size for writing code. One layer only (helpers never start helpers), one or two at a time, briefs name the files each may edit.
+- Run the checks once per finished piece of work, not after every small step.
+- Every feature gets one end-to-end pass on a throwaway server (port 8097, scratch save, headless Chromium) before merging.
+- Do not weaken a test to make it pass.
+- Commit and merge to `main` locally when the code is correct (standing permission). Push only with the owner's go-ahead. Never commit `data/real/`, `saves/`, `web/dist`, `node_modules`.
+- Report honestly: what you ran and saw versus what a helper reported versus what was not tried.
+- Keep the update log at the bottom of `HANDOFF.md` current after each finished piece of work or owner decision (a few lines, you write it yourself).
+- Ask before: downloading anything; anything that leaves the machine; starting or restarting anything on port 8080.
 
 ## Hard constraints
-- The hidden number (`Player.Impact`) must never appear in the UI.
-- `data/real/` (Basketball-Reference-derived CSVs) is for private local testing only: never ship, redistribute or commit it. The default game stays fictional; no lookalike names of real players.
-- Engine randomness only through `engine.RNG` (same seed, same result). Tunables live in `Progression` (progression.go) and `RealTuning` (realdata.go); `game.go` holds the possession constants.
+- The hidden number `Player.Impact` never appears in the API or UI and is never editable (test helper `checkNoImpact` in `cmd/web/api_test.go`).
+- Prospects in the draft pool are secret: send scouting ranges only, never true values.
+- `data/real/` is private local testing data: never ship, redistribute or commit it. No lookalike names of real players.
+- Randomness only through `engine.RNG`; a new feature gets its own random stream (table in `RULES.md` section 3). No `math/rand` or clock in `engine/` or `cmd/`.
+- Saves are versioned (`SaveVersion` in `engine/save.go`, now 3): follow `RULES.md` section 4 when a saved field changes.
+- Never touch port 8080 or `saves/league.json` without asking. Never run `go build` inside `cmd/web` without `-o` pointing outside the repo.
+- Game rules live in `engine/`; `cmd/web/` only translates; `web/src/` only shows what the API returns.
 
 ## Commands
 Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from the project root.
-- `cd web && npm install && npm run build` : build the React app into `web/dist` (needed once, and after UI changes)
-- `go run ./cmd/web` : JSON API + built app on http://localhost:8080 (`-port`, `-save`, `-web` flags; preview name `hoopsim` in `.claude/launch.json`)
-- `cd web && npm run dev` : Vite dev server (proxies `/api` to Go on port 8095, so run `go run ./cmd/web -port 8095` too)
-- `go run ./cmd/sim -mode sanity` : league-average game check
-- `go run ./cmd/sim -mode ratings` : rating and rookie distributions by position/draft tier
-- `go run ./cmd/sim -mode seasons -seasons 10` : multi-season run (add `-reveal` to debug the hidden number)
-- `go run ./cmd/realcheck -runs 30` : compare real-data league vs real 2010-11 results
-- `go vet ./... && go test ./...` : checks (engine has the tests; add `-count=1` to skip cache)
+- `go vet ./... && go test ./... -count=1` : checks (engine tests take 30 to 40 s)
+- `cd web && npm install && npm run build` : build the app into `web/dist` (once, and after screen changes)
+- `go run ./cmd/web` : API plus built app on http://localhost:8080 (flags `-port`, `-save`, `-web`)
+- `cd web && npm run dev` : Vite dev server (proxies `/api` to port 8095; also run `go run ./cmd/web -port 8095`)
+- `go run ./cmd/sim -mode sanity|ratings|seasons` : engine checks (flags `-seed`, `-games`, `-seasons`, `-reveal`)
+- `go run ./cmd/realcheck -runs 30` : compare the real-data league with real 2010-11 results (needs `data/real/`)
 
 ## Layout
-- `engine/` game logic (player, generate, game, season, playoffs, offseason, progression, history, save, realdata, realteams, rng)
-- `cmd/web/` JSON API (main.go routes, state.go flow/sim, league.go pages, flow.go playoffs/offseason/draft, trade.go trades API, colors.go, api_test.go), `cmd/sim/`, `cmd/realcheck/`
-- `web/` React + TypeScript app (Vite, Tailwind v4, react-query, motion); `src/replay.ts` is the plain-TS game replay logic (shared by the 2D and lazy 3D court in `src/court3d/`); `pages/Trade.tsx` is the trade screen; `web/dist` is the build output
-- `data/real/` private CSVs, `saves/league.json` current save
+- `engine/` game logic, one file per feature with its test
+- `cmd/web/` JSON API; `cmd/sim/` and `cmd/realcheck/` command-line tools
+- `web/` React app (Vite, Tailwind, react-query); `web/dist` is the build output
+- `data/real/` private CSVs; `saves/league.json` the owner's current save
 
 ## Next
-Per-player usage tendency (scorer/passer distribution), then injuries and rest; full ordered list in `HANDOFF.md` section 9.
+Open decisions first (star variety in real mode, automatic lineup), then tuning, then morale, owner goals, news feed, coaches. Ordered list in `HANDOFF.md` section 7.
