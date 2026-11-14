@@ -20,11 +20,21 @@ func addInjury(row M, p *engine.Player) {
 	}
 }
 
+// addDev puts "ovrChange" and "potChange" on a non-prospect player row, once
+// the player has had a yearly progression.
+func addDev(row M, p *engine.Player) {
+	if p != nil && p.Dev != nil {
+		row["ovrChange"], row["potChange"] = p.Dev.Overall, p.Dev.Potential
+	}
+}
+
 func (s *server) injuryLines(lines []engine.InjuryLine) []M {
 	out := []M{}
 	for _, l := range lines {
-		out = append(out, M{"playerId": l.PlayerID, "name": l.Name, "team": s.team(l.TeamID),
-			"injury": l.Injury, "gamesLeft": l.GamesLeft, "serious": l.Serious})
+		row := M{"playerId": l.PlayerID, "name": l.Name, "team": s.team(l.TeamID),
+			"injury": l.Injury, "gamesLeft": l.GamesLeft, "serious": l.Serious}
+		addDev(row, s.lg.FindPlayer(l.PlayerID))
+		out = append(out, row)
 	}
 	return out
 }

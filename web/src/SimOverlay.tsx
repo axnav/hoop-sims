@@ -2,8 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, type DayResult, type GameState, type InjuryLine, type SimPause, type Team } from './api'
+import { api, type DayResult, type GameEvents, type GameState, type InjuryLine, type SimPause, type Team } from './api'
 import { AnimatedNumber, TeamBadge, WL } from './ui'
+import { LiveGame } from './LiveGame'
+import { OfferList, useOffers } from './OffersCard'
+
+const WATCH_KEY = 'hoopsim.watchGames'
+function readWatch() {
+  try { return localStorage.getItem(WATCH_KEY) === '1' } catch { return false }
+}
+
+// Pending offers shown inside the sim window (only mounted while paused for an offer).
+function OfferPause({ onChangeIt }: { onChangeIt: (id: number) => void }) {
+  const { offers, accepted, accept, reject, onAccept, onReject } = useOffers()
+  return (
+    <div className="mt-3 space-y-3">
+      {accepted && offers.length === 0 && (
+        <div className="rounded-lg border border-win/50 p-2 font-semibold text-win">Trade complete</div>
+      )}
+      <OfferList compact offers={offers} onChangeIt={onChangeIt} onAccept={onAccept} onReject={onReject} accept={accept} reject={reject} />
+    </div>
+  )
+}
 
 export type SimPlan = { days: number; toEnd: boolean }
 type Strip = { rank: number; team: Team; w: number; l: number }[]
@@ -23,6 +43,23 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
   const [pause, setPause] = useState<SimPause | null>(null)
   const [noStop, setNoStop] = useState(false)
   const closeBtn = useRef<HTMLButtonElement>(null)
+  const [watch, setWatch] = useState(readWatch)
+  const watchRef = useRef(watch)
+  const [live, setLive] = useState<GameEvents | null>(null)
+  const gameRes = useRef<(() => void) | null>(null)
+
+  const toggleWatch = (v: boolean) => {
+    setWatch(v); watchRef.current = v
+    try { localStorage.setItem(WATCH_KEY, v ? '1' : '0') } catch { /* storage unavailable */ }
+  }
+  // Ends the game view and releases the sim loop that is waiting on it.
+  const finishGame = () => {
+    setLive(null)
+    const r = gameRes.current
+    gameRes.current = null
+    r?.()
+  }
+  const playGame = (g: GameEvents) => new Promise<void>((res) => { gameRes.current = res; setLive(g) })
 
   // Sims one day at a time; `remaining` survives a pause so "Keep simming" resumes where it stopped.
   const loop = async () => {
@@ -30,6 +67,11 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
     try {
       while (remaining.current > 0 && !stop.current) {
         const r = await api.sim({ days: 1, auto: true })
+        if (watchRef.current && !stop.current && r.days.some((d) => d.hasReplay)) {
+          let g: GameEvents | null = null
+          try { g = await api.events('last') } catch { /* skip silently */ }
+          if (g && g.events?.length && !stop.current) await playGame(g)
+        }
         setResults((p) => [...p, ...r.days])
         if (r.injuries?.length) setHurt((p) => [...p, ...r.injuries])
         if (r.strip) setStrip(r.strip)
@@ -59,6 +101,11 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
     if (go) { remaining.current = 0; setPause(null); onClose(); nav('/trade') }
     else loop()
   }
+  const changeOffer = (id: number) => {
+    remaining.current = 0; setPause(null); onClose(); nav(`/trade?offer=${id}`)
+  }
+  const closeNow = () => { remaining.current = 0; setPause(null); onClose() }
+  const stopSim = () => { stop.current = true; finishGame() }
 
   useEffect(() => { if (done) closeBtn.current?.focus() }, [done])
 
@@ -75,13 +122,16 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-        className="card w-full max-w-3xl overflow-hidden shadow-2xl"
+        className="card max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto shadow-2xl"
       >
         <div className="h-1.5 bg-line"><motion.div className="h-full bg-accent" animate={{ width: `${(day / start.totalDays) * 100}%` }} /></div>
         <div className="grid gap-4 p-5 md:grid-cols-[1fr_260px]">
           <div>
             <div className="flex items-baseline justify-between">
               <h2 className="text-lg font-extrabold">{done ? (stop.current ? 'Stopped' : 'Done') : 'Simulating season'}</h2>
+              <label className="flex items-center gap-1.5 text-[13px] text-muted">
+                <input type="checkbox" checked={watch} onChange={(e) => toggleWatch(e.target.checked)} />Watch my games
+              </label>
               <span className="text-muted">Day <AnimatedNumber value={day} /> / {start.totalDays}</span>
             </div>
             <div className="mt-3 flex items-center gap-4">
@@ -89,6 +139,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
               <div className="text-3xl font-extrabold tabular-nums"><AnimatedNumber value={w} />-<AnimatedNumber value={l} /></div>
               <div className="text-muted">#<AnimatedNumber value={rank} /> in {start.user.confName}</div>
             </div>
+            {live && <LiveGame game={live} onDone={finishGame} />}
             <ul className="mt-4 h-[210px] overflow-hidden">
               <AnimatePresence initial={false}>
                 {results.filter((r) => r.opp).slice(-6).reverse().map((r) => (
@@ -122,9 +173,11 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
                   <input type="checkbox" checked={noStop} onChange={(e) => setNoStop(e.target.checked)} />
                   {pause.reason === 'offer' ? "Don't stop for offers" : "Don't stop before the deadline"}
                 </label>
+                {pause.reason === 'offer' && <OfferPause onChangeIt={changeOffer} />}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button className="btn btn-accent" onClick={() => answer(true)}>{pause.reason === 'offer' ? 'See the offer' : 'Go to trades'}</button>
-                  <button className="btn" onClick={() => answer(false)}>Keep simming</button>
+                  {pause.reason !== 'offer' && <button className="btn btn-accent" onClick={() => answer(true)}>Go to trades</button>}
+                  <button className={`btn ${pause.reason === 'offer' ? 'btn-accent' : ''}`} onClick={() => answer(false)}>Keep simming</button>
+                  {pause.reason === 'offer' && <button className="btn" onClick={closeNow}>Close</button>}
                 </div>
               </div>
             )}
@@ -140,7 +193,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
                   <button ref={closeBtn} className="btn btn-accent" onClick={onClose}>Close</button>
                 </>
               ) : pause ? <span /> : (
-                <button className="btn" onClick={() => (stop.current = true)}>Stop</button>
+                <button className="btn" onClick={stopSim}>Stop</button>
               )}
             </div>
           </div>

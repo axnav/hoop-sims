@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { api, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
+import { Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -176,6 +176,9 @@ function Body({ id, close }: { id: number; close: () => void }) {
               )}
             </div>
           </div>
+          {!p.prospect && (!!p.ovrChange || !!p.potChange) && (
+            <div className="mt-2 text-sm text-muted">Last offseason: OVR<Delta value={p.ovrChange} /> POT<Delta value={p.potChange} /></div>
+          )}
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
@@ -196,6 +199,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
                   <motion.div className="h-full rounded" style={{ background: ovrColor(r.value) }} initial={{ width: 0 }} animate={{ width: `${r.value}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
                 </div>
                 <span className="w-7 text-right font-bold tabular-nums">{r.value}</span>
+                <span className="w-8"><Delta value={p.ratingChanges?.[r.key]} /></span>
               </div>
             ))}
           </div>

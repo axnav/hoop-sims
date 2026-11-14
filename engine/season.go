@@ -186,7 +186,8 @@ func (lg *League) SimDay() bool {
 	r := lg.dayRNG(s.Year, s.Day)
 	for i := s.Day * GamesPerDay; i < (s.Day+1)*GamesPerDay; i++ {
 		g := &s.Games[i]
-		res := SimGame(r, lg.Teams[g.Home], lg.Teams[g.Away])
+		user := g.Home == lg.UserTeamID || g.Away == lg.UserTeamID
+		res := SimGameRec(r, lg.Teams[g.Home], lg.Teams[g.Away], user)
 		g.Played, g.HomeScore, g.AwayScore = true, res.Home.Score, res.Away.Score
 		if g.HomeScore > g.AwayScore {
 			s.Wins[g.Home]++

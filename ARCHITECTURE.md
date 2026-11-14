@@ -227,6 +227,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 | `Impact` | The hidden number, roughly -8 to +8. Used by `Effective` in the game sim and by progression. Never sent to the browser |
 | `Contract` | `Contract{Salary, Years}`; `Years` counts seasons left including the current one, 0 means none or expiring in the offseason |
 | `Injury` | `*Injury{Name, GamesLeft, Serious}`; nil means healthy |
+| `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. Sent as `ovrChange`, `potChange`, `ratingChanges` by `addDev` in `cmd/web/admin.go` |
 
 ### Lineup
 
@@ -455,7 +456,7 @@ Unknown paths show the Dashboard. A player's detail opens as a side drawer drive
 - `api.ts`: one typed `api` object with a function per route, plus hand-written TypeScript types for every response (`GameState`, `Phase`, `DraftData`, ...). It is a hand-kept copy of the server's maps.
 - `ui.tsx`: small components and formatters used everywhere: `Card`, `Page`, `DataTable`, `Q` (renders a query's loading and error states), `TeamBadge`, `TeamLink`, `PlayerLink`, `TierChip`, `InjuryTag`, `RangeBar` and `rangeText` (scouting ranges), `PayrollBar`, `ConfirmDialog`, `money`, `ovrColor`.
 - `flow.tsx`: `FlowProvider` and `useFlow()`. It owns the `['state']` query, the `run(id)` action runner from section 4, the busy flag, the action error, and the latest free-agency signings. It decides whether to ask for confirmation first.
-- `SimOverlay.tsx`: the full-screen progress view for multi-day sims; it calls `POST /api/sim` one day at a time with `auto: true` so the server can pause for the deadline or a new offer.
+- `SimOverlay.tsx`: the full-screen progress view for multi-day sims; it calls `POST /api/sim` one day at a time with `auto: true` so the server can pause for the deadline or a new offer. A new offer is shown and answered inside it (`OfferList` and `useOffers` from `OffersCard.tsx`). With "Watch my games" on, a day whose result has `hasReplay` plays in `LiveGame.tsx` (events from `/api/game/last/events`; `SimDay` records play-by-play for the user's game only) before the next day is simmed.
 - `TopBar.tsx`: navigation, the season stepper, the continue button, save. `App.tsx` also binds Space and Enter to the continue button.
 - Cards used on several pages: `ExpiringCard.tsx` (re-sign or release), `InjuriesCard.tsx`, `OffersCard.tsx` (computer proposals), `TxItem.tsx` (one trade in a log).
 - `scout.ts`: the `useScout` hook that spends a scouting point and updates the cache.

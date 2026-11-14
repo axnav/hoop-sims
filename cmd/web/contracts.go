@@ -48,9 +48,11 @@ func (s *server) expiringView() M {
 		if err := lg.CanSign(u, sal, engine.SignOwn); err != nil {
 			problem = err.Error()
 		}
-		rows = append(rows, M{"id": p.ID, "name": p.Name, "pos": p.PosLabel(), "age": p.Age, "ovr": p.Overall(),
+		row := M{"id": p.ID, "name": p.Name, "pos": p.PosLabel(), "age": p.Age, "ovr": p.Overall(),
 			"pot": p.Potential, "tier": engine.PlayerTier(p), "askSalary": sal, "askYears": yrs,
-			"canReSign": problem == "", "problem": problem})
+			"canReSign": problem == "", "problem": problem}
+		addDev(row, p)
+		rows = append(rows, row)
 	}
 	return M{"players": rows, "payroll": s.payrollObj(u), "open": s.offseasonOpen()}
 }

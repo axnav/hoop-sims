@@ -60,6 +60,10 @@ type Player struct {
 
 	// Injury is the current injury; nil means healthy (see injury.go).
 	Injury *Injury `json:",omitempty"`
+
+	// Dev is the change in the latest yearly progression; nil = never
+	// progressed (or an old save).
+	Dev *DevChange `json:",omitempty"`
 }
 
 // Positions lists every position the player can play, primary first.

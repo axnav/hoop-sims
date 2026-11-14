@@ -7,7 +7,7 @@ import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type 
 import { useFlow } from '../flow'
 import { TxItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { Card, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, TeamBadge, TierChip, money, ovrColor } from '../ui'
+import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, TeamBadge, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
@@ -31,8 +31,8 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
         <TierChip tier={p.tier} />
       </span>
       <span className="w-8 text-right text-xs text-muted tabular-nums">{p.age}y</span>
-      <b className="w-7 text-right tabular-nums" style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b>
-      <span className="w-7 text-right text-muted tabular-nums">{p.pot}</span>
+      <span className="w-10 text-right tabular-nums"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} /></span>
+      <span className="w-10 text-right text-muted tabular-nums">{p.pot}<Delta value={p.potChange} /></span>
       <span className="w-14 text-right text-xs tabular-nums" title={`${p.years} years left`}>{money(p.salary)}</span>
       <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2" title={`Trade value ${p.value}`}>
         <span className="block h-full rounded bg-accent" style={{ width: `${Math.max(4, (100 * p.value) / maxV)}%` }} />

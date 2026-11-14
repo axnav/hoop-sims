@@ -152,7 +152,43 @@ Do not commit or push unless the rules in RULES.md section 8 allow it.
 Report what you ran and saw separately from what a helper reported.
 ```
 
+## 11. Reference: what a full console-style GM mode has that HoopSim lacks
+
+Written 2026-11-14 from the main session's general knowledge of console franchise modes (the NBA 2K MyGM / MyNBA family). It was not checked against any one release online; treat it as a checklist of ideas, not a spec. Items already planned in section 7 are marked (planned).
+
+**Have already:** trades with picks and three teams, negotiation and incoming offers, soft cap with tax and ceiling, free agency by days, draft lottery, scouting ranges, injuries, lineups and minutes, steppable playoffs, awards, history, commissioner edits, replay viewer.
+
+| Area | Missing |
+|---|---|
+| Players | In-season progression; training or practice focus; badges or traits; hot and cold streaks; fatigue and durability; morale, chemistry, roles and promises, trade requests (planned); personalities |
+| Staff | Coaches and coaching systems (planned); scouts and trainers with their own ratings; hiring and firing |
+| Owner and GM | Owner goals and job security (planned); team finances, budget, ticket prices; GM skills; relocation and rebranding |
+| Contracts | Player and team options; no-trade clauses; restricted free agency and offer sheets; in-season extensions; exceptions (mid-level and others); dead money and buyouts; two-way and ten-day deals; a development league |
+| Trades | Pick protections and swaps; a trade finder ("who would give me X"); a public trading block; draft-day trades; cash and trade exceptions |
+| Draft | Workouts and a combine; a mock draft and big board; draft-and-stash |
+| League | All-Star weekend; All-League teams and more awards (defensive, rookie, sixth man, most improved); Hall of Fame and records; play-in games; expansion; rule changes; several save slots |
+| Presentation | News feed (planned); live game view while simming (being built, see the update log); box scores for every game; player comparison; milestones |
+| Game model | Positions that matter (problem 2); playbooks and strategy sliders; fatigue; clutch |
+
+**Ideas to improve player progression, in recommended order:**
+1. Show it: save each player's last yearly change and show it beside the overall on every screen (being built). Then a per-season overall line on the player page.
+2. In-season progression: split the yearly change into monthly steps so ratings move during the season (needs its own random stream and a re-check of the "55 to 65% reach potential" target).
+3. Training focus: the user picks a focus per player (shooting, defense, body) that tilts which ratings get the growth, not how much.
+4. Performance-based growth: playing above expectation adds a little, for all ages (today only minutes count, and only for ages 24 and under).
+5. Different peak ages per player (late bloomers, early decliners) from a hidden per-player number, which would also help problem 1 (star variety).
+6. Mentors (a veteran at the same position helps a young player) and, once coaches exist, coach development ratings.
+7. Injuries that cost development time (a long absence slows that year's growth).
+
 ## Update log (newest first)
+
+### 2026-11-14, progression arrows, live game in the sim window, offers in the sim window
+- Owner decisions: the live game plays inside the sim window (not the full viewer); the +/- shows last offseason's change; in-season progression is the next progression piece, not built yet. Section 11 (GM-mode gap list and progression ideas) was added as a reference.
+- Engine: `Player.Dev` (`DevChange`, set in `ProgressMinutes`, nil for rookies and old saves, no save-version bump). `SimDay` records play-by-play for the user's game only (`SimGameRec`), kept in `LastBox`.
+- API: `ovrChange` / `potChange` on player rows through `addDev` (roster, trade block, offers, lineup, free agents, expiring, injuries), `ratingChanges` on the player page, `hasReplay` on sim day results. Never on prospects.
+- Screens: `Delta` arrows on TeamPage, Lineup, Trade block, offers, FreeAgency, ExpiringCard and the player drawer; `LiveGame.tsx` with a "Watch my games" switch in `SimOverlay`; offers with Accept / Decline / Change it inside the sim window (`OfferList`, `useOffers` in `OffersCard.tsx`).
+- Verified by the main session: `go vet`, `go test ./... -count=1`, `npm run build`; a full season cycle on port 8097 through the API (deltas present, none for rookies, no hidden number, 328 events for a regular-season game); in the browser pane: arrows on the roster and drawer, a live game playing, Skip to final, an offer shown in the window, Decline, Accept ("Trade complete"), Keep simming, phone width, no console errors. One layout fault found and fixed (player names squeezed out of the offer rows).
+- Not tried: Stop during a live game, the 1x and 16x speed buttons, "Change it" from the sim window, the deadline pause after this change, an old save in the browser, real-data mode. No arrows on the Trade page's selected-asset list, Leaders, Injuries card or Dashboard (they show no overall).
+- Known rough edge: a full game at the default 4x takes about a minute, so watching every game of a season is slow; use 16x or Skip.
 
 ### 2026-11-14, documents and push
 - Added `RULES.md` (rules) and `ARCHITECTURE.md` (how the code is built). The owner asked for `main` to be pushed to GitHub with these documents; see the git log for whether the push went through.

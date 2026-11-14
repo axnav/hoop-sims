@@ -204,3 +204,28 @@ func playSeasonStats(lg *League) *Season {
 	lg.Offseason()
 	return s
 }
+
+func TestUserGameRecordingKeepsResults(t *testing.T) {
+	a, b := GenerateLeague(21), GenerateLeague(21)
+	b.UserTeamID = (a.UserTeamID + 7) % NumTeams
+	a.StartSeason()
+	b.StartSeason()
+	for d := 0; d < 5; d++ {
+		a.SimDay()
+		b.SimDay()
+		if a.LastBox == nil || len(a.LastBox.Events) == 0 {
+			t.Fatalf("day %d: no events in LastBox", d)
+		}
+	}
+	for i := 0; i < 5*GamesPerDay; i++ {
+		ga, gb := a.Season.Games[i], b.Season.Games[i]
+		if ga.HomeScore != gb.HomeScore || ga.AwayScore != gb.AwayScore {
+			t.Fatalf("game %d differs: %d-%d vs %d-%d", i, ga.HomeScore, ga.AwayScore, gb.HomeScore, gb.AwayScore)
+		}
+	}
+	for id, ps := range a.Season.Stats {
+		if *ps != *b.Season.Stats[id] {
+			t.Fatalf("stats differ for player %d", id)
+		}
+	}
+}

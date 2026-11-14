@@ -56,6 +56,7 @@ func (s *server) freeAgencyView() M {
 			row["myOffer"] = M{"id": o.ID, "salary": o.Salary, "years": o.Years, "day": o.Day + 1}
 		}
 		addInjury(row, p)
+		addDev(row, p)
 		rows = append(rows, row)
 	}
 	for _, o := range lg.OffersBy(u) {

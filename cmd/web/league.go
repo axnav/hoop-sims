@@ -90,6 +90,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		}
 		addInjury(row, p)
 		addContract(row, p)
+		addDev(row, p)
 		row["expiring"] = expiring[p.ID]
 		roster = append(roster, row)
 	}
@@ -166,6 +167,15 @@ func (s *server) player(r *http.Request) (any, error) {
 	}
 	addInjury(out, p)
 	addContract(out, p)
+	if !s.inPool(p.ID) && p.Dev != nil {
+		addDev(out, p)
+		rc := M{}
+		for _, k := range engine.RatingKeys() {
+			v, _ := engine.GetRating(p.Dev.Ratings, k.Key)
+			rc[k.Key] = v
+		}
+		out["ratingChanges"] = rc
+	}
 	return out, nil
 }
 

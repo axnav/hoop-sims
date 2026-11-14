@@ -61,6 +61,7 @@ func (s *server) playerRow(owner int, a engine.TradeAsset) M {
 	pl := s.lg.FindPlayer(a.PlayerID)
 	addInjury(row, pl)
 	addContract(row, pl)
+	addDev(row, pl)
 	return row
 }
 

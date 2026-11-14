@@ -202,6 +202,12 @@ func MinutesAdjust(age int, mpg float64) float64 {
 	return -c.MinutesDevPenalty * f
 }
 
+// DevChange is how a player's visible numbers moved in his latest yearly progression (new minus old).
+type DevChange struct {
+	Overall, Potential int
+	Ratings            Ratings
+}
+
 // Progress ages the player one year with no minutes adjustment.
 func (p *Player) Progress(r *RNG) { p.ProgressMinutes(r, -1) }
 
@@ -211,6 +217,7 @@ func (p *Player) Progress(r *RNG) { p.ProgressMinutes(r, -1) }
 // minutes and slower with few (MinutesAdjust).
 func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 	c := &Progression
+	oldOvr, oldPot, oldRt := p.Overall(), p.Potential, p.Ratings
 	ovr := float64(p.Overall())
 	imp := float64(p.Impact)
 	var delta float64
@@ -275,6 +282,13 @@ func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 		pot := float64(p.Potential) + (p.TrueCeiling()-float64(p.Potential))*c.PotentialLearnRate
 		p.Potential = clamp(max(round(pot), newOvr), 25, 99)
 	}
+	n, o := p.Ratings.array(), oldRt.array()
+	var d [7]int
+	for i := range d {
+		d[i] = n[i] - o[i]
+	}
+	p.Dev = &DevChange{Overall: newOvr - oldOvr, Potential: p.Potential - oldPot,
+		Ratings: Ratings{d[0], d[1], d[2], d[3], d[4], d[5], d[6]}}
 }
 
 // RetireChance is the probability the player retires this offseason.

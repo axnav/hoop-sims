@@ -40,6 +40,11 @@ func (s *server) assetRow(m engine.Move) M {
 				if inj, ok := r["injury"]; ok {
 					row["injury"] = inj
 				}
+				for _, k := range []string{"ovrChange", "potChange"} {
+					if v, ok := r[k]; ok {
+						row[k] = v
+					}
+				}
 				return row
 			}
 		}

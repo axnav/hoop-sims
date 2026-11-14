@@ -60,6 +60,7 @@ func (s *server) lineupObj() M {
 			row["gp"], row["mpg"] = st.GP, float64(st.Min)/float64(st.GP)
 		}
 		addInjury(row, p)
+		addDev(row, p)
 		rows = append(rows, row)
 	}
 	return M{"custom": custom, "total": engine.TeamMinutes, "maxMinutes": engine.MaxPlayerMinutes,

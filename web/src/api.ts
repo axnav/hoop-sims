@@ -4,7 +4,7 @@ export type Team = {
 }
 export type Payroll = { payroll: number; cap: number; taxLine: number; ceiling: number; room: number; taxBill: number; minSalary: number }
 export type Injury = { name: string; gamesLeft: number; serious: boolean }
-export type InjuryLine = { playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
+export type InjuryLine = { ovrChange?: number; potChange?: number; playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
 export type Award = { playerId: number; name: string; team: Team; gp: number; ppg: number; rpg: number; apg: number } | null
 export type Action = { id: string; label: string }
 export type Phase = 'regular' | 'regular_done' | 'playoffs' | 'playoffs_done' | 'offseason' | 'draft' | 'draft_done' | 'free_agency'
@@ -16,7 +16,7 @@ export type Series = {
 }
 export type DayResult = {
   day: number; w: number; l: number; rank: number
-  opp?: Team; home?: boolean; me?: number; them?: number; win?: boolean
+  opp?: Team; home?: boolean; me?: number; them?: number; win?: boolean; hasReplay?: boolean
 }
 export type GameState = {
   year: number; phase: Phase; day: number; totalDays: number; mode: 'real' | 'fictional'; conferences: string[]
@@ -40,6 +40,7 @@ export type GameState = {
 export type FAPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; interest: number
+  ovrChange?: number; potChange?: number
   myOffer?: { id: number; salary: number; years: number; day: number }; injury?: Injury
 }
 export type FAOfferRow = { id: number; playerId: number; name: string; salary: number; years: number; day: number }
@@ -55,18 +56,20 @@ export type Meta = {
 }
 export type StandRow = { rank: number; team: Team; w: number; l: number; pct: number; gb: number; pd: number; inPlayoffs: boolean }
 export type Standings = { year: number; conferences: { conf: number; name: string; rows: StandRow[] }[]; playoffLine: number; userTeam: number }
-export type Leader = { playerId: number; name: string; team: Team; gp: number; value: number }
+export type Leader = { ovrChange?: number; potChange?: number; playerId: number; name: string; team: Team; gp: number; value: number }
 export type Leaders = { minGP: number; pts: Leader[]; reb: Leader[]; ast: Leader[] }
 export type RosterRow = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; starter: boolean
   gp: number; mpg: number; ppg: number; rpg: number; apg: number
   injury?: Injury
   salary: number; years: number; expiring: boolean
+  ovrChange?: number; potChange?: number
 }
 export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
+  ovrChange?: number; potChange?: number; ratingChanges?: Record<string, number>
   role: string; usage: number; salary: number; years: number
   injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
   ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
@@ -101,7 +104,7 @@ export type OffseasonReport =
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
-export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number }
+export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number; ovrChange?: number; potChange?: number }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
 export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
 export type DealMove =
@@ -117,7 +120,7 @@ export type DealVerdict = {
   }[]
 }
 export type AssetRow =
-  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury; salary: number; years: number }
+  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury; salary: number; years: number; ovrChange?: number; potChange?: number }
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
 export type Offer = {
   id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
@@ -131,6 +134,7 @@ export type SimResult = {
 export type ExpiringPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; canReSign: boolean; problem: string
+  ovrChange?: number; potChange?: number
 }
 export type Expiring = { players: ExpiringPlayer[]; payroll: Payroll; open: boolean }
 export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; commissioner: boolean }
@@ -165,6 +169,7 @@ export type LineupPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   minutes: number; autoMinutes: number; nextMinutes: number; starterSlot: number
   gp: number; mpg: number; injury?: Injury
+  ovrChange?: number; potChange?: number
 }
 export type LineupData = {
   custom: boolean; total: number; maxMinutes: number; minPlayers: number; slots: string[]

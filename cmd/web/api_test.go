@@ -1394,3 +1394,79 @@ func TestProspectAdminAndDrafted(t *testing.T) {
 		t.Fatalf("done draft: %v", d["done"])
 	}
 }
+
+func TestDevChangeAndLiveReplay(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 11, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	// Before any progression: no keys.
+	team := c.call("GET", "/api/team/3", nil, 200)
+	if _, ok := team["roster"].([]any)[0].(M)["ovrChange"]; ok {
+		t.Fatal("ovrChange before first progression")
+	}
+	// Live replay of the regular-season game.
+	r := c.call("POST", "/api/sim", M{"days": 1}, 200)
+	day := r["days"].([]any)[0].(M)
+	if day["hasReplay"] != true {
+		t.Fatalf("day result without hasReplay: %v", day)
+	}
+	if box := c.call("GET", "/api/box/last", nil, 200); box["hasReplay"] != true {
+		t.Fatalf("box/last hasReplay: %v", box["hasReplay"])
+	}
+	ev := c.call("GET", "/api/game/last/events", nil, 200)
+	if evs, _ := ev["events"].([]any); len(evs) == 0 {
+		t.Fatal("no events for last game")
+	}
+	// Full offseason.
+	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
+	c.call("POST", "/api/playoffs/start", nil, 200)
+	c.call("POST", "/api/playoffs/all", nil, 200)
+	c.call("POST", "/api/offseason/begin", nil, 200)
+	c.call("POST", "/api/offseason/to-draft", nil, 200)
+	d := c.call("GET", "/api/draft", nil, 200)
+	for _, p := range d["prospects"].([]any) {
+		m := p.(M)
+		if _, ok := m["ovrChange"]; ok {
+			t.Fatalf("prospect has ovrChange: %v", m)
+		}
+		if _, ok := m["potChange"]; ok {
+			t.Fatalf("prospect has potChange: %v", m)
+		}
+		if _, ok := m["ratingChanges"]; ok {
+			t.Fatalf("prospect has ratingChanges: %v", m)
+		}
+	}
+	for i := 0; i < 200; i++ {
+		d := c.call("GET", "/api/draft", nil, 200)
+		if d["done"] == true {
+			break
+		}
+		if d["userOnClock"] == true {
+			c.call("POST", "/api/draft/pick", M{"playerId": num(d["prospects"].([]any)[0].(M)["id"])}, 200)
+			continue
+		}
+		c.call("POST", "/api/draft/step", M{"max": 7}, 200)
+	}
+	c.call("POST", "/api/offseason/finish", nil, 200)
+	team = c.call("GET", "/api/team/3", nil, 200)
+	found := false
+	for _, p := range team["roster"].([]any) {
+		m := p.(M)
+		if _, ok := m["ovrChange"]; !ok {
+			continue
+		}
+		if _, ok := m["potChange"]; !ok {
+			t.Fatalf("potChange missing: %v", m)
+		}
+		pg := c.call("GET", "/api/player/"+itoa(num(m["id"])), nil, 200)
+		rc, ok := pg["ratingChanges"].(M)
+		if !ok || len(rc) != len(engine.RatingKeys()) {
+			t.Fatalf("ratingChanges: %v", pg["ratingChanges"])
+		}
+		found = true
+		break
+	}
+	if !found {
+		t.Fatal("no roster row has ovrChange after a full offseason")
+	}
+}

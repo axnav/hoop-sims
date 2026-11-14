@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type LineupData, type LineupPlayer } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Card, InjuryTag, Page, Q, TierChip, ovrColor } from '../ui'
+import { Card, Delta, InjuryTag, Page, Q, TierChip, ovrColor } from '../ui'
 
 type Edit = { starters: number[]; minutes: Record<number, number> }
 
@@ -159,7 +159,7 @@ function LineupView({ d }: { d: LineupData }) {
                     </td>
                     <td>{p.pos}</td>
                     <td className="r">{p.age}</td>
-                    <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b> / {p.pot}</td>
+                    <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} /> / {p.pot}<Delta value={p.potChange} /></td>
                     <td className="r">{p.gp} · {p.mpg.toFixed(1)}</td>
                     <td className="r text-muted">{p.autoMinutes}</td>
                     <td>

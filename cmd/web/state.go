@@ -159,6 +159,9 @@ func (s *server) dayResult(day int) M {
 			me, them, opp = g.AwayScore, g.HomeScore, g.Home
 		}
 		res["opp"], res["home"], res["me"], res["them"], res["win"] = s.team(opp), g.Home == u, me, them, me > them
+		if b := lg.LastBox; b != nil && b.Day == day && len(b.Events) > 0 {
+			res["hasReplay"] = true
+		}
 	}
 	return res
 }
