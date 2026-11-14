@@ -179,7 +179,26 @@ Written 2026-11-14 from the main session's general knowledge of console franchis
 6. Mentors (a veteran at the same position helps a young player) and, once coaches exist, coach development ratings.
 7. Injuries that cost development time (a long absence slows that year's growth).
 
+## 12. Approved plan (owner approved 2026-11-15)
+
+Six pieces, in this order, one at a time, each with checks, a pass on port 8097 and a local merge. Ideas come from researching the NBA 2K franchise modes and EA FC career mode online; no formulas or names are copied.
+
+1. **Court view for the lineup.** Half-court picture on the Lineup page with five spots and the bench; tap or drag a player onto a spot; out-of-position warning. Screens only.
+2. **What players want, and extensions.** Visible motivations per player (Money, Winning, Role, Loyalty: Low/Medium/High). Each of the user's players shows a stance: Will re-sign, Open to it, Will test free agency, with reasons. "Offer extension" for a player in his last contract year, in season or offseason (first-year salary limit like the NBA's 140% rule). The same motivations weight a free agent's choice between offers (extend the appeal score in `playersDecide`).
+3. **Coaches, systems and roster fit.** One head coach per team (Offense, Defense, Development, a preferred system), hired from a pool in the offseason, no salary. Six systems of our own: Balanced, Pace and Space, Run and Gun, Inside-Out, Star-Led, Defense First; each sets pace, three-point share, star usage and defensive effort and names the skills it needs. Per-player fit grade and a team fit score from the players who get minutes; small game effect. The user may run a system other than the coach's favourite at a cost. Needs a before/after measurement of scoring and home-win rate.
+4. **Training focus.** A focus per player (Balanced, Shooting, Inside scoring, Playmaking, Defense, Rebounding, Body). Each player has his own learning speed per skill (derived from seed and player ID, no saved field) and age windows. The focus moves where growth goes; it does not add growth. The coach's Development rating feeds in.
+5. **Badges.** About twelve of our own in four groups (finishing, shooting, playmaking, defense/rebounding), tiers Bronze/Silver/Gold, earned by rating thresholds and by performance, small effect on the matching kind of play; three personality badges (Leader, Mentor, Star). Badges count toward system fit.
+6. **Player pictures.** Generated avatars for everyone; in real-data mode a photo from `data/real/photos/<RealID>.jpg` when present (free-licence photos from Wikipedia, credits in `credits.csv`, private, never committed). The owner said the photos are for local use and will tell us to remove them before going live (delete the folder; the game falls back to avatars).
+
+Left for later on purpose: fatigue on back-to-backs, chemistry between personalities, promises with a trust rating, the room and bi-annual exceptions, more 3D court work (the owner parked it for cost).
+
 ## Update log (newest first)
+
+### 2026-11-15, plan approved, court view for the lineup (plan piece 1)
+- The owner approved the six-piece plan in section 12. A Haiku helper is downloading free-licence player photos into `data/real/photos/` (private; see piece 6).
+- Piece 1 built: `web/src/CourtLineup.tsx`, a half-court picture on the Lineup page with five spots and the bench. Tap a spot then a bench player (or the other way round), tap two spots to swap, × to remove, drag and drop on desktop. A player in a slot that is not in his position label gets an amber "out of position" ring. It edits the same starters state as the dropdowns; no API or engine change.
+- Verified by the main session: web build; on port 8097 (server built from `main`, screens from the working tree) the court drew, a bench centre placed at PG showed out of position and "Unsaved changes", × removed a starter, phone width had no sideways scroll, no console errors.
+- Not tried: drag and drop, saving a lineup made on the court, swapping two starters by tapping two spots. Rough edge: at phone width the last name in a token is clipped by the × button.
 
 ### 2026-11-15, Teams tab and team direction
 - Owner asked to see which teams are proposing trades, a Teams tab with everything, and which teams are buying, selling or chasing a title. Engine: `engine/teamstatus.go` (`TeamStatuses`, `TeamStatusOf`, bands in `StatusBands`: Contender 0.8, Buyer 0.5, Seller 0.2 on the contend factor; the Buyer line is the same constant the proposal code uses). API: `GET /api/teams` (record, rank, payroll, cap room, top-8 average, best player, status, pending offers) and `status` on the team page, trade block and offers. Screens: `pages/Teams.tsx` (offers at the top, filters, sortable table, legend), `StatusChip` on the team page, Trade screen and offers.

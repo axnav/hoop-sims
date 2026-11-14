@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type LineupData, type LineupPlayer } from '../api'
 import { useOpenPlayer } from '../Inline'
+import CourtLineup from '../CourtLineup'
 import { Card, Delta, InjuryTag, Page, Q, TierChip, ovrColor } from '../ui'
 
 type Edit = { starters: number[]; minutes: Record<number, number> }
@@ -115,6 +116,10 @@ function LineupView({ d }: { d: LineupData }) {
             <div className={`h-full rounded-full ${off ? 'bg-amber-400' : 'bg-win'}`} style={{ width: `${Math.min(100, (100 * sum) / d.total)}%` }} />
           </div>
         </div>
+      </Card>
+
+      <Card title="Court" className="mb-4">
+        <CourtLineup slots={d.slots} starters={cur.starters} players={d.players} minutes={cur.minutes} onSet={setStarter} />
       </Card>
 
       <Card title="Starters" className="mb-4">

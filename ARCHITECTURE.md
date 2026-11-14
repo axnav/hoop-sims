@@ -441,7 +441,7 @@ The app is React 19 with TypeScript, built with Vite, styled with Tailwind v4, u
 |---|---|---|
 | `/` | `pages/Dashboard.tsx` | Home: next game, last result, standings snapshot, offers, injuries, the continue button |
 | `/team/:id` | `pages/TeamPage.tsx` | A team's roster and contracts (`/roster` redirects to the user's team) |
-| `/lineup` | `pages/Lineup.tsx` | Starters and minutes |
+| `/lineup` | `pages/Lineup.tsx` | Starters and minutes, with a half-court picture (`CourtLineup.tsx`) to place starters |
 | `/trade` | `pages/Trade.tsx` | Build and evaluate deals, trade block, transactions |
 | `/standings` | `pages/Standings.tsx` | Conference standings |
 | `/teams` | `pages/Teams.tsx` | All teams with direction (contender, buyer, seller, rebuilding), offers for the user, filters |
