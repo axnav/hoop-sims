@@ -1,0 +1,11 @@
+# Private local basketball-reference-derived data; never publish this.
+/data/real/
+
+# Local game saves.
+/saves/
+
+# Operating-system and local environment files.
+.DS_Store
+.env
+.env.*
+!.env.example
