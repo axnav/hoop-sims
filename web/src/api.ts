@@ -69,7 +69,8 @@ export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
   role: string; usage: number; salary: number; years: number
   injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
-  ratings: { key: string; label: string; value: number }[]; experience: number; draftYear: number; draftPick: number
+  ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
+  prospect?: boolean; scout?: { level: number; ovrLo: number; ovrHi: number; potLo: number; potHi: number }
   season: StatLine; playoffs: StatLine
   career: { year: number; team: Team; age: number; ovr: number; pot: number; gp: number; ppg: number; rpg: number; apg: number }[]
 }
@@ -143,12 +144,16 @@ export type TradeVerdict = {
 export type TxPlayer = { playerId: number; name: string; from: Team; to: Team }
 export type Transaction = { year: number; day: number; teamA: Team; teamB: Team; moved: TxPlayer[]; released: TxPlayer[]; signed: TxPlayer[]; teams?: Team[]; picks?: TxPick[] }
 export type TradeResult = Transaction & { state: GameState }
-export type Pick = { pick: number; round: number; team: Team; made: boolean; player?: { id: number; name: string; age: number; ovr: number; pot: number } }
+export type Pick = { pick: number; round: number; team: Team; via?: Team; made: boolean; player?: { id: number; name: string; age: number; ovr: number; pot: number } }
+export type Prospect = { id: number; name: string; age: number; pos: string; ovrLo: number; ovrHi: number; potLo: number; potHi: number; scoutLevel: number }
+export type LotteryRow = { team: Team; owner: Team; seed: number; slot: number; odds: number; change: number }
 export type DraftData =
   | { active: false }
   | {
       active: true; total: number; made: number; done: boolean; picks: Pick[]; started: boolean; userTeam: number
-      prospects: { id: number; name: string; age: number; pos: string; ovr: number; pot: number }[]
+      prospects: Prospect[]
+      scouting: { points: number; maxLevel: number; perDraft: number }
+      lottery: LotteryRow[]
       onClock?: Team; userOnClock?: boolean
     }
 export type HistoryRow = {
@@ -216,6 +221,7 @@ export const api = {
   offseasonToDraft: () => post<GameState>('/api/offseason/to-draft'),
   offseasonFinish: () => post<GameState>('/api/offseason/finish'),
   draft: () => get<DraftData>('/api/draft'),
+  draftScout: (playerId: number) => post<DraftData>('/api/draft/scout', { playerId }),
   draftPick: (playerId: number) => post<{ pick: Pick; state: GameState }>('/api/draft/pick', { playerId }),
   draftStep: (max = 1) => post<{ picks: Pick[]; state: GameState }>('/api/draft/step', { max }),
   tradeStatus: () => get<TradeStatus>('/api/trade/status'),

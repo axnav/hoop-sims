@@ -179,6 +179,18 @@ export const WL = ({ win }: { win: boolean }) => (
 
 export const ovrColor = (v: number) => (v >= 80 ? '#3ddc84' : v >= 70 ? '#a3e635' : v >= 60 ? '#facc15' : v >= 50 ? '#fb923c' : '#ff5a67')
 
+// Thin bar on the common 0-99 rating scale with a span from lo to hi.
+export function RangeBar({ lo, hi, color, className = '' }: { lo: number; hi: number; color?: string; className?: string }) {
+  const a = Math.max(0, Math.min(99, lo)), b = Math.max(a, Math.min(99, hi))
+  return (
+    <div className={`relative h-2 rounded bg-panel2 ${className}`} aria-hidden>
+      <div className="absolute top-0 h-full rounded" style={{ left: `${(a / 99) * 100}%`, width: `${Math.max(1.5, ((b - a) / 99) * 100)}%`, background: color ?? ovrColor((a + b) / 2) }} />
+    </div>
+  )
+}
+
+export const rangeText = (lo: number, hi: number) => `${lo}\u2013${hi}`
+
 // Small label for an asset's tier. Top tiers get a stronger look.
 export function TierChip({ tier }: { tier: string }) {
   const top = tier === 'Franchise' || tier === 'Lottery pick'

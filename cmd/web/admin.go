@@ -71,6 +71,9 @@ func (s *server) adminPlayer(r *http.Request) (any, error) {
 	if s.findPlayer(id) == nil {
 		return nil, missing("no such player")
 	}
+	if s.inPool(id) {
+		return nil, conflict("prospects cannot be edited before the draft")
+	}
 	e := engine.PlayerEdit{Age: in.Age, Potential: in.Potential, Ratings: in.Ratings, Heal: in.Heal}
 	if err := s.lg.EditPlayer(id, e); err != nil {
 		return nil, bad("%v", err)

@@ -253,6 +253,7 @@ func (s *server) routes() *http.ServeMux {
 	p("/api/offseason/finish", true, s.offseasonFinish)
 	g("/api/draft", true, s.draftState)
 	p("/api/draft/pick", true, s.draftPick)
+	p("/api/draft/scout", true, s.draftScout)
 	p("/api/draft/step", true, s.draftStep)
 	p("/api/draft/auto", true, s.draftAuto)
 	g("/api/trade/status", true, s.tradeStatus)

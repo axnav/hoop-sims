@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"net/http"
-	"sort"
 
 	"hoopsim/engine"
 )
@@ -143,21 +142,32 @@ func (s *server) draftState(r *http.Request) (any, error) {
 		return M{"active": false}, nil
 	}
 	picks := []M{}
+	n := len(d.Order)
 	for i := 0; i < d.Total; i++ {
 		if i < len(d.Results) {
 			picks = append(picks, s.pickDTO(d.Results[i]))
 			continue
 		}
-		picks = append(picks, M{"pick": i + 1, "round": i/len(d.Order) + 1, "team": s.team(d.Order[i%len(d.Order)]), "made": false})
+		round := i/n + 1
+		order := d.Order
+		if round == 2 && len(d.Order2) == n {
+			order = d.Order2
+		}
+		orig := order[i%n]
+		owner, ok := lg.PickOwner(lg.Year, round, orig)
+		if !ok {
+			owner = orig
+		}
+		pk := M{"pick": i + 1, "round": round, "team": s.team(owner), "made": false}
+		if owner != orig {
+			pk["via"] = s.team(orig)
+		}
+		picks = append(picks, pk)
 	}
-	pool := append([]*engine.Player(nil), d.Pool...)
-	sort.SliceStable(pool, func(i, j int) bool { return pool[i].Overall() > pool[j].Overall() })
-	prospects := []M{}
-	for _, p := range pool {
-		prospects = append(prospects, M{"id": p.ID, "name": p.Name, "age": p.Age, "pos": p.PosLabel(), "ovr": p.Overall(), "pot": p.Potential})
-	}
+	prospects := s.prospectRows()
 	out := M{"active": true, "total": d.Total, "made": d.Made, "done": lg.DraftDone(), "picks": picks, "prospects": prospects,
-		"started": s.reportSeen, "userTeam": lg.UserTeamID}
+		"started": s.reportSeen, "userTeam": lg.UserTeamID, "lottery": s.lotteryRows(),
+		"scouting": M{"points": lg.ScoutPointsLeft(), "maxLevel": engine.MaxScoutLevel, "perDraft": engine.ScoutTuning.Points}}
 	if !lg.DraftDone() {
 		out["onClock"] = s.team(lg.DraftOnClock())
 		out["userOnClock"] = lg.DraftOnClock() == lg.UserTeamID

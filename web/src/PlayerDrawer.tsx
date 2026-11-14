@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { api, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { ErrorBox, InjuryTag, Q, Ring, TeamBadge, injuryText, ovrColor, f1, money } from './ui'
+import { ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
+import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
   if (!s) return null
@@ -104,6 +105,34 @@ function EditForm({ p, onDone }: { p: PlayerPage; onDone: () => void }) {
   )
 }
 
+function RangeRing({ lo, hi, label, color }: { lo: number; hi: number; label: string; color: string }) {
+  return (
+    <div className="flex h-[84px] w-[84px] flex-col items-center justify-center rounded-full border-[6px] border-line text-center" style={{ borderColor: 'var(--color-line)' }} title={`${label} is somewhere between ${lo} and ${hi}`}>
+      <span className="text-[15px] font-extrabold leading-none tabular-nums" style={{ color }}>{rangeText(lo, hi)}</span>
+      <span className="mt-0.5 text-[10px] uppercase tracking-wider text-muted">{label}</span>
+    </div>
+  )
+}
+
+function ScoutPanel({ id, level, maxLevel }: { id: number; level: number; maxLevel: number }) {
+  const [err, setErr] = useState('')
+  const scout = useScout(setErr)
+  const draft = useQuery({ queryKey: ['draft'], queryFn: api.draft })
+  const sc = draft.data && draft.data.active ? draft.data.scouting : null
+  const max = sc ? sc.maxLevel : maxLevel
+  const full = level >= max
+  const none = sc ? sc.points <= 0 : false
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel2/50 p-3">
+      <span className="font-semibold">Scouting level {level}/{max}</span>
+      {sc && <span className="text-muted">{sc.points} {sc.points === 1 ? 'point' : 'points'} left</span>}
+      <button className="btn btn-accent ml-auto" disabled={full || none || scout.isPending} title={full ? 'Fully scouted' : none ? 'No scouting points left' : 'Spend one scouting point'} onClick={() => scout.mutate(id)}>Scout</button>
+      <div className="w-full text-[12px] text-muted">Ranges always contain the true rating.</div>
+      {err && <div className="w-full text-loss">{err}</div>}
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
@@ -134,17 +163,33 @@ function Body({ id, close }: { id: number; close: () => void }) {
               )}
             </div>
             <div className="flex gap-2">
-              <Ring value={p.ovr} label="OVR" color={ovrColor(p.ovr)} />
-              <Ring value={p.pot} label="POT" color="var(--color-accent)" />
+              {p.prospect && p.scout ? (
+                <>
+                  <RangeRing lo={p.scout.ovrLo} hi={p.scout.ovrHi} label="OVR" color={ovrColor((p.scout.ovrLo + p.scout.ovrHi) / 2)} />
+                  <RangeRing lo={p.scout.potLo} hi={p.scout.potHi} label="POT" color="var(--color-accent)" />
+                </>
+              ) : (
+                <>
+                  <Ring value={p.ovr} label="OVR" color={ovrColor(p.ovr)} />
+                  <Ring value={p.pot} label="POT" color="var(--color-accent)" />
+                </>
+              )}
             </div>
           </div>
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
+          {p.prospect && p.scout && <ScoutPanel id={p.id} level={p.scout.level} maxLevel={3} />}
           {p.editable && !editing && <button className="btn mt-3 ml-2" onClick={() => setEditing(true)}>Edit</button>}
           {p.editable && editing && <EditForm p={p} onDone={() => setEditing(false)} />}
           <div className="mt-4 space-y-1.5">
-            {p.ratings.map((r) => (
+            {p.ratings.map((r) => p.prospect && r.lo != null && r.hi != null ? (
+              <div key={r.key} className="flex items-center gap-3">
+                <span className="w-24 text-muted">{r.label}</span>
+                <RangeBar lo={r.lo} hi={r.hi} className="flex-1" />
+                <span className="w-14 text-right font-bold tabular-nums">{rangeText(r.lo, r.hi)}</span>
+              </div>
+            ) : (
               <div key={r.key} className="flex items-center gap-3">
                 <span className="w-24 text-muted">{r.label}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded bg-panel2">

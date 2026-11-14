@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 )
 
 type tc struct {
+	s  *server
 	t  *testing.T
 	ts *httptest.Server
 }
@@ -22,7 +24,7 @@ func newTC(t *testing.T) *tc {
 	s := &server{savePath: filepath.Join(t.TempDir(), "league.json"), realDir: "../../data/real", webDir: t.TempDir()}
 	ts := httptest.NewServer(s.routes())
 	t.Cleanup(ts.Close)
-	return &tc{t, ts}
+	return &tc{s: s, t: t, ts: ts}
 }
 
 func (c *tc) call(method, path string, body any, want int) M {
@@ -1182,5 +1184,213 @@ func TestLineup(t *testing.T) {
 		if num(p["minutes"]) != num(p["autoMinutes"]) {
 			t.Fatalf("auto values: %v", p)
 		}
+	}
+}
+
+// ---- draft lottery and scouting ----
+
+// toDraftStart walks a new league to the draft screen (nothing picked).
+func toDraftStart(c *tc, seed int) {
+	c.call("POST", "/api/new", M{"seed": seed, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
+	c.call("POST", "/api/playoffs/start", nil, 200)
+	c.call("POST", "/api/playoffs/all", nil, 200)
+	c.call("POST", "/api/offseason/begin", nil, 200)
+	c.call("POST", "/api/offseason/to-draft", nil, 200)
+}
+
+// checkNoProspectTruth: prospect rows never carry ovr or pot keys.
+func (c *tc) checkNoProspectTruth(rows []any) {
+	c.t.Helper()
+	for _, r := range rows {
+		m := r.(M)
+		if _, ok := m["ovr"]; ok {
+			c.t.Fatalf("prospect row has ovr: %v", m)
+		}
+		if _, ok := m["pot"]; ok {
+			c.t.Fatalf("prospect row has pot: %v", m)
+		}
+	}
+}
+
+func TestDraftLotteryAndScouting(t *testing.T) {
+	c := newTC(t)
+	toDraftStart(c, 11)
+	d := c.call("GET", "/api/draft", nil, 200)
+	pros := d["prospects"].([]any)
+	if len(pros) == 0 {
+		t.Fatal("no prospects")
+	}
+	c.checkNoProspectTruth(pros)
+	for _, r := range pros {
+		m := r.(M)
+		for _, k := range []string{"ovrLo", "ovrHi", "potLo", "potHi", "scoutLevel"} {
+			if _, ok := m[k]; !ok {
+				t.Fatalf("prospect missing %s: %v", k, m)
+			}
+		}
+		if num(m["scoutLevel"]) != 0 {
+			t.Fatalf("scout level: %v", m)
+		}
+	}
+	lot := d["lottery"].([]any)
+	if len(lot) != 14 {
+		t.Fatalf("lottery rows: %d", len(lot))
+	}
+	seen, sum := map[int]bool{}, 0.0
+	for i, r := range lot {
+		m := r.(M)
+		sl := num(m["slot"])
+		if sl != i+1 || seen[sl] {
+			t.Fatalf("lottery slots: %v", lot)
+		}
+		seen[sl] = true
+		sum += m["odds"].(float64)
+		if m["team"] == nil || m["owner"] == nil {
+			t.Fatalf("lottery row: %v", m)
+		}
+	}
+	if sum < 99 || sum > 101 {
+		t.Fatalf("odds sum %v", sum)
+	}
+	if len(d["picks"].([]any)) != num(d["total"]) {
+		t.Fatalf("picks %d total %v", len(d["picks"].([]any)), d["total"])
+	}
+	sc := d["scouting"].(M)
+	if num(sc["points"]) != num(sc["perDraft"]) || num(sc["maxLevel"]) != engine.MaxScoutLevel {
+		t.Fatalf("scouting: %v", sc)
+	}
+}
+
+func TestProspectSecrecy(t *testing.T) {
+	c := newTC(t)
+	leaked := false
+	for _, seed := range []int{11, 12, 13} {
+		toDraftStart(c, seed)
+		pool := c.s.lg.Draft.Pool
+		d := c.call("GET", "/api/draft", nil, 200)
+		rows := d["prospects"].([]any)
+		// the listed order must not be the true-overall order
+		ids := []int{}
+		for _, r := range rows {
+			ids = append(ids, num(r.(M)["id"]))
+		}
+		byOvr := append([]*engine.Player(nil), pool...)
+		sort.SliceStable(byOvr, func(i, j int) bool { return byOvr[i].Overall() > byOvr[j].Overall() })
+		for i := range ids {
+			if ids[i] != byOvr[i].ID {
+				leaked = true
+				break
+			}
+		}
+		if seed != 11 {
+			continue
+		}
+		pts := num(d["scouting"].(M)["points"])
+		for _, p := range pool[:3] {
+			truthO, truthP := p.Overall(), p.Potential
+			path := "/api/player/" + itoa(p.ID)
+			prevW := 1 << 30
+			var cur M
+			for lvl := 0; lvl <= 3; lvl++ {
+				if lvl > 0 {
+					c.call("POST", "/api/draft/scout", M{"playerId": p.ID}, 200)
+				}
+				cur = nil
+				for _, r := range c.call("GET", "/api/draft", nil, 200)["prospects"].([]any) {
+					if num(r.(M)["id"]) == p.ID {
+						cur = r.(M)
+					}
+				}
+				if cur == nil || num(cur["scoutLevel"]) != lvl {
+					t.Fatalf("level %d: %v", lvl, cur)
+				}
+				if truthO < num(cur["ovrLo"]) || truthO > num(cur["ovrHi"]) || truthP < num(cur["potLo"]) || truthP > num(cur["potHi"]) {
+					t.Fatalf("range misses truth (%d/%d): %v", truthO, truthP, cur)
+				}
+				w := num(cur["ovrHi"]) - num(cur["ovrLo"]) + num(cur["potHi"]) - num(cur["potLo"])
+				if lvl > 0 && w >= prevW {
+					t.Fatalf("level %d did not narrow: %d vs %d", lvl, w, prevW)
+				}
+				prevW = w
+				pl := c.call("GET", path, nil, 200)
+				if pl["prospect"] != true || pl["editable"] != false {
+					t.Fatalf("prospect flags: %v", pl)
+				}
+				sv := pl["scout"].(M)
+				if num(sv["level"]) != lvl || num(pl["ovr"]) != (num(sv["ovrLo"])+num(sv["ovrHi"])+1)/2 ||
+					num(pl["pot"]) != (num(sv["potLo"])+num(sv["potHi"])+1)/2 {
+					t.Fatalf("player midpoints: %v", pl)
+				}
+				rs := pl["ratings"].([]any)
+				if len(rs) != 7 {
+					t.Fatalf("ratings: %v", rs)
+				}
+				for _, x := range rs {
+					r := x.(M)
+					if num(r["lo"]) > num(r["hi"]) || num(r["value"]) < num(r["lo"]) || num(r["value"]) > num(r["hi"]) {
+						t.Fatalf("rating range: %v", r)
+					}
+				}
+			}
+			c.call("POST", "/api/draft/scout", M{"playerId": p.ID}, 409)
+		}
+		after := num(c.call("GET", "/api/draft", nil, 200)["scouting"].(M)["points"])
+		if pts-after != 9 {
+			t.Fatalf("points used: %d -> %d", pts, after)
+		}
+	}
+	if !leaked {
+		t.Fatal("prospect order matches true overall order in every league")
+	}
+}
+
+func TestScoutPointsRunOut(t *testing.T) {
+	c := newTC(t)
+	toDraftStart(c, 11)
+	d := c.call("GET", "/api/draft", nil, 200)
+	per := num(d["scouting"].(M)["perDraft"])
+	pool := c.s.lg.Draft.Pool
+	n := 0
+	for _, p := range pool {
+		for l := 0; l < engine.MaxScoutLevel && n < per; l++ {
+			c.call("POST", "/api/draft/scout", M{"playerId": p.ID}, 200)
+			n++
+		}
+	}
+	if n != per {
+		t.Fatalf("scouted %d of %d", n, per)
+	}
+	out := c.call("POST", "/api/draft/scout", M{"playerId": pool[len(pool)-1].ID}, 409)
+	if msg, _ := out["error"].(string); msg == "" {
+		t.Fatalf("empty message: %v", out)
+	}
+	if num(c.call("GET", "/api/draft", nil, 200)["scouting"].(M)["points"]) != 0 {
+		t.Fatal("points left")
+	}
+}
+
+func TestProspectAdminAndDrafted(t *testing.T) {
+	c := newTC(t)
+	toDraftStart(c, 11)
+	c.call("POST", "/api/options", M{"commissioner": true}, 200)
+	p := c.s.lg.Draft.Pool[0]
+	id := p.ID
+	c.call("POST", "/api/admin/player/"+itoa(id), M{"age": 20}, 409)
+	if pl := c.call("GET", "/api/player/"+itoa(id), nil, 200); pl["editable"] != false || pl["prospect"] != true {
+		t.Fatalf("prospect editable: %v", pl)
+	}
+	c.call("POST", "/api/draft/auto", nil, 200)
+	pl := c.call("GET", "/api/player/"+itoa(id), nil, 200)
+	if _, ok := pl["prospect"]; ok {
+		t.Fatalf("drafted player still a prospect: %v", pl)
+	}
+	if num(pl["ovr"]) != p.Overall() || num(pl["pot"]) != p.Potential {
+		t.Fatalf("drafted ovr %v, want %d", pl["ovr"], p.Overall())
+	}
+	d := c.call("GET", "/api/draft", nil, 200)
+	if len(d["lottery"].([]any)) != 14 || len(d["prospects"].([]any)) != 0 && d["done"] != true {
+		t.Fatalf("done draft: %v", d["done"])
 	}
 }

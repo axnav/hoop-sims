@@ -161,6 +161,9 @@ func (s *server) player(r *http.Request) (any, error) {
 		"season": statLine(lg.Season.Stats[p.ID]), "playoffs": statLine(lg.Season.PlayoffStats[p.ID]), "career": career,
 		"editable": lg.Options.Commissioner,
 		"limits":   M{"minRating": engine.MinRating, "maxRating": engine.MaxRating, "minAge": engine.MinAge, "maxAge": engine.MaxAge}}
+	if s.inPool(p.ID) && !s.prospectPlayer(p, out) {
+		return nil, missing("no such player")
+	}
 	addInjury(out, p)
 	addContract(out, p)
 	return out, nil
