@@ -32,7 +32,7 @@ export default function TeamPage() {
           right={<div className="flex items-center gap-4 text-muted"><span className="font-bold tabular-nums text-ink">{d.w}-{d.l}</span><span>#{d.confRank} {d.team.confName}</span><Link className="link" to={`/schedule/${d.team.id}`}>Schedule</Link></div>}
         >
           <Card title="Payroll" className="mb-4"><PayrollBar p={d.payroll} /></Card>
-          <Card title="Roster" right={<span className="text-xs text-muted">Click a column to sort · starters marked</span>}>
+          <Card title="Roster" right={<span className="flex items-center gap-3 text-xs text-muted">{d.isUser && <Link className="btn !px-2.5 !py-1 text-xs" to="/lineup">Set lineup</Link>}<span>Click a column to sort · starters marked</span></span>}>
             <DataTable data={d.roster} columns={cols} initialSort={[{ id: 'ovr', desc: true }]} onRow={(r) => open(r.id)} />
           </Card>
         </Page>

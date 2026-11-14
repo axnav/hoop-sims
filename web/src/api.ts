@@ -156,6 +156,18 @@ export type HistoryRow = {
   finals: { winner: Team; loser: Team; winnerWins: number; loserWins: number } | null
 }
 
+export type LineupPlayer = {
+  id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
+  minutes: number; autoMinutes: number; nextMinutes: number; starterSlot: number
+  gp: number; mpg: number; injury?: Injury
+}
+export type LineupData = {
+  custom: boolean; total: number; maxMinutes: number; minPlayers: number; slots: string[]
+  starters: number[]
+  dev: { maxAge: number; fullMinutes: number; noneMinutes: number }
+  players: LineupPlayer[]
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, msg: string) {
@@ -230,5 +242,8 @@ export const api = {
   faBegin: () => post<{ freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/begin'),
   faOffer: (b: { playerId: number; salary: number; years: number }) => post<FreeAgencyData>('/api/freeagents/offer', b),
   faWithdraw: (offerId: number) => post<FreeAgencyData>('/api/freeagents/withdraw', { offerId }),
+  lineup: () => get<LineupData>('/api/lineup'),
+  setLineup: (b: { starters: number[]; minutes: Record<string, number> }) => post<LineupData>('/api/lineup', b),
+  autoLineup: () => post<LineupData>('/api/lineup/auto'),
   faDay: () => post<{ signings: FASigning[]; freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/day'),
 }

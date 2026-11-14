@@ -1033,3 +1033,154 @@ func TestFinishWithoutFreeAgencyScreen(t *testing.T) {
 		t.Fatalf("short roster")
 	}
 }
+
+func TestLineup(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 7, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noInjuries": true}, 200)
+	lu := c.call("GET", "/api/lineup", nil, 200)
+	if lu["custom"] != false || num(lu["total"]) != 240 || len(lu["starters"].([]any)) != 5 {
+		t.Fatalf("fresh lineup: %v", lu)
+	}
+	team := c.call("GET", "/api/team/3", nil, 200)
+	if len(lu["players"].([]any)) != len(team["roster"].([]any)) {
+		t.Fatalf("players %d, roster %d", len(lu["players"].([]any)), len(team["roster"].([]any)))
+	}
+	sum := 0
+	for _, x := range lu["players"].([]any) {
+		p := x.(M)
+		sum += num(p["minutes"])
+		if num(p["minutes"]) != num(p["autoMinutes"]) {
+			t.Fatalf("auto mismatch: %v", p)
+		}
+	}
+	if sum != 240 {
+		t.Fatalf("minutes sum %d", sum)
+	}
+	// build a valid body from the automatic lineup
+	players := lu["players"].([]any)
+	starters := []int{}
+	for _, v := range lu["starters"].([]any) {
+		starters = append(starters, num(v))
+	}
+	mins := map[string]int{}
+	var bench []int
+	for _, x := range players {
+		p := x.(M)
+		mins[itoa(num(p["id"]))] = num(p["minutes"])
+		if num(p["starterSlot"]) < 0 {
+			bench = append(bench, num(p["id"]))
+		}
+	}
+	body := func() M {
+		m := map[string]int{}
+		for k, v := range mins {
+			m[k] = v
+		}
+		return M{"starters": append([]int(nil), starters...), "minutes": m}
+	}
+	// swap starter 4 with bench[0]; move 10 minutes from starter 0 to the bench player (kept within 42)
+	b0 := bench[0]
+	old := starters[4]
+	oldMin, benchMin := mins[itoa(old)], mins[itoa(b0)]
+	good := body()
+	good["starters"].([]int)[4] = b0
+	gm := good["minutes"].(map[string]int)
+	gm[itoa(b0)] = 20
+	gm[itoa(old)] = oldMin + benchMin - 20
+	if gm[itoa(old)] < 1 || gm[itoa(old)] > 42 {
+		gm[itoa(old)] = 15
+		gm[itoa(b0)] = oldMin + benchMin - 15
+	}
+	sm0 := gm[itoa(starters[0])]
+	gm[itoa(starters[0])] = sm0 - 4
+	gm[itoa(starters[1])] += 4
+	if gm[itoa(starters[1])] > 42 {
+		t.Skip("unlucky minutes layout")
+	}
+	set := c.call("POST", "/api/lineup", good, 200)
+	if set["custom"] != true {
+		t.Fatalf("not custom: %v", set)
+	}
+	for _, x := range set["players"].([]any) {
+		p := x.(M)
+		if num(p["minutes"]) != gm[itoa(num(p["id"]))] {
+			t.Fatalf("minutes not stored: %v", p)
+		}
+		if num(p["id"]) == b0 && num(p["starterSlot"]) != 4 {
+			t.Fatalf("bench player not starter: %v", p)
+		}
+	}
+	// play until the user's team has a game, then check the box
+	played := false
+	for i := 0; i < 5 && !played; i++ {
+		c.call("POST", "/api/sim", M{"days": 1}, 200)
+		box := c.call("GET", "/api/box/last", nil, 200)
+		if num(box["day"]) != i {
+			continue
+		}
+		played = true
+		found := false
+		for _, tm := range box["teams"].([]any) {
+			for _, l := range tm.(M)["lines"].([]any) {
+				if num(l.(M)["id"]) == b0 {
+					found = true
+					if num(l.(M)["min"]) != gm[itoa(b0)] {
+						t.Fatalf("box minutes %v, want %d", l, gm[itoa(b0)])
+					}
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("player %d not in box", b0)
+		}
+	}
+	if !played {
+		t.Fatal("user team never played")
+	}
+	// invalid posts leave the stored lineup alone
+	check := func(name string, b M) {
+		out := c.call("POST", "/api/lineup", b, 400)
+		if s, _ := out["error"].(string); s == "" {
+			t.Fatalf("%s: no message: %v", name, out)
+		}
+		now := c.call("GET", "/api/lineup", nil, 200)
+		for _, x := range now["players"].([]any) {
+			p := x.(M)
+			if num(p["minutes"]) != gm[itoa(num(p["id"]))] {
+				t.Fatalf("%s: stored lineup changed", name)
+			}
+		}
+	}
+	b := body()
+	b["minutes"].(map[string]int)[itoa(starters[0])]++
+	check("total", b)
+	b = body()
+	b["minutes"].(map[string]int)[itoa(starters[0])] = 43
+	b["minutes"].(map[string]int)[itoa(starters[1])] -= 43 - mins[itoa(starters[0])]
+	check("max", b)
+	b = body()
+	b["starters"].([]int)[1] = starters[0]
+	check("dup", b)
+	b = body()
+	mm := b["minutes"].(map[string]int)
+	mm[itoa(b0)] += mm[itoa(starters[0])]
+	mm[itoa(starters[0])] = 0
+	check("zero starter", b)
+	b = body()
+	b["starters"].([]int)[0] = 99999
+	check("unknown", b)
+	c.call("POST", "/api/lineup", M{"starters": []int{1, 2}, "minutes": M{}}, 400)
+	c.call("POST", "/api/lineup", M{"starters": starters, "minutes": M{"x": 5}}, 400)
+
+	auto := c.call("POST", "/api/lineup/auto", nil, 200)
+	if auto["custom"] != false {
+		t.Fatalf("still custom: %v", auto)
+	}
+	for _, x := range auto["players"].([]any) {
+		p := x.(M)
+		if num(p["minutes"]) != num(p["autoMinutes"]) {
+			t.Fatalf("auto values: %v", p)
+		}
+	}
+}

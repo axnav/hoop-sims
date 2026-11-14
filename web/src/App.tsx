@@ -19,6 +19,7 @@ import Offseason from './pages/Offseason'
 import Draft from './pages/Draft'
 import FreeAgency from './pages/FreeAgency'
 import History from './pages/History'
+import Lineup from './pages/Lineup'
 import Trade from './pages/Trade'
 import Settings from './pages/Settings'
 
@@ -53,6 +54,7 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/roster" element={<Navigate to={`/team/${state.user.team.id}`} replace />} />
+          <Route path="/lineup" element={<Lineup />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/team/:id" element={<TeamPage />} />
           <Route path="/settings" element={<Settings />} />
