@@ -23,7 +23,7 @@ export default function Start({ meta }: { meta: Meta }) {
   const err = create.error ?? load.error
   const sel = teams[team]
   return (
-    <div className="mx-auto max-w-5xl px-5 py-10">
+    <div className="mx-auto max-w-5xl px-3 py-10 pb-28 min-[1000px]:px-5">
       <h1 className="text-5xl font-black tracking-tight">HOOP<span className="text-accent">SIM</span></h1>
       <p className="mt-1 text-muted">Pick a franchise and run it.</p>
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -60,7 +60,7 @@ export default function Start({ meta }: { meta: Meta }) {
           </div>
         </div>
       ))}
-      <div className="sticky bottom-4 mt-8 flex justify-end">
+      <div className="sticky bottom-3 z-10 mt-8 flex justify-end">
         <button className="btn btn-accent px-6 py-3 text-base shadow-xl" disabled={create.isPending || !sel} onClick={() => create.mutate()}>
           {create.isPending ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Start as {sel?.fullName}
         </button>

@@ -36,3 +36,11 @@ a { color: inherit; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Narrow layouts (side pane): nothing may push the page sideways. */
+@media (max-width: 999px) {
+  html, body { overflow-x: hidden; }
+  .card { overflow-x: auto; min-width: 0; }
+  .grid > * { min-width: 0; }
+  .grid:not([class*=" grid-cols-"]):not([class^="grid-cols-"]) { grid-template-columns: minmax(0, 1fr); }
+}

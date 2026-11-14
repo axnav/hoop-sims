@@ -137,7 +137,7 @@ var Progression = ProgressionConfigT{
 	DraftPotWeight:     0.6,
 	RookieMinAge:       19,
 	RookieMaxAge:       22,
-	RookieTalentMean:   44,
+	RookieTalentMean:   43.5,
 	RookieTalentPerYr:  2,
 	RookiePotMean:      43,
 	RookiePotSD:        8,

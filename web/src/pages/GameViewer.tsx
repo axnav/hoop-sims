@@ -112,7 +112,7 @@ function Viewer({ g }: { g: GameEvents }) {
         {failed && <span className="text-xs text-muted">3D is not available here, showing 2D.</span>}
       </div>
       {view3d ? (
-        <div className="relative mb-4 h-[min(66vh,640px)] min-h-[380px] overflow-hidden rounded-xl border border-line bg-[#06080d]">
+        <div className="relative mb-4 h-[min(66vh,640px)] min-h-[380px] max-[999px]:aspect-[4/3] max-[999px]:h-auto max-[999px]:max-h-[70vh] overflow-hidden rounded-xl border border-line bg-[#06080d]">
           <Boundary onError={() => setFailed(true)}>
             <Suspense fallback={<Spinner label="Loading 3D court" />}>
               <Court3D
@@ -123,7 +123,7 @@ function Viewer({ g }: { g: GameEvents }) {
             </Suspense>
           </Boundary>
           <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-3">
-            <div className="flex items-center gap-4 rounded-xl bg-black/65 px-4 py-2 backdrop-blur">
+            <div className="flex items-center gap-2 rounded-xl bg-black/65 px-3 py-2 backdrop-blur min-[700px]:gap-4 min-[700px]:px-4">
               {[away, home].map((t, k) => (
                 <div key={t.team.id} className={`flex items-center gap-2 ${k === 1 ? 'order-3 flex-row-reverse' : ''}`}>
                   <TeamBadge team={t.team} size={26} />
@@ -136,7 +136,7 @@ function Viewer({ g }: { g: GameEvents }) {
               </div>
             </div>
           </div>
-          <ul className="pointer-events-none absolute bottom-14 left-3 w-[min(340px,70%)] space-y-0.5 text-[12px]">
+          <ul className="pointer-events-none absolute bottom-14 left-3 w-[min(340px,70%)] max-[699px]:hidden space-y-0.5 text-[12px]">
             {feed.slice(0, 5).map(({ i, e }) => (
               <li key={i} className={`truncate rounded bg-black/55 px-2 py-0.5 ${replay.isScore(e) ? 'text-ink' : 'text-muted'}`}>
                 {periodLabel(e.p)} {clockLabel(e.c)} · {replay.describe(e, nameOf)}

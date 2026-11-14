@@ -79,7 +79,8 @@ function hash(n: number, k = 0) {
   x ^= x >>> 16
   return (x >>> 0) / 4294967296
 }
-const OFF: [number, number][] = [[8.2, 0.4], [5.4, 5.6], [5.4, -5.6], [1.2, 6.9], [1.9, -2.0]]
+// Half-court set: [distance out from the hoop along the floor, sideways]. Point guard up top, two wings, two inside.
+const OFF: [number, number][] = [[8.6, 0], [6.4, 5.8], [6.4, -5.8], [3.4, 3.6], [2.6, -2.4]]
 const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
 type Seg = { dur: number; from: THREE.Vector3; to: THREE.Vector3; arc: number; pre?: () => void; post?: () => void; started?: boolean }
@@ -118,10 +119,12 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
   function setFormation(s: any, off: number, hoop: number, key: number) {
     s.offSide = off; s.hoop = hoop; s.possKey = key
     for (let k = 0; k < 5; k++) {
-      let dx = OFF[k][0] + (hash(key, k) - 0.5) * 1.4, z = OFF[k][1] + (hash(key, k + 9) - 0.5) * 1.4
-      dx = Math.max(0.9, dx); z = Math.max(-7.2, Math.min(7.2, z))
+      let dx = OFF[k][0] + (hash(key, k) - 0.5) * 1.0, z = OFF[k][1] + (hash(key, k + 9) - 0.5) * 1.0
+      dx = Math.max(1.2, dx); z = Math.max(-7.0, Math.min(7.0, z))
       s.tgt[off][k] = { x: hoop * (HX - dx), z }
-      s.tgt[1 - off][k] = { x: hoop * (HX - Math.max(0.7, dx - 1.2)), z: z * 0.85 }
+      // defender: on the line from his man to the hoop, about a third of the way
+      const f = 0.36
+      s.tgt[1 - off][k] = { x: hoop * (HX - dx * (1 - f)) , z: z * (1 - f * 0.6) }
     }
   }
   function getSlot(s: any, side: number, id: number) {
@@ -160,6 +163,8 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
     const dirOf = (q: number) => (q === 0 ? homeDir : -homeDir)
     let off = side, hoop = dirOf(side)
     if (e.y === 'dreb') { off = other; hoop = dirOf(other) }
+    // live rebound: stay in the old set so the rebounder can crash the boards; the next event moves everyone
+    if (e.y === 'dreb' && !jump && m > 0) { off = s.offSide; hoop = s.hoop }
     if (off !== s.offSide || hoop !== s.hoop) s.possKey = i
     setFormation(s, off, hoop, s.possKey)
     const slot = getSlot(s, side, e.pl)
@@ -189,6 +194,11 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
       const to = new THREE.Vector3(hoop * (HX - 1.1), 0.25, (hash(i, 3) - 0.5) * 1.6)
       add(0.14, rimTop, to, 1.1, undefined, () => s.rest.copy(to))
     }
+    // after a made basket the other team takes the ball out from the baseline under the hoop
+    const inbound = (from: THREE.Vector3) => {
+      s.tgt[other][0] = { x: hoop * (L / 2 - 0.5), z: 0 }
+      add(0.3, from, new THREE.Vector3(hoop * (L / 2 - 0.5) + 0.3, 1.1, 0), 0.3, undefined, () => { s.holder = { side: other, slot: 0 } })
+    }
     const toHand = (v: THREE.Vector3, d = 0.06) => add(d, ballPos(s), v, 0.15, () => { s.holder = null })
     if (e.y === '2' || e.y === '3' || e.y === 'm2' || e.y === 'm3') {
       const three = e.y === '3' || e.y === 'm3', made = e.y === '2' || e.y === '3'
@@ -197,6 +207,7 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
       else if (hash(i, 2) < 0.55) spot = shotAt(0.6 + hash(i, 4) * 0.9, (hash(i, 1) - 0.5) * 2 * 1.0)
       else spot = shotAt(4 + hash(i, 4) * 1.5, (hash(i, 1) - 0.5) * 2 * 1.2)
       s.tgt[side][slot] = spot
+      s.tgt[other][slot] = { x: spot.x + (hoop * HX - spot.x) * 0.2, z: spot.z * 0.8 }
       const h = hand(s, side, slot)
       if (made && e.a >= 0) {
         const as = getSlot(s, side, e.a)
@@ -204,7 +215,10 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
         add(0.12, hand(s, side, as), h, 0.4)
       } else toHand(h)
       add(0.26, h, rimTop, 0.9 + Math.hypot(h.x - rimTop.x, h.z) * 0.1)
-      if (made) makeTail(h, three ? '+3' : '+2'); else missTail()
+      if (made) {
+        makeTail(h, three ? '+3' : '+2')
+        inbound(new THREE.Vector3(hoop * HX - hoop * 0.2, 0.15, 0))
+      } else missTail()
     } else if (e.y === 'ft') {
       const spot = { x: hoop * (HX - 4.215), z: 0 }
       s.tgt[side][slot] = spot
@@ -218,13 +232,14 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
           add(0.04, new THREE.Vector3(hoop * HX, 2.55, 0), fl, 0, undefined, () => { s.rest.copy(fl); if (k === 0) s.holder = { side, slot } })
         } else missTail()
       }
+      if (n === 2) inbound(new THREE.Vector3(hoop * HX - hoop * 0.2, 0.15, 0))
     } else if (e.y === 'tov') {
       s.flash = 1
       toHand(hand(s, side, slot), 0.06)
       const o = getSlot(s, other, replay.sides[other].lines[0]?.id ?? -1)
       add(0.2, hand(s, side, slot), hand(s, other, o), 0.2, undefined, () => { s.holder = { side: other, slot: o } })
     } else if (e.y === 'oreb' || e.y === 'dreb') {
-      s.tgt[side][slot] = { x: s.rest.x - hoop * 0.5, z: s.rest.z }
+      s.tgt[side][slot] = { x: s.rest.x - hoop * 0.3, z: s.rest.z }
       const h = hand(s, side, slot)
       add(0.14, ballPos(s), h, 0.3, () => { s.holder = null }, () => { s.holder = { side, slot } })
     }
@@ -270,10 +285,17 @@ function Game({ replay, home, away, names, idxRef, speedRef, camRef, reduceMotio
       }
     }
     // figures
-    const k = s.snap ? 1 : 1 - Math.exp(-dt * 3.2), kA = s.snap ? 1 : 1 - Math.exp(-dt * 9)
+    // Run speed scales with replay speed; at 16x (or on a jump) figures snap to their spots.
+    const sp = Math.max(1, speedRef.current), snap = s.snap || sp >= 16
     for (let sd = 0; sd < 2; sd++) for (let j = 0; j < 5; j++) {
-      const p = s.pos[sd][j], t = s.tgt[sd][j], kk = s.active && s.active.side === sd && s.active.slot === j ? kA : k
-      p.x += (t.x - p.x) * kk; p.z += (t.z - p.z) * kk
+      const p = s.pos[sd][j], t0 = s.tgt[sd][j]
+      const sw = snap || (s.active && s.active.side === sd && s.active.slot === j) ? 0 : 0.28
+      const tx = t0.x + Math.sin(s.clock * 0.9 + j * 1.7 + sd * 3) * sw, tz = t0.z + Math.cos(s.clock * 0.8 + j * 2.3 + sd) * sw
+      const ddx = tx - p.x, ddz = tz - p.z, d = Math.hypot(ddx, ddz)
+      if (snap || d < 1e-4) { p.x = tx; p.z = tz } else {
+        const step = Math.min(d, 9 * sp * dt, Math.max(d * (1 - Math.exp(-dt * 4 * sp)), Math.min(d, 3 * sp * dt)))
+        p.x += (ddx / d) * step; p.z += (ddz / d) * step
+      }
       groups.current[sd][j]?.position.set(p.x, 0, p.z)
       const g = groups.current[sd][j]
       if (g) g.rotation.y = Math.atan2(s.hoop * HX - p.x, -p.z)

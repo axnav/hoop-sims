@@ -83,11 +83,11 @@ export default function Playoffs() {
                   <Trophy className="text-[#f5c542]" /> <span className="h2">Champions</span> <TeamLink team={d.champion} />
                 </div>
               )}
-              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-2.5 overflow-x-auto" style={{ minWidth: 980 }}>
+              <div className="card overflow-x-auto p-2"><div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-2.5" style={{ minWidth: 980 }}>
                 {col(`${w} R1`, 1, 0, 4)}{col(`${w} Semis`, 2, 0, 2)}{col(`${w} Finals`, 3, 0, 1)}
                 {col('Finals', 4, -1, 1)}
                 {col(`${e} Finals`, 3, 1, 1)}{col(`${e} Semis`, 2, 1, 2)}{col(`${e} R1`, 1, 1, 4)}
-              </div>
+              </div></div>
             </>
           )
         }}

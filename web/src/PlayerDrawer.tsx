@@ -60,6 +60,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
               <div className="mt-1 flex items-center gap-2 text-muted">
                 <span>{p.pos}</span><span>Age {p.age}</span><span>{p.status}</span>
               </div>
+              <div className="mt-1 text-sm text-accent">{p.role} · shot tendency {p.usage}/90</div>
               {p.team && (
                 <button className="mt-2 inline-flex items-center gap-2 hover:text-accent" onClick={() => { close(); nav(`/team/${p.team!.id}`) }}>
                   <TeamBadge team={p.team} size={20} />{p.team.fullName}

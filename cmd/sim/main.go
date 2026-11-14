@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"text/tabwriter"
@@ -29,13 +30,17 @@ func printBox(b *engine.TeamBox) {
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity or seasons")
+	mode := flag.String("mode", "sanity", "sanity, seasons, or ratings")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	flag.Parse()
 
 	if *mode == "seasons" {
 		runSeasons(*seed, *seasons, *reveal)
+		return
+	}
+	if *mode == "ratings" {
+		runRatings(*seed)
 		return
 	}
 
@@ -84,6 +89,73 @@ func main() {
 		float64(pts)/n, pct(fgm, fga), pct(tpm, tpa), pct(ftm, fta), float64(reb)/n,
 		float64(ast)/n, float64(tov)/n, float64(tpa)/n, float64(fta)/n,
 		100*float64(homeWins)/float64(*games), hi)
+}
+
+func percentile(values []int, p float64) int {
+	if len(values) == 0 {
+		return 0
+	}
+	sort.Ints(values)
+	i := int(math.Round(float64(len(values)-1) * p))
+	return values[i]
+}
+
+func printDistribution(label string, values []int) {
+	if len(values) == 0 {
+		return
+	}
+	fmt.Printf("%-18s n=%3d  min=%2d  p10=%2d  p25=%2d  median=%2d  p75=%2d  p90=%2d  max=%2d\n",
+		label, len(values), percentile(values, 0), percentile(values, 0.10), percentile(values, 0.25),
+		percentile(values, 0.50), percentile(values, 0.75), percentile(values, 0.90), percentile(values, 1))
+}
+
+// runRatings summarizes the current league and draft class rating scales.
+// It is a calibration aid, not a gameplay simulation.
+func runRatings(seed uint64) {
+	lg := engine.GenerateLeague(seed)
+	var leagueOVR, leagueUsage []int
+	byPosOVR := [5][]int{}
+	byPosUsage := [5][]int{}
+	for _, t := range lg.Teams {
+		for _, p := range t.Roster {
+			leagueOVR = append(leagueOVR, p.Overall())
+			leagueUsage = append(leagueUsage, p.ShotUsage())
+			byPosOVR[p.Pos] = append(byPosOVR[p.Pos], p.Overall())
+			byPosUsage[p.Pos] = append(byPosUsage[p.Pos], p.ShotUsage())
+		}
+	}
+	fmt.Printf("Generated league rating distribution (seed %d; primary position)\n", seed)
+	printDistribution("Overall", leagueOVR)
+	printDistribution("Shot tendency", leagueUsage)
+	for pos := engine.PG; pos <= engine.C; pos++ {
+		fmt.Printf("\n%s\n", pos)
+		printDistribution("Overall", byPosOVR[pos])
+		printDistribution("Shot tendency", byPosUsage[pos])
+	}
+
+	r := engine.NewRNG(seed + 1000003)
+	rookies := make([]*engine.Player, engine.Progression.DraftSize)
+	for i := range rookies {
+		rookies[i] = engine.GenerateRookie(r, lg.NextID+i, lg.Year)
+	}
+	sort.SliceStable(rookies, func(i, j int) bool {
+		a := engine.Progression.DraftOvrWeight*float64(rookies[i].Overall()) + engine.Progression.DraftPotWeight*float64(rookies[i].Potential)
+		b := engine.Progression.DraftOvrWeight*float64(rookies[j].Overall()) + engine.Progression.DraftPotWeight*float64(rookies[j].Potential)
+		return a > b
+	})
+	fmt.Println("\nGenerated rookie ratings by approximate draft tier (Overall / Potential)")
+	for _, tier := range []struct {
+		name       string
+		start, end int
+	}{{"Picks 1-5", 0, 5}, {"Picks 6-14", 5, 14}, {"Picks 15-30", 14, 30}, {"Picks 31-60", 30, len(rookies)}} {
+		var ovr, pot []int
+		for _, p := range rookies[tier.start:tier.end] {
+			ovr = append(ovr, p.Overall())
+			pot = append(pot, p.Potential)
+		}
+		printDistribution(tier.name+" OVR", ovr)
+		printDistribution(tier.name+" POT", pot)
+	}
 }
 
 type snap struct {

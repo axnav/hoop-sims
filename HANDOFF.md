@@ -115,7 +115,7 @@ Root: `go.mod`, `.claude/` (agents, `launch.json`), `cmd/`, `engine/`, `data/rea
 
 ## 8. Known problems and things never verified
 
-1. **Shot and assist distribution inside a team.** High-volume scorers come out too low, pure passers too low. Cause: the engine shares shots by rating and minutes rank. Proposed fix (not built): a separate per-player **usage tendency**, so "who shoots" is decided apart from "how good". Re-run `realcheck` after.
+1. **Shot and assist distribution inside a team.** A per-player shot tendency now affects who shoots, separately from shooting skill; historical usage percentiles seed it in real-data mode. Playmaking no longer boosts shot volume directly. The new behavior still needs season-level calibration against scorer and passer distributions. `go run ./cmd/sim -mode ratings` prints current player and rookie rating distributions.
 2. **Win spread too wide in real mode** (16.4 vs 13.0). No injuries or rest is part of the cause.
 3. **Hidden number weakened** (`ImpactSD` 1.8). To revisit after play-testing.
 4. **30-season stability tested on one seed only**; other seeds drifted slightly outside the bounds.
@@ -128,7 +128,7 @@ Root: `go.mod`, `.claude/` (agents, `launch.json`), `cmd/`, `engine/`, `data/rea
 ## 9. Next steps (owner: "build something fun, figure it out while playing")
 
 Done: engine, interface, save/load, interactive playoffs, real-data mode. Recommended order:
-1. Per-player usage tendency (fixes scorer/passer distribution), then re-run `realcheck`.
+1. Run `go run ./cmd/sim -mode ratings` to review the rating scale, then validate and tune the shot-tendency model against scorer/passer distributions and re-run `realcheck`.
 2. Injuries and rest (also narrows the win spread).
 3. User control of lineup and minutes.
 4. Contracts and salary cap.
@@ -154,6 +154,41 @@ Done: engine, interface, save/load, interactive playoffs, real-data mode. Recomm
 - **dealEvenly**: league-creation step that spreads talent evenly across teams.
 
 ## Update log (newest first; overrides anything above that conflicts)
+
+### 2026-11-14, late: investigations only (no code changed), decisions pending
+All findings below are helper reports; the main session only spot-checked three rows of the measurement output.
+- Why the same players always star in real mode: young players' Potential comes from their real later peak (`hindsightPeak`, realdata.go), growth pulls toward that ceiling, there are no injuries or situation effects, and the default seed is 1. Measured over 10 seeds x 10 seasons: Rose ends 85-95 every time, Harden is #1 in 7 of 10, per-player spread 2.5-5 points, below-average youngsters reach 80+ in 2.9% of cases. Ryan Anderson reaches 86-94 every seed (Impact +5 doubled into the ceiling; looks wrong, not traced). Throwaway measuring program was in the session scratchpad, not kept.
+- Owner decisions still open: blur real-player ceilings per league or keep hindsight; injuries permanent or games-only; random default seed; simple cap or full rulebook.
+- Feature gap vs a 2K-style GM mode: sim core is largely done; missing are contracts/salary cap (nothing exists), user free agency, picks as trade assets, 3+ team trades, AI offers to the user, lottery, scouting, lineup control, injuries. Save has one slot and no version field.
+- Structure audit: `engine/` is clean (no HTTP, RNG discipline holds, trade rules in engine, Impact cannot leak via API; vet and tests pass, 26 tests). Weak points in order: player-only two-team `TradeOffer` and no asset/contract model; save has no `Version`/migration; phase and flow rules (`phase()`, `state()`, `playoffAction`, seeding) live in `cmd/web` instead of the engine; API responses are untyped maps with hand-kept TS types in `web/src/api.ts`.
+- Proposed order (not yet agreed): save version + migration; asset model with multi-team trades and picks; contracts and simple cap, then user free agency; move phase rules into the engine; injuries and rest; lottery, scouting and blurred ceilings; product basics.
+- Stale parts of this file: section 5 (html/template pages), "cmd/* has no tests" and "no git repository" are out of date.
+
+### 2026-11-14, evening: narrow layout, 3D formation, offseason trades card
+- Narrow layout (top bar stacks, nav strip scrolls, cards scroll inside themselves, sticky Start button): main session saw the dashboard at 560px with no clipping and no console errors; helper measured no sideways scroll at 520px and 800px on the main pages. Start screen at narrow width and the 1280px pages other than the game page were not looked at. Visible scrollbars on the nav strip remain.
+- 3D formation (`web/src/court3d/Court3D.tsx`): offence now heads for the hoop it attacks and defenders mark their men, but at the fast replay speed the figures are still mostly in transit near half-court because possessions change ends faster than they can run (a whole game replays in roughly 30 seconds). Helper reports a proper half-court set at 1x; main session could not confirm 1x. Open: slow the default pace or guarantee figures arrive before each shot.
+- "Offseason trades around the league" card on the dashboard (first 5 days of a season, from `/api/transactions`): compiled only, never seen with real trades.
+- Only `web/src` changed; `npm run build` passes. Uncommitted.
+
+### 2026-11-14, evening: state check after the owner's changes
+- A git repository now exists with one commit ("Initial HoopSim commit"); `.gitignore` excludes `data/real/` and `saves/`. The usage-tendency work and later handoff edits are uncommitted. Never commit or push unless asked.
+- `go vet`, `go test -count=1 ./...` and `npm run build` pass on the current code (run by the main session).
+- `realcheck -runs 10` after the usage-tendency change: win correlation 0.943, MAE 5.1 wins, sim win SD 16.2 vs real 13.0. Scaled scoring improved for Stoudemire (22.0 vs 25.3 real, was 19.5) and slightly for Carmelo Anthony (18.0 vs 25.6, was 16.6); Monta Ellis unchanged (17.2 vs 24.1). Assists still low for pure passers (Rondo 7.1 vs 11.2, Nash 8.9 vs 11.4). Still open.
+- In progress: a helper fixing the 3D formation (players bunching at half-court), the layout below 1000px (owner views in a narrow side pane), and where offseason computer trades are shown. Verify in a browser before calling done.
+
+### 2026-11-14, evening: trade screen and 3D court reviewed
+- Trade screen (`web/src/pages/Trade.tsx`, API in `cmd/web/trade.go`: `/api/trade/status|block/{id}|evaluate|counter|execute`, `/api/transactions`) and lazy-loaded 3D court (`web/src/court3d/Court3D.tsx`; `three`, `@react-three/fiber`, `@react-three/drei`) are built. `go vet`, `go test ./...` pass on the current code.
+- Seen in a browser by the main session at 1280px: trade screen layout with both rosters, value bars and offer trays; 3D court rendering with hoops, figures, ball, scoreboard, play list, speed controls, camera presets, floating "+2", no console errors.
+- Not seen: an accepted trade's animation and summary, the counter-offer preview, "Trade for this player" in the player drawer, Baseline/Overhead cameras, 16x, the 2D fallback.
+- Problems found: (1) in 3D the ten figures bunch around half-court instead of setting up around the attacking hoop, most visible at 4x; (2) below about 1000px wide the top bar and nav are clipped, so the app needs a wide window; (3) computer trades of the offseason only show on `/offseason` after the new season starts, and nothing links there then.
+- The game server on port 8080 may predate later code changes; restart it (ask first) to pick up engine changes.
+
+### 2026-11-14, simulation role and rating diagnostics
+- Added `Player.UsageTendency` and a derived fallback for old saves/imported players. Generated players get a role tendency based on shooting skills and position, with independent variation; real-data players use historical usage percentiles.
+- Shot selection in `engine/game.go` now depends on playing time, shooting skill, and shot tendency, with less concentration toward the top shooter. Playmaking still affects turnovers and assist selection, but no longer adds directly to shot volume.
+- Broadly lifting rookie ability or potential caused long-run stability failures. The potential curve is unchanged; current rookie base talent is 43.5 (from 44) to keep the generated league near its tested development equilibrium. A fuller rookie tier rebalance remains open and should use the ratings report as its calibration aid.
+- Player details show a plain-language scoring role and shot-tendency value. `go run ./cmd/sim -mode ratings` reports overall/usage percentiles by primary position and rookie overall/potential percentiles by draft tier.
+- Verification: `go test ./...` passes and `cd web && npm run build` succeeds. Seed 1 rookie median Overall/Potential by draft tier is 68/87 (picks 1-5), 62/67 (6-14), 56/58 (15-30), and 45/47 (31-60); this confirms late-pick rookies remain weak and needs a deliberate future rebalance.
 
 ### 2026-11-14, later the same day
 - **Interface rebuilt in React + TypeScript** (owner's choice; they are proficient in React). `web/` is a Vite app (React, TanStack Query, TanStack Table v8, Motion, Tailwind v4, lucide-react); `cmd/web` is now a JSON API under `/api` that serves `web/dist`. The old `html/template` pages are deleted. Build: `cd web && npm install && npm run build`; run: `go run ./cmd/web`. Node is at `~/.nvm/versions/node/v22.23.2/bin`.

@@ -695,6 +695,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 		p := &Player{
 			ID: nextID, Name: row.name, Age: int(row.age), Pos: rp.Pos, AltPos: rp.Alt,
 			Ratings: rp.Ratings, TeamID: -1, Impact: rp.Impact, RealID: pid,
+			UsageTendency: usageFromPercentile(d.model(season).usg.pct(row.usg)),
 		}
 		nextID++
 		if ci.from > 0 {
@@ -783,6 +784,12 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 // PotentialEqual is the age from which Potential equals Overall.
 func PotentialEqual() int { return Progression.PotentialEqualAge }
 
+// usageFromPercentile maps a player's historical usage percentile onto the
+// shot-tendency scale used by the fictional generator.
+func usageFromPercentile(p float64) int {
+	return clamp(30+round(p*60), 25, 90)
+}
+
 func (d *realData) prospect(r *RNG, pk draftPick, year int) *Player {
 	ci := d.career[pk.pid]
 	age := 20
@@ -801,12 +808,13 @@ func (d *realData) prospect(r *RNG, pk draftPick, year int) *Player {
 	if row == nil {
 		pos := Position(r.IntN(5))
 		bp := buildPlayer(r, 0, pos, 36+r.Normal(0, 3), age)
-		p.Pos, p.AltPos, p.Ratings, p.Impact = pos, bp.AltPos, bp.Ratings, 0
+		p.Pos, p.AltPos, p.Ratings, p.Impact, p.UsageTendency = pos, bp.AltPos, bp.Ratings, 0, bp.UsageTendency
 		p.Potential = clamp(p.Overall()+r.Between(0, 4), 25, 99)
 		return p
 	}
 	rp := d.rate(row, RealTuning.RookieDrop)
 	p.Pos, p.AltPos, p.Ratings, p.Impact = rp.Pos, rp.Alt, rp.Ratings, rp.Impact
+	p.UsageTendency = usageFromPercentile(d.model(first).usg.pct(row.usg))
 	p.Potential = clamp(d.hindsightPeak(pk.pid, first, p.Overall()), p.Overall(), 99)
 	return p
 }

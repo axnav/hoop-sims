@@ -148,7 +148,8 @@ func (s *server) player(r *http.Request) (any, error) {
 			"gp": c.GP, "ppg": c.PPG, "rpg": c.RPG, "apg": c.APG})
 	}
 	return M{"id": p.ID, "name": p.Name, "age": p.Age, "pos": p.PosLabel(), "ovr": p.Overall(), "pot": p.Potential,
-		"status": status, "team": team, "ratings": ratings, "experience": p.Experience, "draftYear": p.DraftYear, "draftPick": p.DraftPick,
+		"status": status, "team": team, "role": p.ScoringRole(), "usage": p.ShotUsage(),
+		"ratings": ratings, "experience": p.Experience, "draftYear": p.DraftYear, "draftPick": p.DraftPick,
 		"season": statLine(lg.Season.Stats[p.ID]), "playoffs": statLine(lg.Season.PlayoffStats[p.ID]), "career": career}, nil
 }
 

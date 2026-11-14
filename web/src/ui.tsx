@@ -114,8 +114,8 @@ export function Card({ title, right, children, className = '' }: { title?: React
 
 export function Page({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-[1400px] px-5 py-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
+    <div className="mx-auto max-w-[1400px] px-3 py-5 min-[1000px]:px-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
         {right}
       </div>

@@ -20,7 +20,7 @@ const (
 	overtimePoss  = 10
 	skillCoef     = 0.0020 // FG% per rating point of shooter skill
 	defCoef       = 0.0016 // FG% per rating point of team defense
-	shootExp      = 1.5    // shot-share concentration (higher = stars shoot more)
+	shootExp      = 1.3    // shot-share concentration (higher = stars shoot more)
 )
 
 var minutesByRank = [RosterSize]int{35, 34, 32, 30, 28, 22, 18, 14, 10, 8, 5, 4, 0}
@@ -112,9 +112,13 @@ func newSide(t *Team, home bool) *side {
 		s.eff = append(s.eff, rt)
 		top := max(rt.Inside, rt.Mid, rt.Three)
 		second := rt.Inside + rt.Mid + rt.Three - top - min(rt.Inside, rt.Mid, rt.Three)
-		scoring := (float64(top)+float64(second))/2 + float64(rt.Playmaking)/3
+		// Shooting ability determines how good a player is at scoring; UsageTendency
+		// determines how often he looks for his own shot. Playmaking is used for
+		// creation and assists, not as an automatic boost to shot volume.
+		scoring := (float64(top) + float64(second)) / 2
 		fm := float64(m)
-		s.shootW = append(s.shootW, fm*math.Pow(scoring, shootExp))
+		usageWeight := 0.8 + float64(p.ShotUsage())/250
+		s.shootW = append(s.shootW, fm*math.Pow(scoring, shootExp)*usageWeight)
 		pm := float64(rt.Playmaking)
 		s.astW = append(s.astW, fm*math.Pow(pm, 2.5))
 		rb := float64(rt.Rebounding)

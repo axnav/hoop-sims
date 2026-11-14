@@ -46,7 +46,7 @@ function Shell() {
   return (
     <>
       <TopBar />
-      {actionError && <div className="mx-auto max-w-[1400px] px-5 pt-3"><ErrorBox error={actionError} /></div>}
+      {actionError && <div className="mx-auto max-w-[1400px] px-3 pt-3 min-[1000px]:px-5"><ErrorBox error={actionError} /></div>}
       <main>
         <Routes>
           <Route path="/" element={<Dashboard />} />

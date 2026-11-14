@@ -32,6 +32,10 @@ func buildPlayer(r *RNG, id int, pos Position, talent float64, age int) *Player 
 		TeamID: -1,
 		Impact: clamp(int(r.Normal(0, Progression.ImpactSD)), -8, 8),
 	}
+	// A player's offensive role varies independently from raw skill. The
+	// ratings provide a role-shaped average; noise creates pass-first and
+	// score-first players with otherwise similar abilities.
+	p.UsageTendency = clamp(usageFromRatings(p.Ratings, pos)+usageVariation(id, p.Name), 25, 90)
 	// About half of players can also play a neighbouring position.
 	if r.Chance(0.45) {
 		alt := pos + Position(r.Between(0, 1)*2-1)

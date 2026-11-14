@@ -37,7 +37,11 @@ type Player struct {
 	AltPos    []Position // other positions the player can also play
 	Ratings   Ratings    // the visible ratings everyone sees
 	Potential int        // the overall this player can grow into
-	TeamID    int
+	// UsageTendency is this player's appetite for taking shots, on a 25-90
+	// scale. It is separate from shooting skill and playmaking. A zero value
+	// means an older save or imported player should use a derived default.
+	UsageTendency int `json:",omitempty"`
+	TeamID        int
 
 	Experience int // seasons played
 	DraftYear  int // 0 for the initial league
@@ -113,6 +117,52 @@ func (p *Player) Effective() Ratings {
 	r := p.Ratings
 	return Ratings{adj(r.Inside), adj(r.Mid), adj(r.Three), adj(r.Playmaking),
 		adj(r.Rebounding), adj(r.Defense), adj(r.Athleticism)}
+}
+
+// ShotUsage returns the player's shot-taking tendency. Older saves and
+// imported players without this field get a role estimate from their skills.
+func (p *Player) ShotUsage() int {
+	if p.UsageTendency > 0 {
+		return clamp(p.UsageTendency, 25, 90)
+	}
+	return usageFromRatings(p.Ratings, p.Pos)
+}
+
+// ScoringRole gives the numeric shot tendency a plain-language label.
+func (p *Player) ScoringRole() string {
+	switch {
+	case p.ShotUsage() < 42:
+		return "Facilitator"
+	case p.ShotUsage() >= 63:
+		return "Primary scorer"
+	default:
+		return "Balanced scorer"
+	}
+}
+
+func usageFromRatings(rt Ratings, pos Position) int {
+	top := max(rt.Inside, rt.Mid, rt.Three)
+	second := rt.Inside + rt.Mid + rt.Three - top - min(rt.Inside, rt.Mid, rt.Three)
+	shooting := (top + second) / 2
+	positionBias := [...]int{-3, 4, 2, 0, -2}
+	if pos < PG || pos > C {
+		pos = SF
+	}
+	return clamp(50+round(float64(shooting-rt.Playmaking)*0.45)+positionBias[pos], 25, 90)
+}
+
+// usageVariation provides persistent role variety without consuming extra
+// seeded RNG values, which would otherwise reshuffle every generated league.
+func usageVariation(id int, name string) int {
+	h := uint64(id + 1)
+	for i := 0; i < len(name); i++ {
+		h = (h ^ uint64(name[i])) * 1099511628211
+	}
+	x := h
+	x ^= x >> 16
+	x *= 0x7feb352d
+	x ^= x >> 15
+	return int(x%17) - 8
 }
 
 // TrueOverall is the hidden overall: what the player is really worth.

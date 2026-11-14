@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
-import { Trophy } from 'lucide-react'
+import { ArrowLeftRight, Trophy } from 'lucide-react'
 import { api, type Award } from '../api'
 import { useFlow } from '../flow'
 import { InlineContinue, useOpenPlayer } from '../Inline'
@@ -87,6 +87,40 @@ function Interlude() {
   return null
 }
 
+// Computer-to-computer trades are made when the offseason finishes, so show them at the start of the new season.
+function OffseasonTrades() {
+  const { state: s } = useFlow()
+  const show = !!s && s.phase === 'regular' && s.day <= 5
+  const q = useQuery({ queryKey: ['transactions'], queryFn: api.transactions, enabled: show })
+  if (!s || !show || !q.data) return null
+  const rows = q.data.transactions.filter((t) => t.year === s.year && t.day === 0 && t.teamA.id !== s.user.team.id && t.teamB.id !== s.user.team.id)
+  if (rows.length === 0) return null
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card mb-4 p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="h2 flex items-center gap-1.5"><ArrowLeftRight size={13} />Offseason trades around the league</div>
+        <Link className="link text-accent" to="/trade#transactions">All transactions</Link>
+      </div>
+      <ul className="space-y-1.5">
+        {rows.map((t, i) => {
+          const got = (id: number) => t.moved.filter((m) => m.to.id === id)
+          return (
+            <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {[t.teamA, t.teamB].map((tm, k) => (
+                <span key={tm.id} className="flex items-center gap-1.5">
+                  {k === 1 && <span className="text-muted">and</span>}
+                  <TeamBadge team={tm} size={16} /><span className="text-muted">get</span>
+                  {got(tm.id).map((m, j) => <span key={m.playerId}>{j > 0 && ', '}<PlayerLink id={m.playerId} name={m.name} /></span>)}
+                </span>
+              ))}
+            </li>
+          )
+        })}
+      </ul>
+    </motion.div>
+  )
+}
+
 export default function Dashboard() {
   const { state: s } = useFlow()
   const stand = useQuery({ queryKey: ['standings'], queryFn: api.standings })
@@ -100,6 +134,7 @@ export default function Dashboard() {
   return (
     <Page title={`${s.user.team.fullName}`}>
       <Interlude />
+      <OffseasonTrades />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Next game" className="min-h-[150px]">
           {s.next ? (

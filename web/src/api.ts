@@ -45,6 +45,7 @@ export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank:
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
+  role: string; usage: number
   ratings: { key: string; label: string; value: number }[]; experience: number; draftYear: number; draftPick: number
   season: StatLine; playoffs: StatLine
   career: { year: number; team: Team; age: number; ovr: number; pot: number; gp: number; ppg: number; rpg: number; apg: number }[]

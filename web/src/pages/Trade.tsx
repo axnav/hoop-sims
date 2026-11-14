@@ -116,6 +116,10 @@ function TradeScreen() {
   const mineQ = useQuery({ queryKey: ['trade-block', me, state?.phase, state?.day, done?.year, done?.day, done?.moved.length], queryFn: () => api.tradeBlock(me) })
   const theirQ = useQuery({ queryKey: ['trade-block', partner, state?.phase, state?.day, done?.moved.length], queryFn: () => api.tradeBlock(partner) })
   const txQ = useQuery({ queryKey: ['transactions'], queryFn: api.transactions })
+  // arriving from the dashboard's offseason-trades list (#transactions)
+  useEffect(() => {
+    if (window.location.hash === '#transactions' && txQ.data) document.getElementById('transactions')?.scrollIntoView({ behavior: 'smooth' })
+  }, [txQ.data])
   const open = status.data?.open ?? false
   const max = status.data?.maxPlayers ?? 3
 
@@ -226,13 +230,13 @@ function TradeScreen() {
           </div>
         </div>
       </LayoutGroup>
-      <Card title="Transactions">
+      <div id="transactions" className="scroll-mt-28"><Card title="Transactions">
         {txQ.data ? (
           txQ.data.transactions.length === 0 ? <div className="p-3 text-muted">No trades yet.</div> : (
             <ul className="max-h-[420px] overflow-y-auto"><AnimatePresence initial={false}>{txQ.data.transactions.map((t, i) => <TxItem key={`${t.year}-${t.day}-${i}-${t.moved[0]?.playerId}`} t={t} />)}</AnimatePresence></ul>
           )
         ) : <Spinner />}
-      </Card>
+      </Card></div>
     </Page>
   )
 }

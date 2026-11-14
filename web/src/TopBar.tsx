@@ -31,6 +31,17 @@ function Stepper({ s }: { s: GameState }) {
   )
 }
 
+// Narrow layouts: just the current phase name and the day progress.
+function PhaseLine({ s }: { s: GameState }) {
+  const cur = stepOf(s)
+  return (
+    <div className="truncate text-[11px] font-semibold text-muted">
+      <span className="font-bold uppercase tracking-wider text-accent">{steps[cur]}</span>
+      {cur === 0 && <span className="tabular-nums"> · Day {s.day}/{s.totalDays}</span>}
+    </div>
+  )
+}
+
 function ContinueMenu() {
   const { state, run, busy } = useFlow()
   const [open, setOpen] = useState(false)
@@ -46,7 +57,7 @@ function ContinueMenu() {
     <div ref={ref} className="relative flex">
       <button className="btn btn-accent rounded-r-none" disabled={busy} onClick={() => run(state.nextAction.id)} title="Space or Enter">
         {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-        {state.nextAction.label}
+        <span className="max-w-[7.5rem] truncate min-[1000px]:max-w-none">{state.nextAction.label}</span>
       </button>
       {items.length > 0 && (
         <button className="btn btn-accent rounded-l-none border-l border-black/20 px-2" disabled={busy} onClick={() => setOpen((o) => !o)} aria-label="More actions">
@@ -69,9 +80,9 @@ function ContinueMenu() {
 function SaveButton() {
   const m = useMutation({ mutationFn: api.save })
   return (
-    <button className="btn" onClick={() => m.mutate()} disabled={m.isPending} title={m.isError ? String(m.error) : 'Save game'}>
+    <button className="btn" onClick={() => m.mutate()} disabled={m.isPending} title={m.isError ? String(m.error) : 'Save game'} aria-label="Save game">
       {m.isPending ? <Loader2 size={15} className="animate-spin" /> : m.isSuccess ? <Check size={15} className="text-win" /> : <Save size={15} />}
-      Save
+      <span className="max-[999px]:hidden">Save</span>
     </button>
   )
 }
@@ -89,12 +100,15 @@ export function TopBar() {
       className="sticky top-0 z-20 border-b backdrop-blur"
       style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${u.team.primary} 38%, #090c12), #090c12 70%)`, borderColor: u.team.primary }}
     >
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-5 pt-2.5">
-        <div className="flex items-center gap-6">
-          <div className="text-lg font-black tracking-tight">HOOP<span className="text-accent">SIM</span> <span className="ml-1 text-sm font-semibold text-muted tabular-nums">{s.year}</span></div>
-          <Stepper s={s} />
+      <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 pt-2.5 min-[1000px]:gap-4 min-[1000px]:px-5">
+        <div className="flex min-w-0 items-center gap-6">
+          <div className="min-w-0">
+            <div className="whitespace-nowrap text-lg font-black tracking-tight">HOOP<span className="text-accent">SIM</span> <span className="ml-1 text-sm font-semibold text-muted tabular-nums">{s.year}</span></div>
+            <div className="min-[1000px]:hidden"><PhaseLine s={s} /></div>
+          </div>
+          <div className="max-[999px]:hidden"><Stepper s={s} /></div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 min-[1000px]:gap-3">
           <div className="flex items-center gap-2">
             <TeamBadge team={u.team} size={26} />
             <div className="leading-tight">
@@ -106,7 +120,7 @@ export function TopBar() {
           <ContinueMenu />
         </div>
       </div>
-      <nav className="mx-auto flex max-w-[1400px] items-center gap-1 px-4 py-1.5">
+      <nav className="mx-auto flex max-w-[1400px] items-center gap-1 overflow-x-auto px-2 py-1.5 whitespace-nowrap min-[1000px]:px-4 [&>a]:shrink-0">
         {link('/', 'Dashboard')}
         {link(`/team/${u.team.id}`, 'Roster')}
         {link('/standings', 'Standings')}

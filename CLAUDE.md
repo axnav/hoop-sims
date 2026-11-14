@@ -6,7 +6,7 @@ Text/web basketball GM simulation in Go (module `hoopsim`, standard library only
 - The owner is learning Go, speaks informally (often by voice). Restate your understanding in plain words, ask simple either/or design questions, write the code for them. Short plain-language explanations; brief "insight" notes on why.
 - Save tokens: the main session designs, briefs and reviews; small-model subagents write and test code. ONE layer only (subagents never spawn subagents), one or two at a time, briefs name the files each may edit so two never touch the same file. No separate sessions. No nitpicking polish, but verify results independently.
 - Ask before: downloading anything; restarting the web server (port 8080; a league may be in progress and unsaved progress is lost); anything that leaves the machine.
-- No git repository. Never commit unless asked.
+- A git repository exists (one initial commit; `data/real/` and `saves/` are ignored). Never commit or push unless asked.
 - Report honestly: what you ran and saw vs what a helper reported.
 - Keep the handoff current: after each finished piece of work or owner decision, add a few lines to the "Update log" in `HANDOFF.md` yourself (cheap, no subagent). Run the `handoff-writer` subagent only for a full refresh when the owner asks or the log gets long.
 
@@ -21,6 +21,7 @@ Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from the project root.
 - `go run ./cmd/web` : JSON API + built app on http://localhost:8080 (`-port`, `-save`, `-web` flags; preview name `hoopsim` in `.claude/launch.json`)
 - `cd web && npm run dev` : Vite dev server (proxies `/api` to Go on port 8095, so run `go run ./cmd/web -port 8095` too)
 - `go run ./cmd/sim -mode sanity` : league-average game check
+- `go run ./cmd/sim -mode ratings` : rating and rookie distributions by position/draft tier
 - `go run ./cmd/sim -mode seasons -seasons 10` : multi-season run (add `-reveal` to debug the hidden number)
 - `go run ./cmd/realcheck -runs 30` : compare real-data league vs real 2010-11 results
 - `go vet ./... && go test ./...` : checks (engine has the tests; add `-count=1` to skip cache)
