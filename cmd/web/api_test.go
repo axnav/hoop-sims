@@ -239,3 +239,70 @@ func TestTrades(t *testing.T) {
 	}
 	c.call("POST", "/api/trade/execute", M{"team": 5, "give": []int{myWorst}, "get": []int{theirWorst}}, 409)
 }
+
+func TestDeals(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	if st := c.call("GET", "/api/trade/status", nil, 200); num(st["maxTeams"]) != 3 || num(st["maxPicks"]) != 4 {
+		t.Fatalf("status: %v", st)
+	}
+	blk := c.call("GET", "/api/trade/block/3", nil, 200)
+	picks := blk["picks"].([]any)
+	if len(picks) != 8 {
+		t.Fatalf("picks %d", len(picks))
+	}
+	p0 := picks[0].(M)
+	if p0["own"] != true || p0["label"] == "" || p0["original"] == nil {
+		t.Fatalf("pick: %v", p0)
+	}
+	myPick := func(i int) M {
+		p := picks[i].(M)
+		return M{"year": p["year"], "round": p["round"], "original": num(p["original"].(M)["id"])}
+	}
+	_, theirWorst, _ := blockIDs(c, 4)
+	_, _, third := blockIDs(c, 5)
+	// two-team: my first-round pick for their worst player
+	_, myWorst, _ := blockIDs(c, 3)
+	moves := []M{{"from": 3, "to": 4, "pick": myPick(0)}, {"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 3, "playerId": theirWorst}}
+	v := c.call("POST", "/api/deal/evaluate", M{"moves": moves}, 200)
+	if v["valid"] != true || len(v["teams"].([]any)) != 1 {
+		t.Fatalf("two-team: %v", v)
+	}
+	vt := v["teams"].([]any)[0].(M)
+	if vt["reason"] == "" || vt["team"] == nil {
+		t.Fatalf("verdict: %v", vt)
+	}
+	// three-team
+	moves3 := []M{{"from": 3, "to": 4, "pick": myPick(0)}, {"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 5, "playerId": theirWorst},
+		{"from": 5, "to": 3, "playerId": third}}
+	v = c.call("POST", "/api/deal/evaluate", M{"moves": moves3}, 200)
+	if v["valid"] != true || len(v["teams"].([]any)) != 2 {
+		t.Fatalf("three-team: %v", v)
+	}
+	// malformed moves
+	c.call("POST", "/api/deal/evaluate", M{"moves": []M{{"from": 3, "to": 4}}}, 400)
+	c.call("POST", "/api/deal/evaluate", M{"moves": []M{{"from": 3, "to": 4, "playerId": 1, "pick": myPick(0)}}}, 400)
+	// generous: all my picks plus my best player for their worst player
+	myBest, _, _ := blockIDs(c, 3)
+	gen := []M{{"from": 4, "to": 3, "playerId": theirWorst}, {"from": 3, "to": 4, "playerId": myBest}}
+	for i := 0; i < 4; i++ {
+		gen = append(gen, M{"from": 3, "to": 4, "pick": myPick(i)})
+	}
+	v = c.call("POST", "/api/deal/evaluate", M{"moves": gen}, 200)
+	if v["accept"] != true {
+		t.Fatalf("generous deal refused: %v", v)
+	}
+	r := c.call("POST", "/api/deal/execute", M{"moves": gen}, 200)
+	if r["state"] == nil || len(r["picks"].([]any)) != 4 || len(r["teams"].([]any)) != 2 {
+		t.Fatalf("execute: %v", r)
+	}
+	tx := c.call("GET", "/api/transactions", nil, 200)["transactions"].([]any)
+	if len(tx) != 1 || len(tx[0].(M)["picks"].([]any)) != 4 {
+		t.Fatalf("transactions: %v", tx)
+	}
+	if n := len(c.call("GET", "/api/trade/block/4", nil, 200)["picks"].([]any)); n != 12 {
+		t.Fatalf("team 4 picks %d", n)
+	}
+	// a rejected deal is a 409
+	c.call("POST", "/api/deal/execute", M{"moves": []M{{"from": 3, "to": 4, "playerId": 0}}}, 409)
+}

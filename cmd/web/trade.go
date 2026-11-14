@@ -23,7 +23,8 @@ func (s *server) tradeStatus(r *http.Request) (any, error) {
 		}
 	}
 	return M{"open": open, "reason": why, "reopens": reopens, "deadlineDay": engine.TradeDeadlineDay,
-		"day": s.lg.Season.Day, "maxPlayers": engine.MaxTradePlayers, "rosterSize": engine.RosterSize}, nil
+		"day": s.lg.Season.Day, "maxPlayers": engine.MaxTradePlayers, "rosterSize": engine.RosterSize,
+		"maxTeams": engine.MaxDealTeams, "maxPicks": engine.MaxDealPicks}, nil
 }
 
 func (s *server) tradeBlock(r *http.Request) (any, error) {
@@ -39,7 +40,24 @@ func (s *server) tradeBlock(r *http.Request) (any, error) {
 		rows = append(rows, M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
 			"value": round1(a.Value), "untouchable": a.Untouchable})
 	}
-	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows}, nil
+	picks := []M{}
+	for _, p := range s.lg.PicksOwnedBy(id) {
+		t := s.team(p.Original)
+		label := pickLabel(p.Year, p.Round)
+		if p.Original != id {
+			label += " (via " + t["abbr"].(string) + ")"
+		}
+		picks = append(picks, M{"year": p.Year, "round": p.Round, "original": t, "own": p.Original == id, "label": label,
+			"value": round1(s.lg.PickValue(p.Year, p.Round, p.Original, id))})
+	}
+	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows, "picks": picks}, nil
+}
+
+func pickLabel(year, round int) string {
+	if round == 1 {
+		return strconv.Itoa(year) + " 1st"
+	}
+	return strconv.Itoa(year) + " 2nd"
 }
 
 type tradeIn struct {
@@ -91,8 +109,90 @@ func (s *server) txPlayers(in []engine.TxPlayer) []M {
 }
 
 func (s *server) txDTO(t engine.TradeResult) M {
-	return M{"year": t.Year, "day": t.Day, "teamA": s.team(t.TeamA), "teamB": s.team(t.TeamB),
+	d := M{"year": t.Year, "day": t.Day, "teamA": s.team(t.TeamA), "teamB": s.team(t.TeamB),
 		"moved": s.txPlayers(t.Moved), "released": s.txPlayers(t.Released), "signed": s.txPlayers(t.Signed)}
+	if len(t.Teams) > 0 {
+		ts := []M{}
+		for _, id := range t.Teams {
+			ts = append(ts, s.team(id))
+		}
+		d["teams"] = ts
+	}
+	if len(t.Picks) > 0 {
+		ps := []M{}
+		for _, p := range t.Picks {
+			o := s.team(p.Original)
+			ps = append(ps, M{"year": p.Year, "round": p.Round, "original": o,
+				"label": pickLabel(p.Year, p.Round) + " (" + o["abbr"].(string) + ")",
+				"from":  s.team(p.From), "to": s.team(p.To)})
+		}
+		d["picks"] = ps
+	}
+	return d
+}
+
+type dealPickIn struct {
+	Year     int `json:"year"`
+	Round    int `json:"round"`
+	Original int `json:"original"`
+}
+
+type dealMoveIn struct {
+	From     int         `json:"from"`
+	To       int         `json:"to"`
+	PlayerID *int        `json:"playerId"`
+	Pick     *dealPickIn `json:"pick"`
+}
+
+func (s *server) readDeal(r *http.Request) (engine.Deal, error) {
+	var in struct {
+		Moves []dealMoveIn `json:"moves"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		return engine.Deal{}, err
+	}
+	var d engine.Deal
+	for _, m := range in.Moves {
+		if (m.PlayerID == nil) == (m.Pick == nil) {
+			return engine.Deal{}, bad("each move needs exactly one of playerId or pick")
+		}
+		a := engine.Asset{}
+		if m.PlayerID != nil {
+			a = engine.PlayerOf(*m.PlayerID)
+		} else {
+			a = engine.PickOf(m.Pick.Year, m.Pick.Round, m.Pick.Original)
+		}
+		d.Moves = append(d.Moves, engine.Move{From: m.From, To: m.To, Asset: a})
+	}
+	return d, nil
+}
+
+func (s *server) dealEvaluate(r *http.Request) (any, error) {
+	d, err := s.readDeal(r)
+	if err != nil {
+		return nil, err
+	}
+	v := engine.EvaluateDeal(s.lg, d, s.lg.UserTeamID)
+	teams := []M{}
+	for _, t := range v.Teams {
+		teams = append(teams, M{"team": s.team(t.Team), "accept": t.Accept, "reason": t.Reason,
+			"gives": round1(t.Gives), "gets": round1(t.Gets), "needed": round1(t.Needed)})
+	}
+	return M{"valid": v.Valid, "problem": v.Problem, "accept": v.Accept, "teams": teams}, nil
+}
+
+func (s *server) dealExecute(r *http.Request) (any, error) {
+	d, err := s.readDeal(r)
+	if err != nil {
+		return nil, err
+	}
+	res, err := engine.ExecuteDeal(s.lg, d, s.lg.UserTeamID)
+	if err != nil {
+		return nil, conflict("%v", err)
+	}
+	out := s.txDTO(res)
+	out["state"] = s.state()
+	return out, nil
 }
 
 func (s *server) tradeExecute(r *http.Request) (any, error) {

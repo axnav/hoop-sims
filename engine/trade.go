@@ -422,10 +422,19 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 // agents, recording both in res.
 func (lg *League) fixRosters(tids []int, res *TradeResult) {
 	cf := lg.contendFactors()
+	// A player who just arrived in this trade is never the one released to
+	// make room: the team wanted him, so it cuts someone it already had.
+	arrived := map[int]bool{}
+	for _, m := range res.Moved {
+		arrived[m.PlayerID] = true
+	}
 	for _, tid := range tids {
 		t := lg.Teams[tid]
 		if len(t.Roster) > RosterSize {
 			sort.SliceStable(t.Roster, func(i, j int) bool {
+				if ai, aj := arrived[t.Roster[i].ID], arrived[t.Roster[j].ID]; ai != aj {
+					return ai
+				}
 				vi, vj := lg.value(t.Roster[i], tid, cf), lg.value(t.Roster[j], tid, cf)
 				if vi != vj {
 					return vi > vj
@@ -439,6 +448,11 @@ func (lg *League) fixRosters(tids []int, res *TradeResult) {
 			}
 			t.Roster = t.Roster[:RosterSize]
 		}
+	}
+	// Fill after every team has trimmed, so players released by one team in
+	// the deal are available to a team the deal left short.
+	for _, tid := range tids {
+		t := lg.Teams[tid]
 		for len(t.Roster) < RosterSize && len(lg.FreeAgents) > 0 {
 			bi := 0
 			for i, p := range lg.FreeAgents {

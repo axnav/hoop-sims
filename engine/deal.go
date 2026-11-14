@@ -109,6 +109,15 @@ func (lg *League) pickValue(a Asset, tid int, cf []float64) float64 {
 	return PickValueFor(a.Round, a.Year-lg.Year, cf[a.Original], cf[tid])
 }
 
+// PickValue is what a draft pick is worth to the given team right now, in the
+// same units as TradeValue for players.
+func (lg *League) PickValue(year, round, original, valuerTeam int) float64 {
+	if original < 0 || original >= len(lg.Teams) || valuerTeam < 0 || valuerTeam >= len(lg.Teams) {
+		return 0
+	}
+	return lg.pickValue(PickOf(year, round, original), valuerTeam, lg.contendFactors())
+}
+
 func (lg *League) assetName(a Asset) string {
 	if a.Kind == PickAsset {
 		rd := "first"
@@ -210,9 +219,22 @@ func ValidateDeal(lg *League, deal Deal, userTeam int) error {
 		if picks[t] > MaxDealPicks {
 			return fmt.Errorf("A team can send at most %d draft picks in one deal.", MaxDealPicks)
 		}
-		if d := net[t]; d > len(lg.FreeAgents) || -d > len(lg.FreeAgents) {
-			return fmt.Errorf("Not enough free agents to fill the short roster.")
+	}
+	// Rosters stay at RosterSize: a team left short signs free agents, and a
+	// team left over releases players, who become free agents the short
+	// teams can sign. So the deal only fails if the shortage is bigger than
+	// the free agents on hand plus the players the deal itself releases.
+	short, over := 0, 0
+	for _, t := range order {
+		size := len(lg.Teams[t].Roster) + net[t]
+		if size < RosterSize {
+			short += RosterSize - size
+		} else {
+			over += size - RosterSize
 		}
+	}
+	if short > len(lg.FreeAgents)+over {
+		return fmt.Errorf("Not enough free agents to fill the short roster.")
 	}
 	if !inDeal {
 		return fmt.Errorf("Deals must include your team.")

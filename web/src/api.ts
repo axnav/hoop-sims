@@ -76,16 +76,25 @@ export type OffseasonReport =
       available: true; year: number; risers: Change[]; fallers: Change[]; trades?: Transaction[]
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
-export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; rosterSize: number }
+export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
 export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean }
-export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[] }
+export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number }
+export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[] }
+export type DealMove =
+  | { from: number; to: number; playerId: number }
+  | { from: number; to: number; pick: { year: number; round: number; original: number } }
+export type DealVerdict = {
+  valid: boolean; problem: string; accept: boolean
+  teams: { team: Team; accept: boolean; reason: string; gives: number; gets: number; needed: number }[]
+}
+export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
 export type TradeOfferIn = { team: number; give: number[]; get: number[] }
 export type TradeVerdict = {
   valid: boolean; problem: string; accept: boolean; reason: string
   theyGive: number; theyGet: number; youGive: number; youGet: number; needed: number
 }
 export type TxPlayer = { playerId: number; name: string; from: Team; to: Team }
-export type Transaction = { year: number; day: number; teamA: Team; teamB: Team; moved: TxPlayer[]; released: TxPlayer[]; signed: TxPlayer[] }
+export type Transaction = { year: number; day: number; teamA: Team; teamB: Team; moved: TxPlayer[]; released: TxPlayer[]; signed: TxPlayer[]; teams?: Team[]; picks?: TxPick[] }
 export type TradeResult = Transaction & { state: GameState }
 export type Pick = { pick: number; round: number; team: Team; made: boolean; player?: { id: number; name: string; age: number; ovr: number; pot: number } }
 export type DraftData =
@@ -157,6 +166,8 @@ export const api = {
   tradeCounter: (o: TradeOfferIn) =>
     post<{ found: false } | { found: true; give: number[]; get: number[]; verdict: TradeVerdict }>('/api/trade/counter', o),
   tradeExecute: (o: TradeOfferIn) => post<TradeResult>('/api/trade/execute', o),
+  dealEvaluate: (moves: DealMove[]) => post<DealVerdict>('/api/deal/evaluate', { moves }),
+  dealExecute: (moves: DealMove[]) => post<TradeResult>('/api/deal/execute', { moves }),
   transactions: () => get<{ transactions: Transaction[]; userTeam: number }>('/api/transactions'),
   draftAuto: () => post<GameState>('/api/draft/auto'),
 }
