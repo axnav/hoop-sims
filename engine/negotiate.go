@@ -265,7 +265,7 @@ func joinList(xs []string) string {
 
 func (lg *League) buildProposal(tid int, cf []float64, r *RNG) (Deal, string, bool) {
 	user := lg.UserTeamID
-	contender := cf[tid] >= 0.5
+	contender := cf[tid] >= StatusBands.Buyer
 	var targets []*Player
 	for _, p := range lg.Teams[user].Roster {
 		if contender && p.Overall() >= 58 {

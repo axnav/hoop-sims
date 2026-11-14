@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Injury, Payroll, Team } from './api'
+import type { Injury, Payroll, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -124,7 +124,7 @@ export function Page({ title, right, children }: { title: ReactNode; right?: Rea
   )
 }
 
-export type Col<T> = ColumnDef<T, any> & { num?: boolean }
+export type Col<T> = ColumnDef<T, any> & { num?: boolean; hideSmall?: boolean }
 
 export function DataTable<T>({
   data, columns, initialSort, onRow, rowClass,
@@ -145,7 +145,7 @@ export function DataTable<T>({
               const num = (h.column.columnDef as Col<T>).num
               const s = h.column.getIsSorted()
               return (
-                <th key={h.id} className={`cursor-pointer select-none ${num ? 'r' : ''}`} onClick={h.column.getToggleSortingHandler()}>
+                <th key={h.id} className={`cursor-pointer select-none ${num ? 'r' : ''} ${(h.column.columnDef as Col<T>).hideSmall ? 'max-[699px]:hidden' : ''}`} onClick={h.column.getToggleSortingHandler()}>
                   <span className="inline-flex items-center gap-1">
                     {flexRender(h.column.columnDef.header, h.getContext())}
                     {s === 'asc' ? <ArrowUp size={11} /> : s === 'desc' ? <ArrowDown size={11} /> : <span className="w-[11px]" />}
@@ -160,7 +160,7 @@ export function DataTable<T>({
         {table.getRowModel().rows.map((row) => (
           <tr key={row.id} className={`${onRow ? 'cursor-pointer' : ''} ${rowClass?.(row.original) ?? ''}`} onClick={() => onRow?.(row.original)}>
             {row.getVisibleCells().map((c) => (
-              <td key={c.id} className={(c.column.columnDef as Col<T>).num ? 'r' : ''}>
+              <td key={c.id} className={`${(c.column.columnDef as Col<T>).num ? 'r' : ''} ${(c.column.columnDef as Col<T>).hideSmall ? 'max-[699px]:hidden' : ''}`}>
                 {flexRender(c.column.columnDef.cell, c.getContext())}
               </td>
             ))}
@@ -281,5 +281,20 @@ export function ConfirmDialog({ message, confirmLabel = 'Continue', onConfirm, o
         </div>
       </div>
     </div>
+  )
+}
+
+const statusStyle: Record<TeamStatus['key'], string> = {
+  contender: 'bg-accent/25 text-accent ring-accent/60',
+  buyer: 'bg-win/20 text-win ring-win/50',
+  seller: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
+  rebuilding: 'bg-sky-400/15 text-sky-300 ring-sky-400/40',
+}
+
+// Small pill for a team's trade status. Nothing when unknown.
+export function StatusChip({ status }: { status?: TeamStatus }) {
+  if (!status) return null
+  return (
+    <span title={status.wants} className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${statusStyle[status.key]}`}>{status.label}</span>
   )
 }

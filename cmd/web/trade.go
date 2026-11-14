@@ -44,7 +44,7 @@ func (s *server) tradeBlock(r *http.Request) (any, error) {
 		picks = append(picks, s.pickRow(id, p.Year, p.Round, p.Original))
 	}
 	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows, "picks": picks,
-		"payroll": s.payrollObj(id)}, nil
+		"payroll": s.payrollObj(id), "status": s.statusObj(id)}, nil
 }
 
 // playerRow is one trade-block row for a player on team owner's roster.

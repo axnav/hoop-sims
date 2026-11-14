@@ -71,7 +71,7 @@ func (s *server) offerDTO(p engine.Proposal) M {
 		left = 0
 	}
 	return M{"id": p.ID, "team": s.team(p.Team), "message": p.Message, "day": p.Day, "expires": p.Expires,
-		"daysLeft": left, "give": give, "get": get, "moves": moves}
+		"status": s.statusObj(p.Team), "daysLeft": left, "give": give, "get": get, "moves": moves}
 }
 
 func (s *server) offerList() []M {

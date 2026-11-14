@@ -7,7 +7,7 @@ import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type 
 import { useFlow } from '../flow'
 import { TxItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, TeamBadge, TierChip, money, ovrColor } from '../ui'
+import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
@@ -347,6 +347,10 @@ function TradeScreen() {
             </button>
           ))}
           {slot === 1 && <button className="btn ml-2" onClick={removeThird}><X size={14} />Remove third team</button>}
+          {(() => {
+            const st = qs[slot + 1]?.data?.status
+            return st ? <span className="flex basis-full items-center gap-2 text-xs text-muted"><StatusChip status={st} />{st.wants}</span> : null
+          })()}
         </div>
       ))}
       {partners.length < Math.min(2, maxTeams - 1) && open && (

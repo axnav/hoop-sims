@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Card, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
+import { Card, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -28,9 +28,10 @@ export default function TeamPage() {
     <Q q={q} minH={400}>
       {(d) => (
         <Page
-          title={<span className="flex items-center gap-3"><TeamBadge team={d.team} size={34} />{d.team.fullName}</span>}
+          title={<span className="flex items-center gap-3"><TeamBadge team={d.team} size={34} />{d.team.fullName}<StatusChip status={d.status} /></span>}
           right={<div className="flex items-center gap-4 text-muted"><span className="font-bold tabular-nums text-ink">{d.w}-{d.l}</span><span>#{d.confRank} {d.team.confName}</span><Link className="link" to={`/schedule/${d.team.id}`}>Schedule</Link></div>}
         >
+          {d.status && <p className="-mt-2 mb-4 text-sm text-muted">{d.status.wants}</p>}
           <Card title="Payroll" className="mb-4"><PayrollBar p={d.payroll} /></Card>
           <Card title="Roster" right={<span className="flex items-center gap-3 text-xs text-muted">{d.isUser && <Link className="btn !px-2.5 !py-1 text-xs" to="/lineup">Set lineup</Link>}<span>Click a column to sort · starters marked</span></span>}>
             <DataTable data={d.roster} columns={cols} initialSort={[{ id: 'ovr', desc: true }]} onRow={(r) => open(r.id)} />

@@ -144,6 +144,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | `deal.go` | Multi-asset deals (players and picks, 2 or 3 teams) | `Asset`, `Move`, `Deal`, `ValidateDeal`, `EvaluateDeal`, `ExecuteDeal`, `PickValueFor`, `PickValue` | pick-value constants at the top (`pickR1Late`, `pickYearDiscount`, ...), `MaxDealTeams`, `MaxDealPicks` |
 | `negotiate.go` | Tiers, asks, proposals from computer teams, user options, deadline pause | `PlayerTier`, `PickTier`, `Options`, `Proposal`, `PendingProposals`, `AcceptProposal`, `RejectProposal`, `ShouldPauseForDeadline` | constants (`CloseFraction`, `ProposalChancePerDay`, `MaxPendingProposals`, `ProposalLifeDays`, `proposalOffset`) |
 | `picks.go` | Ownership of draft picks | `DraftPick`, `PicksOwnedBy`, `PickOwner`, `TransferPick`, `PickYearsAhead` (4) | none |
+| `teamstatus.go` | A team's direction from the contend factor (visible strength and record) | `TeamStatus`, `TeamStatuses`, `TeamStatusOf`, `TeamTop8` | `StatusBands` |
 
 ### Contracts and free agency
 
@@ -375,6 +376,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/sim` | Sim days: `{days, toEnd, auto}`; returns day results, standings strip, new state, optional `pause` | `sim` (state.go) |
 | GET | `/api/standings` | Conference standings | `standings` (league.go) |
 | GET | `/api/leaders` | Top 10 in points, rebounds, assists | `leaders` (league.go) |
+| GET | `/api/teams` | All 30 teams: record, rank, payroll, cap room, top-8 average, best player, status, pending offers | `teamsList` (teams.go) |
 | GET | `/api/team/{id}` | A team's roster, record, payroll | `teamPage` (league.go) |
 | GET | `/api/player/{id}` | A player's page (prospects get ranges only) | `player` (league.go) |
 | GET | `/api/schedule` | A team's games; `?team=` (default user) | `schedule` (league.go) |
@@ -442,6 +444,7 @@ The app is React 19 with TypeScript, built with Vite, styled with Tailwind v4, u
 | `/lineup` | `pages/Lineup.tsx` | Starters and minutes |
 | `/trade` | `pages/Trade.tsx` | Build and evaluate deals, trade block, transactions |
 | `/standings` | `pages/Standings.tsx` | Conference standings |
+| `/teams` | `pages/Teams.tsx` | All teams with direction (contender, buyer, seller, rebuilding), offers for the user, filters |
 | `/leaders` | `pages/Leaders.tsx` | Statistical leaders |
 | `/schedule`, `/schedule/:id` | `pages/Schedule.tsx` | A team's schedule and results |
 | `/box/:id` | `pages/BoxScore.tsx` | Box score |

@@ -67,7 +67,12 @@ export type RosterRow = {
   salary: number; years: number; expiring: boolean
   ovrChange?: number; changeScope?: ChangeScope; potChange?: number
 }
-export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll }
+export type TeamStatus = { key: 'contender' | 'buyer' | 'seller' | 'rebuilding'; label: string; wants: string }
+export type TeamRow = {
+  team: Team; w: number; l: number; confRank: number; payroll: number; capRoom: number; rosterSize: number; top8: number
+  star?: { id: number; name: string; pos: string; ovr: number }; status: TeamStatus; offers: number; isUser: boolean
+}
+export type TeamPage = { status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
@@ -108,7 +113,7 @@ export type OffseasonReport =
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
 export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
-export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
+export type TradeBlockData = { status?: TeamStatus; team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
 export type DealMove =
   | { from: number; to: number; playerId: number }
   | { from: number; to: number; pick: { year: number; round: number; original: number } }
@@ -125,7 +130,7 @@ export type AssetRow =
   | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury; salary: number; years: number; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
 export type Offer = {
-  id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
+  status?: TeamStatus; id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
   give: AssetRow[]; get: AssetRow[]; moves: DealMove[]
 }
 export type SimPause = { reason: 'offer' | 'deadline'; text: string }
@@ -215,6 +220,7 @@ export const api = {
   sim: (b: { days?: number; toEnd?: boolean; auto?: boolean }) => post<SimResult>('/api/sim', b),
   standings: () => get<Standings>('/api/standings'),
   leaders: () => get<Leaders>('/api/leaders'),
+  teams: () => get<{ teams: TeamRow[] }>('/api/teams'),
   team: (id: number) => get<TeamPage>(`/api/team/${id}`),
   player: (id: number) => get<PlayerPage>(`/api/player/${id}`),
   schedule: (team?: number) => get<Schedule>('/api/schedule' + (team === undefined ? '' : `?team=${team}`)),

@@ -181,6 +181,12 @@ Written 2026-11-14 from the main session's general knowledge of console franchis
 
 ## Update log (newest first)
 
+### 2026-11-15, Teams tab and team direction
+- Owner asked to see which teams are proposing trades, a Teams tab with everything, and which teams are buying, selling or chasing a title. Engine: `engine/teamstatus.go` (`TeamStatuses`, `TeamStatusOf`, bands in `StatusBands`: Contender 0.8, Buyer 0.5, Seller 0.2 on the contend factor; the Buyer line is the same constant the proposal code uses). API: `GET /api/teams` (record, rank, payroll, cap room, top-8 average, best player, status, pending offers) and `status` on the team page, trade block and offers. Screens: `pages/Teams.tsx` (offers at the top, filters, sortable table, legend), `StatusChip` on the team page, Trade screen and offers.
+- Verified by the main session: `go vet`, `go test ./... -count=1`, web build; on port 8097 an offer arrived on day 4 and the Teams page showed it with the proposer's status, the table, filters row and team page chip, at wide and phone width, no console errors. Status counts seen: 6 contenders, 9 buyers, 9 sellers, 6 rebuilding.
+- Not tried: clicking each filter and column sort by hand, the chip on the Trade screen, Accept/Decline from the Teams page. `status` on `/api/offers` has no test.
+- Owner decisions the same day: add a mid-level exception and restricted free agency, modelled on the real NBA rules (next piece). The owner allowed browsing to check the real rules.
+
 ### 2026-11-14, watch the next game
 - Owner asked to be able to watch the game when playing just the next day. New menu action `watch_day` ("Watch next game") in `NextActions` (`engine/phase.go`); the front end opens the sim window for one day with the live game forced on (`SimPlan.watch`), titled "Game day". "Sim next day" itself is unchanged (instant). `phase_test.go` expects the new action in the menu list (a spec change, not a weakened test).
 - Verified by the main session: `go vet`, `go test ./... -count=1`, web build; on port 8097 the menu showed the entry, the game played live, 64x finished it, the window showed the final and standings, no console errors. `main` was pushed earlier today at 84cace9 with the owner's go-ahead; this piece is merged locally only.

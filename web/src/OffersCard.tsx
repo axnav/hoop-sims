@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { api, type AssetRow, type Offer } from './api'
 import { useFlow } from './flow'
-import { Card, Delta, ErrorBox, InjuryTag, TeamBadge, TierChip, money } from './ui'
+import { Card, Delta, ErrorBox, InjuryTag, StatusChip, TeamBadge, TierChip, money } from './ui'
 
 function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
   return (
@@ -81,7 +81,7 @@ export function OfferList({ offers, compact = false, onChangeIt, onAccept, onRej
       {accept.isError && accept.variables === o.id && <div className="mt-2"><ErrorBox error={accept.error} /></div>}
     </div>
   )
-  const title = (o: Offer) => <span className="flex items-center gap-2"><TeamBadge team={o.team} size={18} />Offer from {o.team.fullName}</span>
+  const title = (o: Offer) => <span className="flex items-center gap-2"><TeamBadge team={o.team} size={18} />Offer from {o.team.fullName}<StatusChip status={o.status} /></span>
   const expires = (o: Offer) => <span className="text-[11px] text-muted">expires in {o.daysLeft} {o.daysLeft === 1 ? 'day' : 'days'}</span>
   return (
     <div className="space-y-3">

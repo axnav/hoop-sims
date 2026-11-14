@@ -1515,3 +1515,43 @@ func TestInSeasonDevAPI(t *testing.T) {
 		t.Fatalf("development after a plain day: %v", r["development"])
 	}
 }
+
+func TestTeamsListAndStatus(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 7, "team": 3}, 200)
+	valid := map[string]bool{"contender": true, "buyer": true, "seller": true, "rebuilding": true}
+	checkStatus := func(where string, v any) {
+		st, _ := v.(M)
+		if st == nil || !valid[st["key"].(string)] || st["label"] == "" || st["wants"] == "" {
+			t.Fatalf("%s: bad status %v", where, v)
+		}
+	}
+	rows := c.call("GET", "/api/teams", nil, 200)["teams"].([]any)
+	if len(rows) != 30 {
+		t.Fatalf("%d teams", len(rows))
+	}
+	users := 0
+	for i, x := range rows {
+		r := x.(M)
+		for _, k := range []string{"team", "w", "l", "confRank", "payroll", "capRoom", "rosterSize", "top8", "star", "status", "offers", "isUser"} {
+			if _, ok := r[k]; !ok {
+				t.Fatalf("team row %d missing %q", i, k)
+			}
+		}
+		if num(r["team"].(M)["id"]) != i {
+			t.Fatalf("row %d out of order", i)
+		}
+		if r["star"].(M)["name"] == "" {
+			t.Fatalf("row %d star", i)
+		}
+		if r["isUser"] == true {
+			users++
+		}
+		checkStatus("teams row", r["status"])
+	}
+	if users != 1 {
+		t.Fatalf("%d user rows", users)
+	}
+	checkStatus("team page", c.call("GET", "/api/team/4", nil, 200)["status"])
+	checkStatus("trade block", c.call("GET", "/api/trade/block/4", nil, 200)["status"])
+}
