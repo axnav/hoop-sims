@@ -203,14 +203,107 @@ func blockIDs(c *tc, team int) (best, worst, top int) {
 	return
 }
 
+// salaryOf reads a player's salary from a team's trade block.
+func salaryOf(c *tc, team, id int) int {
+	for _, x := range c.call("GET", "/api/trade/block/"+itoa(team), nil, 200)["players"].([]any) {
+		if p := x.(M); num(p["id"]) == id {
+			return num(p["salary"])
+		}
+	}
+	c.t.Fatalf("player %d not on the block of team %d", id, team)
+	return 0
+}
+
+// matchID picks a player from a team's block whose salary is close enough to
+// every reference salary that a swap is salary-legal both ways (the trade rule
+// allows 125% plus $250K). best chooses the highest trade value, else the lowest.
+func matchID(c *tc, team int, best bool, refs ...int) int {
+	c.t.Helper()
+	id, bv := -1, 0.0
+	for _, x := range c.call("GET", "/api/trade/block/"+itoa(team), nil, 200)["players"].([]any) {
+		p := x.(M)
+		sal, ok := num(p["salary"]), true
+		for _, r := range refs {
+			if sal > r*5/4+250 || r > sal*5/4+250 {
+				ok = false
+			}
+		}
+		v := p["value"].(float64)
+		if ok && (id < 0 || (best && v > bv) || (!best && v < bv)) {
+			id, bv = num(p["id"]), v
+		}
+	}
+	if id < 0 {
+		c.t.Fatalf("no salary-matched player on team %d for %v", team, refs)
+	}
+	return id
+}
+
+// roomiest returns the team (not except) with the most cap room.
+func roomiest(c *tc, except int) int {
+	best, room := -1, -1<<30
+	for id := 0; id < 30; id++ {
+		if id == except {
+			continue
+		}
+		if r := num(c.call("GET", "/api/team/"+itoa(id), nil, 200)["payroll"].(M)["room"]); r > room {
+			best, room = id, r
+		}
+	}
+	return best
+}
+
+// generousPair finds the salary-legal swap where team mine gives the most trade
+// value over what it gets back from team theirs. A side is legal when it ends
+// at or under the cap, or takes back at most 125% of what it sends plus $250K.
+func generousPair(c *tc, mine, theirs int) (give, get int) {
+	c.t.Helper()
+	ba := c.call("GET", "/api/trade/block/"+itoa(mine), nil, 200)
+	bb := c.call("GET", "/api/trade/block/"+itoa(theirs), nil, 200)
+	legal := func(blk M, in, out int) bool {
+		pay := blk["payroll"].(M)
+		return num(pay["payroll"])+in-out <= num(pay["cap"]) || in <= out*5/4+250
+	}
+	best, found := 0.0, false
+	for _, x := range ba["players"].([]any) {
+		for _, y := range bb["players"].([]any) {
+			p, q := x.(M), y.(M)
+			sp, sq := num(p["salary"]), num(q["salary"])
+			if !legal(ba, sq, sp) || !legal(bb, sp, sq) {
+				continue
+			}
+			if d := p["value"].(float64) - q["value"].(float64); !found || d > best {
+				best, found, give, get = d, true, num(p["id"]), num(q["id"])
+			}
+		}
+	}
+	if !found {
+		c.t.Fatalf("no salary-legal pair between teams %d and %d", mine, theirs)
+	}
+	return
+}
+
+// dealTeams returns the per-team verdicts, failing with the problem text if the deal is invalid.
+func dealTeams(t *testing.T, v M) []any {
+	t.Helper()
+	if v["valid"] != true {
+		t.Fatalf("deal invalid: %v", v["problem"])
+	}
+	return v["teams"].([]any)
+}
+
 func TestTrades(t *testing.T) {
 	c := newTC(t)
 	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
 	if c.call("GET", "/api/trade/status", nil, 200)["open"] != true {
 		t.Fatal("window should be open at season start")
 	}
-	myBest, myWorst, _ := blockIDs(c, 3)
-	_, theirWorst, theirBest := blockIDs(c, 4)
+	_, myWorst, _ := blockIDs(c, 3)
+	// salary-legal partners: similar salaries so the cap rules stay out of the way
+	theirBest := matchID(c, 4, true, salaryOf(c, 3, myWorst))
+	// the generous swap goes to the team with the most cap room (it must absorb salary)
+	gp := roomiest(c, 3)
+	myBest, theirWorst := generousPair(c, 3, gp)
 	// lopsided: my worst for their best
 	v := c.call("POST", "/api/trade/evaluate", M{"team": 4, "give": []int{myWorst}, "get": []int{theirBest}}, 200)
 	if v["valid"] != true || v["accept"] != false || v["reason"] == "" {
@@ -219,15 +312,15 @@ func TestTrades(t *testing.T) {
 	c.call("POST", "/api/trade/execute", M{"team": 4, "give": []int{myWorst}, "get": []int{theirBest}}, 409)
 	c.call("POST", "/api/trade/counter", M{"team": 4, "give": []int{myWorst}, "get": []int{theirBest}}, 200)
 	// generous: my best for their worst
-	v = c.call("POST", "/api/trade/evaluate", M{"team": 4, "give": []int{myBest}, "get": []int{theirWorst}}, 200)
+	v = c.call("POST", "/api/trade/evaluate", M{"team": gp, "give": []int{myBest}, "get": []int{theirWorst}}, 200)
 	if v["accept"] != true {
 		t.Fatalf("generous offer refused: %v", v)
 	}
-	r := c.call("POST", "/api/trade/execute", M{"team": 4, "give": []int{myBest}, "get": []int{theirWorst}}, 200)
+	r := c.call("POST", "/api/trade/execute", M{"team": gp, "give": []int{myBest}, "get": []int{theirWorst}}, 200)
 	if len(r["moved"].([]any)) != 2 || r["state"] == nil {
 		t.Fatalf("execute: %v", r)
 	}
-	for _, id := range []int{3, 4} {
+	for _, id := range []int{3, gp} {
 		if n := len(c.call("GET", "/api/team/"+itoa(id), nil, 200)["roster"].([]any)); n != 13 {
 			t.Fatalf("team %d roster %d", id, n)
 		}
@@ -266,13 +359,14 @@ func TestDeals(t *testing.T) {
 		p := picks[i].(M)
 		return M{"year": p["year"], "round": p["round"], "original": num(p["original"].(M)["id"])}
 	}
-	_, theirWorst, _ := blockIDs(c, 4)
-	_, _, third := blockIDs(c, 5)
-	// two-team: my first-round pick for their worst player
+	// two-team: my first-round pick for their worst player (salaries matched)
 	_, myWorst, _ := blockIDs(c, 3)
+	mySal := salaryOf(c, 3, myWorst)
+	theirWorst := matchID(c, 4, false, mySal)
+	third := matchID(c, 5, false, mySal, salaryOf(c, 4, theirWorst))
 	moves := []M{{"from": 3, "to": 4, "pick": myPick(0)}, {"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 3, "playerId": theirWorst}}
 	v := c.call("POST", "/api/deal/evaluate", M{"moves": moves}, 200)
-	if v["valid"] != true || len(v["teams"].([]any)) != 1 {
+	if len(dealTeams(t, v)) != 1 {
 		t.Fatalf("two-team: %v", v)
 	}
 	vt := v["teams"].([]any)[0].(M)
@@ -283,17 +377,18 @@ func TestDeals(t *testing.T) {
 	moves3 := []M{{"from": 3, "to": 4, "pick": myPick(0)}, {"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 5, "playerId": theirWorst},
 		{"from": 5, "to": 3, "playerId": third}}
 	v = c.call("POST", "/api/deal/evaluate", M{"moves": moves3}, 200)
-	if v["valid"] != true || len(v["teams"].([]any)) != 2 {
+	if len(dealTeams(t, v)) != 2 {
 		t.Fatalf("three-team: %v", v)
 	}
 	// malformed moves
 	c.call("POST", "/api/deal/evaluate", M{"moves": []M{{"from": 3, "to": 4}}}, 400)
 	c.call("POST", "/api/deal/evaluate", M{"moves": []M{{"from": 3, "to": 4, "playerId": 1, "pick": myPick(0)}}}, 400)
 	// generous: all my picks plus my best player for their worst player
-	myBest, _, _ := blockIDs(c, 3)
-	gen := []M{{"from": 4, "to": 3, "playerId": theirWorst}, {"from": 3, "to": 4, "playerId": myBest}}
+	gp := roomiest(c, 3)
+	myBest, theirWorst2 := generousPair(c, 3, gp)
+	gen := []M{{"from": gp, "to": 3, "playerId": theirWorst2}, {"from": 3, "to": gp, "playerId": myBest}}
 	for i := 0; i < 4; i++ {
-		gen = append(gen, M{"from": 3, "to": 4, "pick": myPick(i)})
+		gen = append(gen, M{"from": 3, "to": gp, "pick": myPick(i)})
 	}
 	v = c.call("POST", "/api/deal/evaluate", M{"moves": gen}, 200)
 	if v["accept"] != true {
@@ -307,8 +402,8 @@ func TestDeals(t *testing.T) {
 	if len(tx) != 1 || len(tx[0].(M)["picks"].([]any)) != 4 {
 		t.Fatalf("transactions: %v", tx)
 	}
-	if n := len(c.call("GET", "/api/trade/block/4", nil, 200)["picks"].([]any)); n != 12 {
-		t.Fatalf("team 4 picks %d", n)
+	if n := len(c.call("GET", "/api/trade/block/"+itoa(gp), nil, 200)["picks"].([]any)); n != 12 {
+		t.Fatalf("team %d picks %d", gp, n)
 	}
 	// a rejected deal is a 409
 	c.call("POST", "/api/deal/execute", M{"moves": []M{{"from": 3, "to": 4, "playerId": 0}}}, 409)
@@ -326,13 +421,13 @@ func TestNegotiationAPI(t *testing.T) {
 		}
 	}
 	_, myWorst, _ := blockIDs(c, 3)
-	_, _, theirBest := blockIDs(c, 4)
+	theirBest := matchID(c, 4, true, salaryOf(c, 3, myWorst))
 	moves := []M{{"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 3, "playerId": theirBest}}
 	v := c.call("POST", "/api/deal/evaluate", M{"moves": moves}, 200)
 	if v["accept"] != false {
 		t.Fatalf("expected refusal: %v", v)
 	}
-	tv := v["teams"].([]any)[0].(M)
+	tv := dealTeams(t, v)[0].(M)
 	if tv["mood"] == "" || tv["mood"] == nil || tv["askText"] == "" || tv["askText"] == nil {
 		t.Fatalf("verdict: %v", tv)
 	}
@@ -341,7 +436,7 @@ func TestNegotiationAPI(t *testing.T) {
 			t.Fatalf("no askLabel: %v", tv)
 		}
 		v2 := c.call("POST", "/api/deal/evaluate", M{"moves": append(moves, ask)}, 200)
-		if v2["valid"] != true || v2["teams"].([]any)[0].(M)["accept"] != true {
+		if dealTeams(t, v2)[0].(M)["accept"] != true {
 			t.Fatalf("ask did not satisfy: %v", v2)
 		}
 	}
@@ -546,5 +641,203 @@ func TestInjuriesAndCommissioner(t *testing.T) {
 	healed := c.call("POST", "/api/admin/player/"+strconv.Itoa(num(first["playerId"])), M{"heal": true}, 200)
 	if _, has := healed["injury"]; has {
 		t.Fatalf("still injured: %v", healed)
+	}
+}
+
+func TestContractsInSeason(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	team := c.call("GET", "/api/team/3", nil, 200)
+	sum := 0
+	for _, x := range team["roster"].([]any) {
+		r := x.(M)
+		if num(r["salary"]) <= 0 || num(r["years"]) < 1 || r["expiring"] != false {
+			t.Fatalf("roster row: %v", r)
+		}
+		sum += num(r["salary"])
+	}
+	pay := team["payroll"].(M)
+	if num(pay["payroll"]) != sum {
+		t.Fatalf("payroll %v, roster sums to %d", pay["payroll"], sum)
+	}
+	if !(num(pay["cap"]) < num(pay["taxLine"]) && num(pay["taxLine"]) < num(pay["ceiling"])) || num(pay["minSalary"]) <= 0 ||
+		num(pay["room"]) != num(pay["cap"])-num(pay["payroll"]) {
+		t.Fatalf("payroll object: %v", pay)
+	}
+	pid := num(team["roster"].([]any)[0].(M)["id"])
+	pl := c.call("GET", "/api/player/"+itoa(pid), nil, 200)
+	if num(pl["salary"]) <= 0 || num(pl["years"]) < 1 {
+		t.Fatalf("player: %v", pl)
+	}
+	blk := c.call("GET", "/api/trade/block/4", nil, 200)
+	if blk["payroll"] == nil {
+		t.Fatalf("block without payroll")
+	}
+	for _, x := range blk["players"].([]any) {
+		if r := x.(M); num(r["salary"]) <= 0 || num(r["years"]) < 1 {
+			t.Fatalf("block row: %v", r)
+		}
+	}
+	st := c.call("GET", "/api/state", nil, 200)
+	if num(st["expiring"]) != 0 || st["payroll"] == nil {
+		t.Fatalf("state: %v", st)
+	}
+	ex := c.call("GET", "/api/contracts/expiring", nil, 200)
+	if len(ex["players"].([]any)) != 0 || ex["open"] != false || ex["payroll"] == nil {
+		t.Fatalf("expiring in season: %v", ex)
+	}
+	c.call("POST", "/api/contracts/release", M{"playerId": pid}, 409)
+	c.call("POST", "/api/contracts/resign", M{"playerId": pid}, 409)
+}
+
+func TestDealSalaryRules(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	// team 4 is over the cap: it sends its cheapest player and takes my most expensive
+	var cheap, dear, cheapSal, dearSal int
+	cheapSal = 1 << 30
+	for _, x := range c.call("GET", "/api/trade/block/4", nil, 200)["players"].([]any) {
+		if r := x.(M); num(r["salary"]) < cheapSal {
+			cheap, cheapSal = num(r["id"]), num(r["salary"])
+		}
+	}
+	for _, x := range c.call("GET", "/api/trade/block/3", nil, 200)["players"].([]any) {
+		if r := x.(M); num(r["salary"]) > dearSal {
+			dear, dearSal = num(r["id"]), num(r["salary"])
+		}
+	}
+	moves := []M{{"from": 3, "to": 4, "playerId": dear}, {"from": 4, "to": 3, "playerId": cheap}}
+	v := c.call("POST", "/api/deal/evaluate", M{"moves": moves}, 200)
+	if v["valid"] != false || v["problem"] == "" {
+		t.Fatalf("expected a salary problem: %v", v)
+	}
+	ps := v["payrolls"].([]any)
+	if len(ps) != 2 {
+		t.Fatalf("payrolls: %v", ps)
+	}
+	want := []struct{ team, in, out int }{{3, cheapSal, dearSal}, {4, dearSal, cheapSal}}
+	for i, x := range ps {
+		r := x.(M)
+		if num(r["team"].(M)["id"]) != want[i].team || num(r["in"]) != want[i].in || num(r["out"]) != want[i].out ||
+			num(r["after"]) != num(r["before"])+num(r["in"])-num(r["out"]) {
+			t.Fatalf("payroll entry %d: %v", i, r)
+		}
+		if num(r["before"]) != num(c.call("GET", "/api/team/"+itoa(want[i].team), nil, 200)["payroll"].(M)["payroll"]) {
+			t.Fatalf("before does not match team payroll: %v", r)
+		}
+	}
+}
+
+func TestContractsOffseason(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 7, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
+	c.call("POST", "/api/playoffs/start", nil, 200)
+	c.call("POST", "/api/playoffs/all", nil, 200)
+	c.call("POST", "/api/offseason/begin", nil, 200)
+
+	ex := c.call("GET", "/api/contracts/expiring", nil, 200)
+	list := ex["players"].([]any)
+	if ex["open"] != true || len(list) < 2 {
+		t.Fatalf("expiring: open=%v n=%d", ex["open"], len(list))
+	}
+	prev := 1 << 30
+	for _, x := range list {
+		r := x.(M)
+		if num(r["askSalary"]) <= 0 || num(r["askYears"]) < 1 || r["tier"] == "" || r["canReSign"] == nil || r["problem"] == nil {
+			t.Fatalf("expiring row: %v", r)
+		}
+		if num(r["ovr"]) > prev {
+			t.Fatalf("not sorted by ovr")
+		}
+		prev = num(r["ovr"])
+	}
+	if st := c.call("GET", "/api/state", nil, 200); num(st["expiring"]) != len(list) {
+		t.Fatalf("state.expiring %v, list %d", st["expiring"], len(list))
+	}
+	team := c.call("GET", "/api/team/3", nil, 200)
+	flagged := 0
+	for _, x := range team["roster"].([]any) {
+		if x.(M)["expiring"] == true {
+			flagged++
+		}
+	}
+	if flagged != len(list) {
+		t.Fatalf("roster flags %d, list %d", flagged, len(list))
+	}
+	has := func(roster []any, id int) bool {
+		for _, x := range roster {
+			if num(x.(M)["id"]) == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	// re-sign the first one who can be
+	resigned := -1
+	for _, x := range list {
+		r := x.(M)
+		if r["canReSign"] != true {
+			continue
+		}
+		out := c.call("POST", "/api/contracts/resign", M{"playerId": num(r["id"])}, 200)
+		if len(out["expiring"].(M)["players"].([]any)) != len(list)-1 || num(out["state"].(M)["expiring"]) != len(list)-1 {
+			t.Fatalf("resign: %v", out)
+		}
+		resigned = num(r["id"])
+		break
+	}
+	if resigned < 0 {
+		t.Fatalf("nobody could be re-signed")
+	}
+	pl := c.call("GET", "/api/player/"+itoa(resigned), nil, 200)
+	if num(pl["years"]) < 1 || num(pl["salary"]) <= 0 {
+		t.Fatalf("re-signed player: %v", pl)
+	}
+	c.call("POST", "/api/contracts/resign", M{"playerId": resigned}, 409)
+
+	// release another expiring one
+	list = c.call("GET", "/api/contracts/expiring", nil, 200)["players"].([]any)
+	if len(list) == 0 {
+		t.Fatalf("no one left to release")
+	}
+	gone := num(list[0].(M)["id"])
+	out := c.call("POST", "/api/contracts/release", M{"playerId": gone}, 200)
+	if len(out["expiring"].(M)["players"].([]any)) != len(list)-1 {
+		t.Fatalf("release: %v", out)
+	}
+	if has(c.call("GET", "/api/team/3", nil, 200)["roster"].([]any), gone) {
+		t.Fatalf("released player still on roster")
+	}
+	c.call("POST", "/api/contracts/release", M{"playerId": gone}, 409)
+
+	// through the draft and out
+	left := c.call("GET", "/api/contracts/expiring", nil, 200)["players"].([]any)
+	c.call("POST", "/api/offseason/to-draft", nil, 200)
+	c.call("POST", "/api/draft/auto", nil, 200)
+	if ex := c.call("GET", "/api/contracts/expiring", nil, 200); ex["open"] != true {
+		t.Fatalf("still open after the draft: %v", ex["open"])
+	}
+	c.call("POST", "/api/offseason/finish", nil, 200)
+	roster := c.call("GET", "/api/team/3", nil, 200)["roster"].([]any)
+	if len(roster) != 13 {
+		t.Fatalf("roster %d after offseason", len(roster))
+	}
+	for _, x := range left {
+		if has(roster, num(x.(M)["id"])) {
+			t.Fatalf("ignored expiring player %v still on roster", x.(M)["name"])
+		}
+	}
+	if !has(roster, resigned) {
+		t.Fatalf("re-signed player gone")
+	}
+	st := c.call("GET", "/api/state", nil, 200)
+	if num(st["expiring"]) != 0 {
+		t.Fatalf("state.expiring %v", st["expiring"])
+	}
+	if ex := c.call("GET", "/api/contracts/expiring", nil, 200); ex["open"] != false || len(ex["players"].([]any)) != 0 {
+		t.Fatalf("expiring after offseason: %v", ex)
 	}
 }

@@ -269,6 +269,9 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/options", true, s.optionsGet)
 	p("/api/options", true, s.optionsSet)
 	g("/api/injuries", true, s.injuries)
+	g("/api/contracts/expiring", true, s.expiring)
+	p("/api/contracts/resign", true, func(r *http.Request) (any, error) { return s.contractAction(s.lg.ReSign)(r) })
+	p("/api/contracts/release", true, func(r *http.Request) (any, error) { return s.contractAction(s.lg.Release)(r) })
 	p("/api/admin/player/{id}", true, s.adminPlayer)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, M{"error": "not found"})

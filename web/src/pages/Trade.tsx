@@ -7,7 +7,7 @@ import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type 
 import { useFlow } from '../flow'
 import { TxItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { Card, ErrorBox, Page, InjuryTag, PlayerLink, Q, Spinner, TeamBadge, TierChip, ovrColor } from '../ui'
+import { Card, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, TeamBadge, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
@@ -33,6 +33,7 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
       <span className="w-8 text-right text-xs text-muted tabular-nums">{p.age}y</span>
       <b className="w-7 text-right tabular-nums" style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b>
       <span className="w-7 text-right text-muted tabular-nums">{p.pot}</span>
+      <span className="w-14 text-right text-xs tabular-nums" title={`${p.years} years left`}>{money(p.salary)}</span>
       <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2" title={`Trade value ${p.value}`}>
         <span className="block h-full rounded bg-accent" style={{ width: `${Math.max(4, (100 * p.value) / maxV)}%` }} />
       </span>
@@ -294,9 +295,10 @@ function TradeScreen() {
     const team = slot === 0 ? undefined : teamOf(id)
     return (
       <Card key={id} title={slot === 0 ? 'Your roster' : team ? team.fullName : 'Partner'}
-        right={slot === 0 ? <span className="text-[11px] text-muted">Pos · age · OVR · POT · value</span> : <span className="flex items-center gap-1 text-[11px] text-muted"><Lock size={11} />core players cost a lot</span>}>
+        right={slot === 0 ? <span className="text-[11px] text-muted">Pos · age · OVR · POT · salary · value</span> : <span className="flex items-center gap-1 text-[11px] text-muted"><Lock size={11} />core players cost a lot</span>}>
         <Q q={q}>{() => (
           <>
+            <PayrollBar p={q.data!.payroll} compact />
             <ul>{q.data!.players.filter((p) => !selKeys.has(pkey(p.id))).map((p) => <Row key={p.id} p={p} maxV={maxV} disabled={!lock} onPick={() => togglePlayer(id, p)} />)}</ul>
             {q.data!.picks.length > 0 && <div className="h2 px-2 pt-3">Draft picks</div>}
             <ul>{q.data!.picks.filter((k) => !selKeys.has(kkey({ year: k.year, round: k.round, original: k.original.id }))).map((k) => <PickRow key={kkey({ year: k.year, round: k.round, original: k.original.id })} k={k} maxV={maxV} disabled={!lock} onPick={() => togglePick(id, k)} />)}</ul>
@@ -381,10 +383,31 @@ function TradeScreen() {
                 ))}
               </div>
             )}
+            {deal?.payrolls && deal.payrolls.length > 0 && (
+              <div className="mt-3 overflow-x-auto">
+                <table className="tbl">
+                  <thead><tr><th>Team</th><th>Payroll before &rarr; after</th><th>Salary moved</th></tr></thead>
+                  <tbody>
+                    {deal.payrolls.map((pr) => {
+                      const pay = qs.map((x) => x.data).find((b) => b?.team.id === pr.team.id)?.payroll
+                      const bad = pay ? pr.after > pay.ceiling : false
+                      const warn = pay ? pr.after > pay.cap : false
+                      return (
+                        <tr key={pr.team.id}>
+                          <td><span className="inline-flex items-center gap-1.5"><TeamBadge team={pr.team} size={16} />{pr.team.id === me ? 'You' : pr.team.abbr}</span></td>
+                          <td>{money(pr.before)} &rarr; <b className={bad ? 'text-loss' : warn ? 'text-amber-400' : ''}>{money(pr.after)}</b></td>
+                          <td className="text-muted">Takes in {money(pr.in)} &middot; sends out {money(pr.out)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <div className="mt-2 text-[13px]">
               {preview && <div className="mb-1 flex items-center gap-1 font-semibold text-accent"><Sparkles size={14} />This is what it would take (highlighted).</div>}
               {preview && <div className={preview.verdict.accept ? 'text-win' : 'text-loss'}>{preview.verdict.reason}</div>}
-              {deal && !deal.valid && <div className="text-loss">{deal.problem}</div>}
+              {deal && !deal.valid && <div className="font-semibold text-loss">{deal.problem}</div>}
               {notice && <div className="text-loss">{notice}</div>}
               {evalQ.isError && ready && <ErrorBox error={evalQ.error} />}
               {exec.isError && <ErrorBox error={exec.error} />}

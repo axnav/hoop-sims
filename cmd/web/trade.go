@@ -43,7 +43,8 @@ func (s *server) tradeBlock(r *http.Request) (any, error) {
 	for _, p := range s.lg.PicksOwnedBy(id) {
 		picks = append(picks, s.pickRow(id, p.Year, p.Round, p.Original))
 	}
-	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows, "picks": picks}, nil
+	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows, "picks": picks,
+		"payroll": s.payrollObj(id)}, nil
 }
 
 // playerRow is one trade-block row for a player on team owner's roster.
@@ -57,7 +58,9 @@ func (s *server) playerRow(owner int, a engine.TradeAsset) M {
 	}
 	row := M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
 		"value": round1(a.Value), "untouchable": a.Untouchable, "tier": tier}
-	addInjury(row, s.lg.FindPlayer(a.PlayerID))
+	pl := s.lg.FindPlayer(a.PlayerID)
+	addInjury(row, pl)
+	addContract(row, pl)
 	return row
 }
 
@@ -208,7 +211,7 @@ func (s *server) dealEvaluate(r *http.Request) (any, error) {
 		}
 		teams = append(teams, row)
 	}
-	return M{"valid": v.Valid, "problem": v.Problem, "accept": v.Accept, "teams": teams}, nil
+	return M{"valid": v.Valid, "problem": v.Problem, "accept": v.Accept, "teams": teams, "payrolls": s.dealPayrolls(d)}, nil
 }
 
 func (s *server) dealExecute(r *http.Request) (any, error) {
@@ -263,4 +266,33 @@ func (s *server) offseasonTrades(reportYear int) []M {
 		out = append(out, s.txDTO(t))
 	}
 	return out
+}
+
+// dealPayrolls shows each team's payroll before and after the deal (plain sums
+// of the salaries that move).
+func (s *server) dealPayrolls(d engine.Deal) []M {
+	order := []int{}
+	in, out := map[int]int{}, map[int]int{}
+	seen := func(id int) {
+		if _, ok := in[id]; !ok {
+			in[id], out[id] = 0, 0
+			order = append(order, id)
+		}
+	}
+	for _, m := range d.Moves {
+		seen(m.From)
+		seen(m.To)
+		if m.Kind == engine.PlayerAsset {
+			if p := s.lg.FindPlayer(m.PlayerID); p != nil {
+				out[m.From] += p.Contract.Salary
+				in[m.To] += p.Contract.Salary
+			}
+		}
+	}
+	rows := []M{}
+	for _, id := range order {
+		before := s.lg.Payroll(id)
+		rows = append(rows, M{"team": s.team(id), "before": before, "after": before + in[id] - out[id], "in": in[id], "out": out[id]})
+	}
+	return rows
 }

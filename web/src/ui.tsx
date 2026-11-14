@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Injury, Team } from './api'
+import type { Injury, Payroll, Team } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -197,3 +197,44 @@ export function InjuryTag({ injury }: { injury?: Injury }) {
       className="ml-1.5 shrink-0 rounded bg-loss/20 px-1.5 py-px align-middle text-[10px] font-extrabold tracking-wide text-loss ring-1 ring-loss/50">INJ</span>
   )
 }
+
+// Money values from the API are integers in thousands of dollars.
+export const money = (k: number) => {
+  const neg = k < 0
+  const a = Math.abs(k)
+  const t = a >= 1000 ? `$${(a / 1000).toFixed(1)}M` : `$${Math.round(a)}K`
+  return neg ? `-${t}` : t
+}
+
+// Bar scaled to the hard ceiling, with marks at the cap, tax line and ceiling.
+export function PayrollBar({ p, compact = false }: { p: Payroll; compact?: boolean }) {
+  const max = Math.max(p.ceiling, p.payroll, 1)
+  const at = (v: number) => `${Math.min(100, (100 * v) / max)}%`
+  const fill = p.payroll > p.taxLine ? 'bg-loss' : p.payroll > p.cap ? 'bg-amber-400' : 'bg-win'
+  const marks: [string, number][] = [['Cap', p.cap], ['Tax', p.taxLine], ['Max', p.ceiling]]
+  return (
+    <div className={compact ? 'px-2 pb-1' : 'px-2 pb-2'}>
+      <div className={`relative ${compact ? 'h-7' : 'h-9'}`}>
+        <div className="absolute inset-x-0 top-0 h-2.5 overflow-hidden rounded-full bg-panel2">
+          <div className={`h-full rounded-full ${fill}`} style={{ width: at(p.payroll) }} />
+        </div>
+        {marks.map(([l, v], i) => (
+          <div key={l} className="absolute top-0" style={{ left: at(v), transform: i === marks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
+            <div className="mx-auto h-3.5 w-px bg-ink/60" style={i === marks.length - 1 ? { marginRight: 0 } : undefined} />
+            <div className="whitespace-nowrap text-[10px] leading-tight text-muted">{l} {money(v)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 text-[12px] text-muted">
+        <span>Payroll <b className="text-ink tabular-nums">{money(p.payroll)}</b></span>
+        {' \u00b7 '}
+        <span className={p.room < 0 ? 'text-loss' : ''}>{p.room < 0 ? `Over the cap by ${money(-p.room)}` : `Cap room ${money(p.room)}`}</span>
+        {p.taxBill > 0 && <>{' \u00b7 '}<span className="font-semibold text-loss">Luxury tax {money(p.taxBill)}</span></>}
+      </div>
+    </div>
+  )
+}
+
+export const ExpiringChip = () => (
+  <span className="ml-1.5 shrink-0 rounded bg-amber-400/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-400 ring-1 ring-amber-400/50">Expiring</span>
+)

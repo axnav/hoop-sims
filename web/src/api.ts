@@ -2,6 +2,7 @@ export type Team = {
   id: number; abbr: string; city: string; name: string; fullName: string
   primary: string; secondary: string; conf: number; confName: string
 }
+export type Payroll = { payroll: number; cap: number; taxLine: number; ceiling: number; room: number; taxBill: number; minSalary: number }
 export type Injury = { name: string; gamesLeft: number; serious: boolean }
 export type InjuryLine = { playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
 export type Award = { playerId: number; name: string; team: Team; gp: number; ppg: number; rpg: number; apg: number } | null
@@ -32,6 +33,8 @@ export type GameState = {
   actions: Action[] | null
   offers: number
   injured: number
+  expiring: number
+  payroll: Payroll
 }
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
@@ -45,12 +48,13 @@ export type RosterRow = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; starter: boolean
   gp: number; mpg: number; ppg: number; rpg: number; apg: number
   injury?: Injury
+  salary: number; years: number; expiring: boolean
 }
-export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[] }
+export type TeamPage = { team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
-  role: string; usage: number
+  role: string; usage: number; salary: number; years: number
   injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
   ratings: { key: string; label: string; value: number }[]; experience: number; draftYear: number; draftPick: number
   season: StatLine; playoffs: StatLine
@@ -83,21 +87,23 @@ export type OffseasonReport =
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
-export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury }
+export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
-export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[] }
+export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
 export type DealMove =
   | { from: number; to: number; playerId: number }
   | { from: number; to: number; pick: { year: number; round: number; original: number } }
+export type DealPayroll = { team: Team; before: number; after: number; in: number; out: number }
 export type DealVerdict = {
   valid: boolean; problem: string; accept: boolean
+  payrolls?: DealPayroll[]
   teams: {
     team: Team; accept: boolean; reason: string; gives: number; gets: number; needed: number
     mood: 'accept' | 'close' | 'far' | 'no'; askText: string; ask?: DealMove; askLabel?: string
   }[]
 }
 export type AssetRow =
-  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury }
+  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury; salary: number; years: number }
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
 export type Offer = {
   id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
@@ -108,6 +114,11 @@ export type SimResult = {
   days: DayResult[]; strip: { rank: number; team: Team; w: number; l: number }[]; state: GameState
   newOffers: number; pause?: SimPause; injuries: InjuryLine[]
 }
+export type ExpiringPlayer = {
+  id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
+  askSalary: number; askYears: number; canReSign: boolean; problem: string
+}
+export type Expiring = { players: ExpiringPlayer[]; payroll: Payroll; open: boolean }
 export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; commissioner: boolean }
 export type AdminEdit = { age?: number; potential?: number; ratings?: Record<string, number>; heal?: boolean }
 export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
@@ -198,5 +209,8 @@ export const api = {
   setOptions: (o: Partial<Options>) => post<Options>('/api/options', o),
   injuries: (team?: number | 'all') => get<{ injuries: InjuryLine[] }>('/api/injuries' + (team === undefined ? '' : `?team=${team}`)),
   adminEditPlayer: (id: number, b: AdminEdit) => post<PlayerPage>(`/api/admin/player/${id}`, b),
+  contractsExpiring: () => get<Expiring>('/api/contracts/expiring'),
+  contractResign: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/resign', { playerId }),
+  contractRelease: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/release', { playerId }),
   draftAuto: () => post<GameState>('/api/draft/auto'),
 }

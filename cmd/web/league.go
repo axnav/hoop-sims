@@ -78,6 +78,10 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		}
 	}
 	roster := []M{}
+	expiring := map[int]bool{}
+	for _, p := range lg.Expiring(id) {
+		expiring[p.ID] = true
+	}
 	for _, p := range t.Roster {
 		row := M{"id": p.ID, "name": p.Name, "age": p.Age, "pos": p.PosLabel(), "ovr": p.Overall(), "pot": p.Potential,
 			"starter": starters[p.ID], "gp": 0, "mpg": 0.0, "ppg": 0.0, "rpg": 0.0, "apg": 0.0}
@@ -85,11 +89,13 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 			row["gp"], row["mpg"], row["ppg"], row["rpg"], row["apg"] = ps.GP, float64(ps.Min)/float64(ps.GP), ps.PPG(), ps.RPG(), ps.APG()
 		}
 		addInjury(row, p)
+		addContract(row, p)
+		row["expiring"] = expiring[p.ID]
 		roster = append(roster, row)
 	}
 	st := lg.Season
 	return M{"team": s.team(id), "w": st.Wins[id], "l": st.Losses[id], "pd": st.PointDiff[id], "confRank": s.rank(id),
-		"isUser": id == lg.UserTeamID, "roster": roster}, nil
+		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": s.payrollObj(id)}, nil
 }
 
 func (s *server) findPlayer(id int) *engine.Player {
@@ -156,6 +162,7 @@ func (s *server) player(r *http.Request) (any, error) {
 		"editable": lg.Options.Commissioner,
 		"limits":   M{"minRating": engine.MinRating, "maxRating": engine.MaxRating, "minAge": engine.MinAge, "maxAge": engine.MaxAge}}
 	addInjury(out, p)
+	addContract(out, p)
 	return out, nil
 }
 

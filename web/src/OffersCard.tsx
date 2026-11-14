@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { api, type AssetRow } from './api'
 import { useFlow } from './flow'
-import { Card, ErrorBox, InjuryTag, TeamBadge, TierChip } from './ui'
+import { Card, ErrorBox, InjuryTag, TeamBadge, TierChip, money } from './ui'
 
 function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
   return (
@@ -19,6 +19,7 @@ function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
               <TierChip tier={r.tier} />
             </span>
             {r.kind === 'player' && <span className="text-xs text-muted tabular-nums">{r.pos} · {r.age}y · {r.ovr}/{r.pot}</span>}
+            {r.kind === 'player' && <span className="text-xs tabular-nums" title={`${r.years} years left`}>{money(r.salary)}</span>}
             <span className="w-10 text-right text-xs text-muted tabular-nums" title="Trade value">{r.value}</span>
           </li>
         ))}

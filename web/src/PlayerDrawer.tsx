@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { api, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { ErrorBox, InjuryTag, Q, Ring, TeamBadge, injuryText, ovrColor, f1 } from './ui'
+import { ErrorBox, InjuryTag, Q, Ring, TeamBadge, injuryText, ovrColor, f1, money } from './ui'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
   if (!s) return null
@@ -121,6 +121,11 @@ function Body({ id, close }: { id: number; close: () => void }) {
               <div className="mt-1 flex items-center gap-2 text-muted">
                 <span>{p.pos}</span><span>Age {p.age}</span><span>{p.status}</span>
               </div>
+              {p.salary > 0 && (
+                <div className="mt-1 text-sm font-semibold">
+                  {money(p.salary)} per season <span className="text-muted">&middot; {p.years === 0 && p.team ? 'Contract expiring' : `${p.years} ${p.years === 1 ? 'year' : 'years'} left`}</span>
+                </div>
+              )}
               <div className="mt-1 text-sm text-accent">{p.role} · shot tendency {p.usage}/90</div>
               {p.team && (
                 <button className="mt-2 inline-flex items-center gap-2 hover:text-accent" onClick={() => { close(); nav(`/team/${p.team!.id}`) }}>

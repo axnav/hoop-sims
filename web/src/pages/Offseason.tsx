@@ -4,6 +4,7 @@ import { motion } from 'motion/react'
 import { api, type Change } from '../api'
 import { useFlow } from '../flow'
 import { InlineContinue } from '../Inline'
+import { ExpiringCard } from '../ExpiringCard'
 import { TxItem } from '../TxItem'
 import { AnimatedNumber, Card, Page, PlayerLink, Q, TeamLink } from '../ui'
 
@@ -41,6 +42,7 @@ export default function Offseason() {
   const q = useQuery({ queryKey: ['offseason'], queryFn: api.offseason })
   return (
     <Page title="Offseason report" right={state?.phase === 'offseason' ? <InlineContinue /> : null}>
+      <ExpiringCard />
       <Q q={q} minH={400}>
         {(r) => {
           if (!r.available) return <div className="card p-8 text-center text-muted">No offseason in progress yet. Finish the playoffs first.</div>

@@ -35,7 +35,8 @@ func (s *server) assetRow(m engine.Move) M {
 			if a.PlayerID == m.PlayerID {
 				r := s.playerRow(owner, a)
 				row := M{"kind": "player", "playerId": a.PlayerID, "name": r["name"], "pos": r["pos"], "age": r["age"],
-					"ovr": r["ovr"], "pot": r["pot"], "value": r["value"], "tier": r["tier"]}
+					"ovr": r["ovr"], "pot": r["pot"], "value": r["value"], "tier": r["tier"],
+					"salary": r["salary"], "years": r["years"]}
 				if inj, ok := r["injury"]; ok {
 					row["injury"] = inj
 				}

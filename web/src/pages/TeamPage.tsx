@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Card, DataTable, Page, InjuryTag, PlayerLink, Q, TeamBadge, f1, ovrColor, type Col } from '../ui'
+import { Card, DataTable, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -11,11 +11,13 @@ export default function TeamPage() {
   const open = useOpenPlayer()
   const cols: Col<RosterRow>[] = [
     { accessorKey: 'starter', header: '', cell: (i) => (i.getValue() ? <Star size={12} className="fill-accent text-accent" /> : null), sortingFn: 'basic' },
-    { accessorKey: 'name', header: 'Player', cell: (i) => <><PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} /></>, sortDescFirst: false },
+    { accessorKey: 'name', header: 'Player', cell: (i) => <><PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} />{i.row.original.expiring && <ExpiringChip />}</>, sortDescFirst: false },
     { accessorKey: 'pos', header: 'Pos', sortDescFirst: false },
     { accessorKey: 'age', header: 'Age', num: true },
     { accessorKey: 'ovr', header: 'OVR', num: true, cell: (i) => <b style={{ color: ovrColor(i.getValue()) }}>{i.getValue()}</b> },
     { accessorKey: 'pot', header: 'POT', num: true },
+    { accessorKey: 'salary', header: 'Salary', num: true, cell: (i) => money(i.getValue()) },
+    { accessorKey: 'years', header: 'Yrs', num: true },
     { accessorKey: 'gp', header: 'GP', num: true },
     { accessorKey: 'mpg', header: 'MPG', num: true, cell: (i) => f1(i.getValue()) },
     { accessorKey: 'ppg', header: 'PPG', num: true, cell: (i) => f1(i.getValue()) },
@@ -29,6 +31,7 @@ export default function TeamPage() {
           title={<span className="flex items-center gap-3"><TeamBadge team={d.team} size={34} />{d.team.fullName}</span>}
           right={<div className="flex items-center gap-4 text-muted"><span className="font-bold tabular-nums text-ink">{d.w}-{d.l}</span><span>#{d.confRank} {d.team.confName}</span><Link className="link" to={`/schedule/${d.team.id}`}>Schedule</Link></div>}
         >
+          <Card title="Payroll" className="mb-4"><PayrollBar p={d.payroll} /></Card>
           <Card title="Roster" right={<span className="text-xs text-muted">Click a column to sort · starters marked</span>}>
             <DataTable data={d.roster} columns={cols} initialSort={[{ id: 'ovr', desc: true }]} onRow={(r) => open(r.id)} />
           </Card>
