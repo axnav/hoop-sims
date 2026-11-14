@@ -21,7 +21,7 @@ export function ExpiringCard() {
   const busy = resign.isPending || release.isPending
   return (
     <Card title={`Contracts ending (${d.players.length})`} className="mb-4">
-      <div className="px-2 pb-1 text-[13px] text-muted">Players you do not re-sign leave when the offseason ends.</div>
+      <div className="px-2 pb-1 text-[13px] text-muted">{d.open ? 'Players you do not re-sign become free agents when free agency begins.' : 'Free agency has begun, so these contracts can no longer be renewed here. Players not re-signed are in the free-agent pool.'}</div>
       <PayrollBar p={d.payroll} />
       <ul className="px-2 pb-1">
         {d.players.map((p) => (

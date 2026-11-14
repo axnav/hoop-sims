@@ -101,6 +101,9 @@ func (s *server) state() M {
 		}
 		out["draft"] = dr
 	}
+	if lg.FA != nil {
+		out["fa"] = s.faState()
+	}
 	// next action and menu
 	var na M
 	var menu []M

@@ -8,9 +8,11 @@ import (
 )
 
 // draftDoneLeague plays a season and the draft, stopping before free agency.
-func draftDoneLeague(seed uint64) *League {
+func draftDoneLeague(seed uint64) *League { return draftDoneLeagueFor(seed, 0) }
+
+func draftDoneLeagueFor(seed uint64, user int) *League {
 	lg := GenerateLeague(seed)
-	lg.UserTeamID = 0
+	lg.UserTeamID = user
 	lg.StartSeason()
 	lg.SimRegularSeason()
 	lg.SimPlayoffs()
@@ -156,15 +158,15 @@ func TestFreeAgencyFlowAndOffers(t *testing.T) {
 	low := FAOffer{ID: lg.FA.NextOfferID, Team: u.ID, PlayerID: other.ID, Salary: oask * 80 / 100 / 100 * 100, Years: 1, Day: 0}
 	lg.FA.Offers = []FAOffer{low}
 	lg.FA.Day = 0 // made today: cannot be accepted today
-	if s := lg.playersDecide(cf); len(s) != 0 {
+	if s := lg.playersDecide(cf, false); len(s) != 0 {
 		t.Fatal("an offer made today was accepted today")
 	}
 	lg.FA.Day = 1 // below 95% of the softened ask: waits
-	if s := lg.playersDecide(cf); len(s) != 0 {
+	if s := lg.playersDecide(cf, false); len(s) != 0 {
 		t.Fatal("a lowball was accepted before the ask softened")
 	}
 	lg.FA.Day = lg.FA.Days - 1 // ask has softened to ~70%
-	if s := lg.playersDecide(cf); len(s) != 1 || s[0].Team != u.ID {
+	if s := lg.playersDecide(cf, false); len(s) != 1 || s[0].Team != u.ID {
 		t.Fatalf("softened ask not met: %+v", s)
 	}
 	lg.FA.Day = 0
@@ -293,4 +295,77 @@ func TestSaveRoundTripFreeAgency(t *testing.T) {
 	if !reflect.DeepEqual(got.FA, lg.FA) {
 		t.Errorf("FA differs after round trip: %+v", got.FA)
 	}
+}
+
+func signingOf(lg *League, id int) (FASigning, bool) {
+	for _, s := range lg.FA.Log {
+		if s.PlayerID == id {
+			return s, true
+		}
+	}
+	return FASigning{}, false
+}
+
+func TestFreeAgencyStarsSign(t *testing.T) {
+	// seed 11, user team 3 re-signs nobody: the top free agent must sign for real money
+	lg := draftDoneLeagueFor(11, 3)
+	mustBeginFA(t, lg)
+	star := lg.sortedPool()[0]
+	orig, _ := AskingContract(star)
+	for lg.FA.DaysLeft() > 0 {
+		lg.AdvanceFreeAgency()
+	}
+	s, ok := signingOf(lg, star.ID)
+	if !ok || s.Salary*100 < 40*orig {
+		t.Fatalf("star (ovr %d, ask %d) signing: %+v ok=%v", star.Overall(), orig, s, ok)
+	}
+	t.Logf("seed 11 star ovr %d asked %d: signed with team %d for %d x %d on day %d", star.Overall(), orig, s.Team, s.Salary, s.Years, s.Day)
+	lg.FinishOffseason()
+	if star.TeamID < 0 {
+		t.Error("star not on a roster after the offseason")
+	}
+
+	// no 80+ player unsigned or on the minimum, over a few seeds
+	for _, seed := range []uint64{31, 32, 5} {
+		lg := draftDoneLeague(seed)
+		mustBeginFA(t, lg)
+		var tops []*Player
+		for _, p := range lg.FreeAgents {
+			if p.Overall() >= 80 {
+				tops = append(tops, p)
+			}
+		}
+		for lg.FA.DaysLeft() > 0 {
+			lg.AdvanceFreeAgency()
+		}
+		for _, p := range tops {
+			if s, ok := signingOf(lg, p.ID); !ok || s.Salary <= Cap.MinSalary {
+				t.Errorf("seed %d: %d-rated player unsigned or on the minimum: %+v %v", seed, p.Overall(), s, ok)
+			}
+		}
+	}
+
+	// the user offers all his cap room on day 0
+	lg = draftDoneLeagueFor(11, 3)
+	mustBeginFA(t, lg)
+	star = lg.sortedPool()[0]
+	orig, _ = AskingContract(star)
+	room := lg.CapRoom(3) / 100 * 100
+	if room <= Cap.MinSalary || room*100 < 50*orig {
+		t.Skipf("user room %d too small for ask %d", room, orig)
+	}
+	if _, err := lg.MakeOffer(3, star.ID, room, 2); err != nil {
+		t.Fatal(err)
+	}
+	for lg.FA.DaysLeft() > 0 {
+		lg.AdvanceFreeAgency()
+	}
+	s, ok = signingOf(lg, star.ID)
+	if !ok {
+		t.Fatal("star unsigned despite the user's offer")
+	}
+	if s.Team == 3 && s.Salary != room {
+		t.Errorf("user signed him at %d, offered %d", s.Salary, room)
+	}
+	t.Logf("user offered %d (ask %d): star signed with team %d for %d", room, orig, s.Team, s.Salary)
 }

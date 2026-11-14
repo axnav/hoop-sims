@@ -22,12 +22,17 @@ var FATuning = struct {
 	MinOffersAfter  int     // computer teams start offering minimum deals from this day on
 	WantMinValue    float64 // a computer team bids above the minimum only for players worth at least this to it
 	CandidatesPerTm int     // how many top-valued free agents a team looks at per day
+	BestEffortShare float64 // a team short of cap room may offer all its room if that is at least this share of the current ask
+	LateDays        int     // in the last this-many days a player settles for less (see LateShare)
+	LateShare       float64 // late in the period he takes his best offer if it is at least this share of his ORIGINAL ask
+	SettleAskMult   int     // after the last day, players whose original ask is at least this many times the minimum take their best real offer
 	UpgradeMargin   float64 // a full computer team bids for a free agent whose keep score beats its worst player's by this much, and cuts that player on signing
 }{
 	Days: 10, SoftenTo: 0.70, AcceptPct: 0.95,
 	OfferLow: 0.92, OfferHigh: 1.12, YearBonus: 0.02, TeamSwing: 0.08, RoleBonus: 0.03,
 	MaxNewOffers: 2, SecondOfferPct: 0.4, MinOffersAfter: 5,
 	WantMinValue: 2.5, CandidatesPerTm: 14, UpgradeMargin: 4,
+	BestEffortShare: 0.60, LateDays: 3, LateShare: 0.50, SettleAskMult: 4,
 }
 
 // freeAgencyOffset is the RNG stream for computer offers (20000 proposals,
@@ -282,8 +287,12 @@ func (lg *League) AdvanceFreeAgency() ([]FASigning, error) {
 	}
 	cf := lg.contendFactors()
 	lg.computerOffers(cf)
-	signed := lg.playersDecide(cf)
+	signed := lg.playersDecide(cf, false)
 	fa.Day++
+	if fa.Day >= fa.Days {
+		// Period over: players with a real offer on the table take the best one.
+		signed = append(signed, lg.playersDecide(cf, true)...)
+	}
 	return signed, nil
 }
 
@@ -354,7 +363,16 @@ func (lg *League) computerOffers(cf []float64) {
 			sal = max(Cap.MinSalary, min(Cap.MaxSalary, sal))
 			years = clamp(years+r.Between(-1, 1)*b2i(r.Chance(0.3)), 1, Cap.MaxContractYears)
 			if lg.checkOfferMoney(t.ID, c.p.ID, sal) != nil {
-				continue
+				// "Best we can do": offer all the usable cap room if it is a credible share of the ask.
+				softAsk := max(Cap.MinSalary, int(math.Round(float64(ask)*soft/100))*100)
+				room := (Cap.SalaryCap - lg.Payroll(t.ID) - lg.pendingAbove(t.ID, c.p.ID)) / 100 * 100
+				if room <= Cap.MinSalary || float64(room) < FATuning.BestEffortShare*float64(softAsk) {
+					continue
+				}
+				sal = min(sal, room)
+				if lg.checkOfferMoney(t.ID, c.p.ID, sal) != nil {
+					continue
+				}
 			}
 			if _, err := lg.makeOffer(t.ID, c.p.ID, sal, years, upgrade); err == nil {
 				made++
@@ -400,13 +418,13 @@ func b2i(b bool) int {
 
 // playersDecide lets every free agent with an offer made before today pick
 // the most appealing acceptable one.
-func (lg *League) playersDecide(cf []float64) []FASigning {
+func (lg *League) playersDecide(cf []float64, final bool) []FASigning {
 	fa := lg.FA
 	var out []FASigning
 	for _, p := range lg.sortedPool() {
 		var offs []FAOffer
 		for _, o := range fa.Offers {
-			if o.PlayerID == p.ID && o.Day < fa.Day {
+			if o.PlayerID == p.ID && (o.Day < fa.Day || final) {
 				offs = append(offs, o)
 			}
 		}
@@ -415,6 +433,16 @@ func (lg *League) playersDecide(cf []float64) []FASigning {
 		}
 		ask, _ := lg.FreeAgentAsk(p)
 		need := FATuning.AcceptPct * float64(ask)
+		orig, _ := AskingContract(p)
+		if fa.Day >= fa.Days-FATuning.LateDays {
+			need = math.Min(need, FATuning.LateShare*float64(orig))
+		}
+		if final {
+			if orig < FATuning.SettleAskMult*Cap.MinSalary {
+				continue
+			}
+			need = float64(Cap.MinSalary + 1)
+		}
 		appeal := func(o FAOffer) float64 {
 			a := float64(o.Salary) * (1 + FATuning.YearBonus*float64(o.Years-1))
 			a *= 1 - FATuning.TeamSwing + 2*FATuning.TeamSwing*cf[o.Team]
@@ -475,7 +503,7 @@ func (lg *League) playersDecide(cf []float64) []FASigning {
 				}
 			}
 			fa.Offers = keep
-			s := FASigning{Day: fa.Day, PlayerID: p.ID, Name: p.Name, Team: o.Team, Salary: o.Salary, Years: o.Years, Pos: p.Pos.String(), Overall: p.Overall()}
+			s := FASigning{Day: min(fa.Day, fa.Days-1), PlayerID: p.ID, Name: p.Name, Team: o.Team, Salary: o.Salary, Years: o.Years, Pos: p.Pos.String(), Overall: p.Overall()}
 			fa.Log = append(fa.Log, s)
 			out = append(out, s)
 			break

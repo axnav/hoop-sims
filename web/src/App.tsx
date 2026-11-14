@@ -17,6 +17,7 @@ import Playoffs from './pages/Playoffs'
 import GameViewer from './pages/GameViewer'
 import Offseason from './pages/Offseason'
 import Draft from './pages/Draft'
+import FreeAgency from './pages/FreeAgency'
 import History from './pages/History'
 import Trade from './pages/Trade'
 import Settings from './pages/Settings'
@@ -64,6 +65,7 @@ function Shell() {
           <Route path="/game/:id" element={<GameViewer />} />
           <Route path="/offseason" element={<Offseason />} />
           <Route path="/draft" element={<Draft />} />
+          <Route path="/free-agency" element={<FreeAgency />} />
           <Route path="/history" element={<History />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>

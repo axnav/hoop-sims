@@ -7,7 +7,7 @@ export type Injury = { name: string; gamesLeft: number; serious: boolean }
 export type InjuryLine = { playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
 export type Award = { playerId: number; name: string; team: Team; gp: number; ppg: number; rpg: number; apg: number } | null
 export type Action = { id: string; label: string }
-export type Phase = 'regular' | 'regular_done' | 'playoffs' | 'playoffs_done' | 'offseason' | 'draft' | 'draft_done'
+export type Phase = 'regular' | 'regular_done' | 'playoffs' | 'playoffs_done' | 'offseason' | 'draft' | 'draft_done' | 'free_agency'
 
 export type SeriesGame = { n: number; home: number; homeScore: number; awayScore: number; winner: number; ot: number; box: number }
 export type Series = {
@@ -35,6 +35,19 @@ export type GameState = {
   injured: number
   expiring: number
   payroll: Payroll
+  fa?: { day: number; days: number; daysLeft: number }
+}
+export type FAPlayer = {
+  id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
+  askSalary: number; askYears: number; interest: number
+  myOffer?: { id: number; salary: number; years: number; day: number }; injury?: Injury
+}
+export type FAOfferRow = { id: number; playerId: number; name: string; salary: number; years: number; day: number }
+export type FASigning = { day: number; playerId: number; name: string; pos: string; ovr: number; team: Team; salary: number; years: number; mine: boolean }
+export type FreeAgencyData = {
+  open: boolean; day: number; days: number; daysLeft: number; payroll: Payroll
+  rosterCount: number; rosterSize: number; minSalary: number; maxYears: number
+  players: FAPlayer[]; offers: FAOfferRow[]; log: FASigning[]
 }
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
@@ -213,4 +226,9 @@ export const api = {
   contractResign: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/resign', { playerId }),
   contractRelease: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/release', { playerId }),
   draftAuto: () => post<GameState>('/api/draft/auto'),
+  freeAgents: () => get<FreeAgencyData>('/api/freeagents'),
+  faBegin: () => post<{ freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/begin'),
+  faOffer: (b: { playerId: number; salary: number; years: number }) => post<FreeAgencyData>('/api/freeagents/offer', b),
+  faWithdraw: (offerId: number) => post<FreeAgencyData>('/api/freeagents/withdraw', { offerId }),
+  faDay: () => post<{ signings: FASigning[]; freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/day'),
 }

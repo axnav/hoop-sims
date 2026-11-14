@@ -841,3 +841,195 @@ func TestContractsOffseason(t *testing.T) {
 		t.Fatalf("expiring after offseason: %v", ex)
 	}
 }
+
+// toDraftEnd walks a new league to the end of the draft.
+func toDraftEnd(c *tc) {
+	c.call("POST", "/api/new", M{"seed": 11, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
+	c.call("POST", "/api/playoffs/start", nil, 200)
+	c.call("POST", "/api/playoffs/all", nil, 200)
+	c.call("POST", "/api/offseason/begin", nil, 200)
+	c.call("POST", "/api/offseason/to-draft", nil, 200)
+	c.call("POST", "/api/draft/auto", nil, 200)
+}
+
+func TestFreeAgencyAPI(t *testing.T) {
+	c := newTC(t)
+	toDraftEnd(c)
+	st := c.call("GET", "/api/state", nil, 200)
+	if st["nextAction"].(M)["id"] != "begin_free_agency" || st["fa"] != nil {
+		t.Fatalf("before FA: %v %v", st["nextAction"], st["fa"])
+	}
+	if f := c.call("GET", "/api/freeagents", nil, 200); f["open"] != false || len(f["players"].([]any)) != 0 || num(f["daysLeft"]) != 0 {
+		t.Fatalf("FA open early: %v", f["open"])
+	}
+	c.call("POST", "/api/freeagents/day", nil, 409)
+	out := c.call("POST", "/api/freeagents/begin", nil, 200)
+	st = out["state"].(M)
+	if st["phase"] != "free_agency" || st["fa"] == nil {
+		t.Fatalf("begin: phase %v fa %v", st["phase"], st["fa"])
+	}
+	c.call("POST", "/api/freeagents/begin", nil, 409)
+	if ex := c.call("GET", "/api/contracts/expiring", nil, 200); ex["open"] != false {
+		t.Fatalf("expiring still open in FA")
+	}
+	fa := c.call("GET", "/api/freeagents", nil, 200)
+	days := num(fa["days"])
+	if fa["open"] != true || num(fa["day"]) != 1 || days < 1 || num(fa["daysLeft"]) != days {
+		t.Fatalf("FA object: %v", fa)
+	}
+	if fs := st["fa"].(M); num(fs["day"]) != 1 || num(fs["days"]) != days || num(fs["daysLeft"]) != days {
+		t.Fatalf("state.fa: %v", fs)
+	}
+	players := fa["players"].([]any)
+	if len(players) < 5 {
+		t.Fatalf("pool of %d", len(players))
+	}
+	prev := 1 << 30
+	for _, x := range players {
+		r := x.(M)
+		if num(r["askSalary"]) <= 0 || num(r["askYears"]) < 1 || r["tier"] == "" || num(r["ovr"]) > prev {
+			t.Fatalf("pool row: %v", r)
+		}
+		prev = num(r["ovr"])
+	}
+
+	// make room on the roster
+	rosterSize := num(fa["rosterSize"])
+	if num(fa["rosterCount"]) >= rosterSize {
+		roster := c.call("GET", "/api/team/3", nil, 200)["roster"].([]any)
+		c.call("POST", "/api/contracts/release", M{"playerId": num(roster[len(roster)-1].(M)["id"])}, 200)
+		fa = c.call("GET", "/api/freeagents", nil, 200)
+	}
+	minSal, maxYears := num(fa["minSalary"]), num(fa["maxYears"])
+	room := num(fa["payroll"].(M)["room"])
+	mid := players[len(players)/2].(M)
+	midID := num(mid["id"])
+	fa = c.call("POST", "/api/freeagents/offer", M{"playerId": midID, "salary": minSal, "years": 1}, 200)
+	findMine := func(fa M, id int) M {
+		for _, x := range fa["players"].([]any) {
+			if num(x.(M)["id"]) == id {
+				return x.(M)
+			}
+		}
+		return nil
+	}
+	row := findMine(fa, midID)
+	mo, _ := row["myOffer"].(M)
+	if mo == nil || num(mo["salary"]) != minSal || num(mo["years"]) != 1 || num(row["interest"]) < 1 || len(fa["offers"].([]any)) != 1 {
+		t.Fatalf("offer not shown: %v", row)
+	}
+	firstID := num(mo["id"])
+	// replacing
+	fa = c.call("POST", "/api/freeagents/offer", M{"playerId": midID, "salary": minSal, "years": maxYears}, 200)
+	offers := fa["offers"].([]any)
+	if len(offers) != 1 || num(offers[0].(M)["years"]) != maxYears || num(offers[0].(M)["playerId"]) != midID || offers[0].(M)["name"] == "" {
+		t.Fatalf("replace: %v", offers)
+	}
+	if num(findMine(fa, midID)["myOffer"].(M)["id"]) == firstID {
+		t.Fatalf("offer id not renewed")
+	}
+	c.call("POST", "/api/freeagents/offer", "not json{", 400)
+	// full-ask offer to a different player, or an over-cap refusal
+	var other M
+	for _, x := range players {
+		r := x.(M)
+		if num(r["id"]) != midID && num(r["askSalary"]) <= room {
+			other = r
+			break
+		}
+	}
+	if other != nil {
+		fa = c.call("POST", "/api/freeagents/offer", M{"playerId": num(other["id"]), "salary": num(other["askSalary"]), "years": num(other["askYears"])}, 200)
+		if len(fa["offers"].([]any)) != 2 || findMine(fa, num(other["id"]))["myOffer"] == nil {
+			t.Fatalf("full-ask offer missing")
+		}
+	} else {
+		top := players[0].(M)
+		if out := c.call("POST", "/api/freeagents/offer", M{"playerId": num(top["id"]), "salary": num(top["askSalary"]), "years": 3}, 409); out["error"] == nil || out["error"] == "" {
+			t.Fatalf("over-cap offer: %v", out)
+		}
+	}
+	c.call("POST", "/api/freeagents/offer", M{"playerId": midID, "salary": minSal, "years": maxYears + 1}, 409)
+	// withdraw
+	fa = c.call("POST", "/api/freeagents/withdraw", M{"offerId": num(fa["offers"].([]any)[0].(M)["id"])}, 200)
+	want := 0
+	if other != nil {
+		want = 1
+	}
+	if len(fa["offers"].([]any)) != want {
+		t.Fatalf("withdraw: %v", fa["offers"])
+	}
+	for _, x := range fa["offers"].([]any) {
+		c.call("POST", "/api/freeagents/withdraw", M{"offerId": num(x.(M)["id"])}, 200)
+	}
+	c.call("POST", "/api/freeagents/withdraw", M{"offerId": 999999}, 409)
+	c.call("POST", "/api/freeagents/offer", M{"playerId": midID, "salary": minSal, "years": 2}, 200)
+
+	// run the days
+	logN := 0
+	for i := 0; i < days; i++ {
+		d := c.call("POST", "/api/freeagents/day", nil, 200)
+		f := d["freeAgency"].(M)
+		if num(f["day"]) > days || num(f["day"]) < 1 {
+			t.Fatalf("day %v of %d", f["day"], days)
+		}
+		for _, x := range d["signings"].([]any) {
+			g := x.(M)
+			if num(g["day"]) != i+1 || g["name"] == "" || num(g["salary"]) <= 0 || num(g["years"]) < 1 || g["team"].(M)["id"] == nil || g["mine"] == nil || g["pos"] == "" {
+				t.Fatalf("signing: %v", g)
+			}
+		}
+		n := len(f["log"].([]any))
+		if n != logN+len(d["signings"].([]any)) {
+			t.Fatalf("log %d, was %d, signings %d", n, logN, len(d["signings"].([]any)))
+		}
+		logN = n
+		if num(f["daysLeft"]) != days-(i+1) || num(d["state"].(M)["fa"].(M)["daysLeft"]) != days-(i+1) {
+			t.Fatalf("daysLeft %v after day %d", f["daysLeft"], i+1)
+		}
+	}
+	if logN == 0 {
+		t.Fatalf("nobody signed in free agency")
+	}
+	log := c.call("GET", "/api/freeagents", nil, 200)["log"].([]any)
+	for i := 1; i < len(log); i++ {
+		if num(log[i].(M)["day"]) > num(log[i-1].(M)["day"]) {
+			t.Fatalf("log not newest first")
+		}
+	}
+	c.call("POST", "/api/freeagents/day", nil, 409)
+	c.call("POST", "/api/freeagents/offer", M{"playerId": midID, "salary": minSal, "years": 1}, 409)
+	if st := c.call("GET", "/api/state", nil, 200); st["nextAction"].(M)["id"] != "start_season" {
+		t.Fatalf("after last day: %v", st["nextAction"])
+	}
+	st = c.call("POST", "/api/offseason/finish", nil, 200)
+	if st["phase"] != "regular" || st["fa"] != nil {
+		t.Fatalf("after finish: phase %v fa %v", st["phase"], st["fa"])
+	}
+	roster := c.call("GET", "/api/team/3", nil, 200)["roster"].([]any)
+	if len(roster) != rosterSize {
+		t.Fatalf("roster %d, want %d", len(roster), rosterSize)
+	}
+	for _, x := range roster {
+		if num(x.(M)["years"]) < 1 {
+			t.Fatalf("roster player without contract: %v", x)
+		}
+	}
+	if f := c.call("GET", "/api/freeagents", nil, 200); f["open"] != false || len(f["players"].([]any)) != 0 {
+		t.Fatalf("FA still open after finish")
+	}
+}
+
+func TestFinishWithoutFreeAgencyScreen(t *testing.T) {
+	c := newTC(t)
+	toDraftEnd(c)
+	st := c.call("POST", "/api/offseason/finish", nil, 200)
+	if st["phase"] != "regular" {
+		t.Fatalf("phase %v", st["phase"])
+	}
+	if len(c.call("GET", "/api/team/3", nil, 200)["roster"].([]any)) != engine.RosterSize {
+		t.Fatalf("short roster")
+	}
+}

@@ -238,3 +238,25 @@ export function PayrollBar({ p, compact = false }: { p: Payroll; compact?: boole
 export const ExpiringChip = () => (
   <span className="ml-1.5 shrink-0 rounded bg-amber-400/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-400 ring-1 ring-amber-400/50">Expiring</span>
 )
+
+// Small accessible confirm dialog (replaces window.confirm). Escape or the backdrop cancels.
+export function ConfirmDialog({ message, confirmLabel = 'Continue', onConfirm, onCancel }: { message: string; confirmLabel?: string; onConfirm: () => void; onCancel: () => void }) {
+  const ok = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    ok.current?.focus()
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onCancel])
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+      <div role="alertdialog" aria-modal="true" aria-label="Confirm" className="card w-full max-w-sm p-4 shadow-xl">
+        <p className="mb-4">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button ref={ok} className="btn btn-accent" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}

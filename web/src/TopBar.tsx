@@ -7,9 +7,9 @@ import { api, type GameState } from './api'
 import { useFlow } from './flow'
 import { TeamBadge } from './ui'
 
-const steps = ['Regular season', 'Playoffs', 'Draft', 'New season']
+const steps = ['Regular season', 'Playoffs', 'Draft', 'Free agency', 'New season']
 const stepOf = (s: GameState) =>
-  ({ regular: 0, regular_done: 0, playoffs: 1, playoffs_done: 1, offseason: 2, draft: 2, draft_done: 3 })[s.phase]
+  ({ regular: 0, regular_done: 0, playoffs: 1, playoffs_done: 1, offseason: 2, draft: 2, draft_done: 2, free_agency: 3 })[s.phase]
 
 function Stepper({ s }: { s: GameState }) {
   const cur = stepOf(s)
@@ -129,6 +129,7 @@ export function TopBar() {
         {link('/playoffs', 'Playoffs')}
         {offseason && link('/offseason', 'Offseason')}
         {offseason && link('/draft', 'Draft')}
+        {s.phase === 'free_agency' && link('/free-agency', 'Free agency')}
         {link('/history', 'History')}
         {link('/trade', 'Trades', s.offers)}
         {link('/settings', 'Settings')}

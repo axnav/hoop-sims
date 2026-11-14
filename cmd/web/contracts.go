@@ -26,6 +26,9 @@ func addContract(row M, p *engine.Player) {
 
 // offseasonOpen is true in the offseason phases, when re-signing is possible.
 func (s *server) offseasonOpen() bool {
+	if s.lg.FA != nil {
+		return false
+	}
 	switch s.lg.Phase(s.reportSeen) {
 	case engine.PhaseOffseason, engine.PhaseDraft, engine.PhaseDraftDone:
 		return true
