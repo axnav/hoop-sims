@@ -178,3 +178,11 @@ export const WL = ({ win }: { win: boolean }) => (
 )
 
 export const ovrColor = (v: number) => (v >= 80 ? '#3ddc84' : v >= 70 ? '#a3e635' : v >= 60 ? '#facc15' : v >= 50 ? '#fb923c' : '#ff5a67')
+
+// Small label for an asset's tier. Top tiers get a stronger look.
+export function TierChip({ tier }: { tier: string }) {
+  const top = tier === 'Franchise' || tier === 'Lottery pick'
+  return (
+    <span className={`ml-1.5 shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ${top ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : 'bg-panel2 text-muted'}`}>{tier}</span>
+  )
+}

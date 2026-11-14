@@ -3,13 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { Check, Lock, Plus, Sparkles, X } from 'lucide-react'
-import { api, type DealMove, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
+import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
 import { useFlow } from '../flow'
 import { TxItem } from '../TxItem'
-import { Card, ErrorBox, Page, PlayerLink, Q, Spinner, TeamBadge, ovrColor } from '../ui'
+import { OffersCard } from '../OffersCard'
+import { Card, ErrorBox, Page, PlayerLink, Q, Spinner, TeamBadge, TierChip, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
+const moodText = { accept: 'They accept', close: 'Close', far: 'Far apart', no: 'Not interested' } as const
 const pkey = (id: number) => `p${id}`
 const kkey = (p: { year: number; round: number; original: number }) => `k${p.year}-${p.round}-${p.original}`
 const toMove = (m: Sel): DealMove => (m.pick ? { from: m.from, to: m.to, pick: m.pick } : { from: m.from, to: m.to, playerId: m.playerId! })
@@ -26,6 +28,7 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
       <span className="min-w-0 flex-1 truncate font-medium">
         <PlayerLink id={p.id} name={p.name} />
         {p.untouchable && <Lock size={12} className="ml-1.5 inline text-accent" aria-label="Core player" />}
+        <TierChip tier={p.tier} />
       </span>
       <span className="w-8 text-right text-xs text-muted tabular-nums">{p.age}y</span>
       <b className="w-7 text-right tabular-nums" style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b>
@@ -44,7 +47,7 @@ function PickRow({ k, maxV, disabled, onPick }: { k: TradePickRow; maxV: number;
       onClick={() => !disabled && onPick()}
     >
       <span className="w-7 text-xs text-muted">Pick</span>
-      <span className="min-w-0 flex-1 truncate font-medium">{k.label}</span>
+      <span className="min-w-0 flex-1 truncate font-medium">{k.label}<TierChip tier={k.tier} /></span>
       <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2" title={`Trade value ${k.value}`}>
         <span className="block h-full rounded bg-accent" style={{ width: `${Math.max(4, (100 * k.value) / maxV)}%` }} />
       </span>
@@ -110,7 +113,7 @@ export default function Trade() {
 function TradeScreen() {
   const { state } = useFlow()
   const qc = useQueryClient()
-  const [sp] = useSearchParams()
+  const [sp, setSp] = useSearchParams()
   const me = state!.user.team.id
   const status = useQuery({ queryKey: ['trade-status', state?.phase, state?.day], queryFn: api.tradeStatus })
   const meta = useQuery({ queryKey: ['meta'], queryFn: api.meta })
@@ -160,6 +163,32 @@ function TradeScreen() {
     setPending(null)
     setRawMoves((m) => (m.length === 0 ? [{ key: pkey(row.id), label: row.name, from: partners[0], to: me, playerId: row.id }] : m))
   }, [pending, q1.data]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // arriving from an offer (?offer=id): load its deal, then drop the parameter
+  const offerId = sp.get('offer')
+  useEffect(() => {
+    if (!offerId) return
+    let live = true
+    qc.fetchQuery({ queryKey: ['offers', 'load', offerId], queryFn: api.offers, staleTime: 0 }).then(({ offers }) => {
+      if (!live) return
+      const o = offers.find((x) => x.id === Number(offerId))
+      if (o) {
+        const rows = [...o.give, ...o.get]
+        const labelOf = (m: DealMove) => {
+          const r = rows.find((x: AssetRow) => ('pick' in m ? x.kind === 'pick' && x.year === m.pick.year && x.round === m.pick.round && x.original.id === m.pick.original : x.kind === 'player' && x.playerId === m.playerId))
+          return r ? (r.kind === 'player' ? r.name : r.label) : 'Asset'
+        }
+        const sels: Sel[] = o.moves.map((m) => (
+          'pick' in m
+            ? { key: kkey(m.pick), label: labelOf(m), from: m.from, to: m.to, pick: m.pick }
+            : { key: pkey(m.playerId), label: labelOf(m), from: m.from, to: m.to, playerId: m.playerId }
+        ))
+        setPartners([o.team.id]); setRawMoves(sels); setPreview(null)
+      }
+      setSp((p) => { const n = new URLSearchParams(p); n.delete('offer'); return n }, { replace: true })
+    }).catch(() => setSp((p) => { const n = new URLSearchParams(p); n.delete('offer'); return n }, { replace: true }))
+    return () => { live = false }
+  }, [offerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [deb, setDeb] = useState(wireKey)
   useEffect(() => {
@@ -221,6 +250,18 @@ function TradeScreen() {
       return [...ms, { key, label: k.label, from, to: defaultTo(from), pick }]
     })
   }
+  const addAsk = (m: DealMove, label: string) => {
+    reset()
+    const sel: Sel = 'pick' in m
+      ? { key: kkey(m.pick), label, from: m.from, to: m.to, pick: m.pick }
+      : { key: pkey(m.playerId), label, from: m.from, to: m.to, playerId: m.playerId }
+    setRawMoves((ms) => {
+      if (ms.some((x) => x.key === sel.key)) return ms
+      if (outCount(sel.from, !!sel.pick) >= (sel.pick ? maxPicks : max)) return ms
+      return [...ms, sel]
+    })
+  }
+  const askBlocked = (m: DealMove) => outCount(m.from, 'pick' in m) >= ('pick' in m ? maxPicks : max)
   const setDest = (key: string, to: number) => { reset(); setRawMoves((ms) => ms.map((m) => (m.key === key ? { ...m, to } : m))) }
   const removeKey = (key: string) => { reset(); setRawMoves((ms) => ms.filter((m) => m.key !== key)) }
   const pickPartner = (slot: number, id: number) => {
@@ -293,6 +334,7 @@ function TradeScreen() {
           <div className="text-muted">{status.data.reason} {status.data.reopens}</div>
         </div>
       )}
+      <OffersCard />
       {done && <Summary r={done} onClose={() => setDone(null)} />}
       {partners.map((pid, slot) => (
         <div key={slot} className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -327,7 +369,13 @@ function TradeScreen() {
               <div className="space-y-3">
                 {deal.teams.map((t) => (
                   <div key={t.team.id}>
-                    <div className="mb-1 flex items-center gap-2 text-[13px]"><TeamBadge team={t.team} size={16} /><span className={t.accept ? 'text-win' : 'text-loss'}>{t.reason}</span></div>
+                    <div className="mb-1 flex items-center gap-2 text-[13px]"><TeamBadge team={t.team} size={16} /><span className={t.accept ? 'text-win' : 'text-loss'}><b>{moodText[t.mood]}.</b> {t.reason}</span></div>
+                    {!t.accept && t.askText && <div className="mb-1 text-[13px] text-muted">{t.askText}</div>}
+                    {!t.accept && t.ask && (
+                      <button className="btn mb-1" disabled={askBlocked(t.ask)} onClick={() => addAsk(t.ask!, t.askLabel ?? 'asset')}>
+                        <Plus size={14} />Add {t.askLabel}
+                      </button>
+                    )}
                     <DealMeter gets={t.gets} gives={t.gives} needed={t.needed} accept={t.accept} />
                   </div>
                 ))}

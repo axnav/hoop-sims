@@ -57,7 +57,8 @@ func (s *server) state() M {
 	ph := s.phase()
 	out := M{
 		"year": lg.Year, "phase": ph, "day": st.Day, "totalDays": engine.SeasonDays,
-		"mode": map[bool]string{true: "real", false: "fictional"}[s.isReal()], "conferences": confNames,
+		"offers": len(lg.PendingProposals()),
+		"mode":   map[bool]string{true: "real", false: "fictional"}[s.isReal()], "conferences": confNames,
 		"user": M{"team": s.team(u), "w": st.Wins[u], "l": st.Losses[u], "pd": st.PointDiff[u],
 			"confRank": s.rank(u), "confName": confNames[engine.Conference(u)]},
 	}
@@ -256,6 +257,7 @@ func (s *server) sim(r *http.Request) (any, error) {
 	var in struct {
 		Days  int  `json:"days"`
 		ToEnd bool `json:"toEnd"`
+		Auto  bool `json:"auto"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -271,11 +273,32 @@ func (s *server) sim(r *http.Request) (any, error) {
 	if n < 1 {
 		n = 1
 	}
+	multi := in.Auto || in.Days > 1 || in.ToEnd
 	days := []M{}
+	created := 0
+	var pause M
 	for i := 0; i < n && !lg.Season.Done(); i++ {
+		if multi && lg.ShouldPauseForDeadline() {
+			pause = M{"reason": "deadline", "text": "The trade deadline is tomorrow. After the next game day, trades are closed until the offseason."}
+			break
+		}
 		d := lg.Season.Day
 		lg.SimDay()
 		days = append(days, s.dayResult(d))
+		k := lg.ProposalsCreatedLastDay()
+		created += k
+		if multi && k > 0 && !lg.Options.NoOfferStop {
+			text := "You have new trade offers."
+			if ps := lg.PendingProposals(); k == 1 && len(ps) > 0 {
+				text = s.team(ps[len(ps)-1].Team)["fullName"].(string) + " made you a trade offer."
+			}
+			pause = M{"reason": "offer", "text": text}
+			break
+		}
 	}
-	return M{"days": days, "strip": s.strip(), "state": s.state()}, nil
+	out := M{"days": days, "strip": s.strip(), "state": s.state(), "newOffers": created}
+	if pause != nil {
+		out["pause"] = pause
+	}
+	return out, nil
 }

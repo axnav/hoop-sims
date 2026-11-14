@@ -37,20 +37,41 @@ func (s *server) tradeBlock(r *http.Request) (any, error) {
 	}
 	rows := []M{}
 	for _, a := range engine.TradeBlock(s.lg, id) {
-		rows = append(rows, M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
-			"value": round1(a.Value), "untouchable": a.Untouchable})
+		rows = append(rows, s.playerRow(id, a))
 	}
 	picks := []M{}
 	for _, p := range s.lg.PicksOwnedBy(id) {
-		t := s.team(p.Original)
-		label := pickLabel(p.Year, p.Round)
-		if p.Original != id {
-			label += " (via " + t["abbr"].(string) + ")"
-		}
-		picks = append(picks, M{"year": p.Year, "round": p.Round, "original": t, "own": p.Original == id, "label": label,
-			"value": round1(s.lg.PickValue(p.Year, p.Round, p.Original, id))})
+		picks = append(picks, s.pickRow(id, p.Year, p.Round, p.Original))
 	}
 	return M{"team": s.team(id), "isUser": id == s.lg.UserTeamID, "players": rows, "picks": picks}, nil
+}
+
+// playerRow is one trade-block row for a player on team owner's roster.
+func (s *server) playerRow(owner int, a engine.TradeAsset) M {
+	tier := ""
+	for _, p := range s.lg.Teams[owner].Roster {
+		if p.ID == a.PlayerID {
+			tier = engine.PlayerTier(p)
+			break
+		}
+	}
+	return M{"id": a.PlayerID, "name": a.Name, "pos": a.Pos, "age": a.Age, "ovr": a.Overall, "pot": a.Pot,
+		"value": round1(a.Value), "untouchable": a.Untouchable, "tier": tier}
+}
+
+func (s *server) pickLabelFor(owner, year, round, original int) string {
+	label := pickLabel(year, round)
+	if original != owner {
+		label += " (via " + s.team(original)["abbr"].(string) + ")"
+	}
+	return label
+}
+
+// pickRow is one trade-block row for a pick owned by team owner.
+func (s *server) pickRow(owner, year, round, original int) M {
+	return M{"year": year, "round": round, "original": s.team(original), "own": original == owner,
+		"label": s.pickLabelFor(owner, year, round, original),
+		"value": round1(s.lg.PickValue(year, round, original, owner)), "tier": s.lg.PickTier(year, round, original)}
 }
 
 func pickLabel(year, round int) string {
@@ -175,8 +196,15 @@ func (s *server) dealEvaluate(r *http.Request) (any, error) {
 	v := engine.EvaluateDeal(s.lg, d, s.lg.UserTeamID)
 	teams := []M{}
 	for _, t := range v.Teams {
-		teams = append(teams, M{"team": s.team(t.Team), "accept": t.Accept, "reason": t.Reason,
-			"gives": round1(t.Gives), "gets": round1(t.Gets), "needed": round1(t.Needed)})
+		row := M{"team": s.team(t.Team), "accept": t.Accept, "reason": t.Reason,
+			"gives": round1(t.Gives), "gets": round1(t.Gets), "needed": round1(t.Needed),
+			"mood": t.Mood, "askText": t.AskText}
+		if t.Ask != nil {
+			user := s.lg.UserTeamID
+			row["ask"] = s.wireMove(engine.Move{From: user, To: t.Team, Asset: *t.Ask})
+			row["askLabel"] = s.askLabel(*t.Ask, user)
+		}
+		teams = append(teams, row)
 	}
 	return M{"valid": v.Valid, "problem": v.Problem, "accept": v.Accept, "teams": teams}, nil
 }

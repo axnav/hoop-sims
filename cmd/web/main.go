@@ -263,6 +263,11 @@ func (s *server) routes() *http.ServeMux {
 	p("/api/deal/evaluate", true, s.dealEvaluate)
 	p("/api/deal/execute", true, s.dealExecute)
 	g("/api/transactions", true, s.transactions)
+	g("/api/offers", true, s.offersList)
+	p("/api/offers/{id}/accept", true, s.offerAccept)
+	p("/api/offers/{id}/reject", true, s.offerReject)
+	g("/api/options", true, s.optionsGet)
+	p("/api/options", true, s.optionsSet)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, M{"error": "not found"})
 	})

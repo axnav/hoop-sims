@@ -28,6 +28,7 @@ export type GameState = {
   draft?: { made: number; total: number; done: boolean; onClock?: Team; userOnClock?: boolean }
   nextAction: Action
   actions: Action[] | null
+  offers: number
 }
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
@@ -77,16 +78,32 @@ export type OffseasonReport =
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
-export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean }
-export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number }
+export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string }
+export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
 export type TradeBlockData = { team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[] }
 export type DealMove =
   | { from: number; to: number; playerId: number }
   | { from: number; to: number; pick: { year: number; round: number; original: number } }
 export type DealVerdict = {
   valid: boolean; problem: string; accept: boolean
-  teams: { team: Team; accept: boolean; reason: string; gives: number; gets: number; needed: number }[]
+  teams: {
+    team: Team; accept: boolean; reason: string; gives: number; gets: number; needed: number
+    mood: 'accept' | 'close' | 'far' | 'no'; askText: string; ask?: DealMove; askLabel?: string
+  }[]
 }
+export type AssetRow =
+  | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string }
+  | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
+export type Offer = {
+  id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
+  give: AssetRow[]; get: AssetRow[]; moves: DealMove[]
+}
+export type SimPause = { reason: 'offer' | 'deadline'; text: string }
+export type SimResult = {
+  days: DayResult[]; strip: { rank: number; team: Team; w: number; l: number }[]; state: GameState
+  newOffers: number; pause?: SimPause
+}
+export type Options = { noDeadlineStop: boolean; noOfferStop: boolean }
 export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
 export type TradeOfferIn = { team: number; give: number[]; get: number[] }
 export type TradeVerdict = {
@@ -141,8 +158,7 @@ export const api = {
   load: () => post<GameState>('/api/load'),
   save: () => post<{ ok: boolean }>('/api/save'),
   state: () => get<GameState>('/api/state'),
-  sim: (b: { days?: number; toEnd?: boolean }) =>
-    post<{ days: DayResult[]; strip: { rank: number; team: Team; w: number; l: number }[]; state: GameState }>('/api/sim', b),
+  sim: (b: { days?: number; toEnd?: boolean; auto?: boolean }) => post<SimResult>('/api/sim', b),
   standings: () => get<Standings>('/api/standings'),
   leaders: () => get<Leaders>('/api/leaders'),
   team: (id: number) => get<TeamPage>(`/api/team/${id}`),
@@ -169,5 +185,10 @@ export const api = {
   dealEvaluate: (moves: DealMove[]) => post<DealVerdict>('/api/deal/evaluate', { moves }),
   dealExecute: (moves: DealMove[]) => post<TradeResult>('/api/deal/execute', { moves }),
   transactions: () => get<{ transactions: Transaction[]; userTeam: number }>('/api/transactions'),
+  offers: () => get<{ offers: Offer[] }>('/api/offers'),
+  offerAccept: (id: number) => post<TradeResult>(`/api/offers/${id}/accept`),
+  offerReject: (id: number) => post<{ ok: true; offers: Offer[] }>(`/api/offers/${id}/reject`),
+  options: () => get<Options>('/api/options'),
+  setOptions: (o: Partial<Options>) => post<Options>('/api/options', o),
   draftAuto: () => post<GameState>('/api/draft/auto'),
 }

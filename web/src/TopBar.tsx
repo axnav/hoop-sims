@@ -92,8 +92,8 @@ export function TopBar() {
   if (!s) return null
   const u = s.user
   const offseason = s.phase === 'offseason' || s.phase === 'draft' || s.phase === 'draft_done'
-  const link = (to: string, label: string) => (
-    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}</NavLink>
+  const link = (to: string, label: string, badge = 0) => (
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}{badge > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 py-px text-[10px] font-bold text-black tabular-nums" aria-label={`${badge} offers`}>{badge}</span>}</NavLink>
   )
   return (
     <header
@@ -130,7 +130,7 @@ export function TopBar() {
         {offseason && link('/offseason', 'Offseason')}
         {offseason && link('/draft', 'Draft')}
         {link('/history', 'History')}
-        {link('/trade', 'Trades')}
+        {link('/trade', 'Trades', s.offers)}
       </nav>
     </header>
   )

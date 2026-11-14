@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, type DayResult, type GameState, type Team } from './api'
+import { useNavigate } from 'react-router-dom'
+import { api, type DayResult, type GameState, type SimPause, type Team } from './api'
 import { AnimatedNumber, TeamBadge, WL } from './ui'
 
 export type SimPlan = { days: number; toEnd: boolean }
@@ -16,28 +17,46 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
   const [error, setError] = useState('')
   const stop = useRef(false)
   const started = useRef(false)
+  const nav = useNavigate()
+  const remaining = useRef(0)
+  const [pause, setPause] = useState<SimPause | null>(null)
+  const [noStop, setNoStop] = useState(false)
   const closeBtn = useRef<HTMLButtonElement>(null)
+
+  // Sims one day at a time; `remaining` survives a pause so "Keep simming" resumes where it stopped.
+  const loop = async () => {
+    setPause(null); setDone(false)
+    try {
+      while (remaining.current > 0 && !stop.current) {
+        const r = await api.sim({ days: 1, auto: true })
+        setResults((p) => [...p, ...r.days])
+        if (r.strip) setStrip(r.strip)
+        qc.setQueryData(['state'], r.state)
+        if (r.days.length > 0) remaining.current--
+        if (r.pause) { setPause(r.pause); return }
+        if (r.state.phase !== 'regular') break
+        await new Promise((res) => setTimeout(res, 110))
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+    setDone(true)
+  }
 
   useEffect(() => {
     if (started.current) return
     started.current = true
-    ;(async () => {
-      const total = plan.toEnd ? start.totalDays - start.day : plan.days
-      try {
-        for (let i = 0; i < total && !stop.current; i++) {
-          const r = await api.sim({ days: 1 })
-          setResults((p) => [...p, ...r.days])
-          setStrip(r.strip)
-          qc.setQueryData(['state'], r.state)
-          if (r.state.phase !== 'regular') break
-          await new Promise((res) => setTimeout(res, 110))
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      }
-      setDone(true)
-    })()
-  }, [plan, qc, start])
+    remaining.current = plan.toEnd ? start.totalDays - start.day : plan.days
+    loop()
+  }, [plan, qc, start]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const answer = (go: boolean) => {
+    if (!pause) return
+    if (noStop) api.setOptions(pause.reason === 'offer' ? { noOfferStop: true } : { noDeadlineStop: true }).catch(() => {})
+    setNoStop(false)
+    if (go) { remaining.current = 0; setPause(null); onClose(); nav('/trade') }
+    else loop()
+  }
 
   useEffect(() => { if (done) closeBtn.current?.focus() }, [done])
 
@@ -86,6 +105,19 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
               </AnimatePresence>
             </ul>
             {error && <div className="mt-2 text-loss">{error}</div>}
+            {pause && (
+              <div className="mt-2 rounded-lg border border-accent/60 bg-panel2 p-3" role="alertdialog" aria-label="Sim paused">
+                <div className="font-semibold">{pause.text}</div>
+                <label className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+                  <input type="checkbox" checked={noStop} onChange={(e) => setNoStop(e.target.checked)} />
+                  {pause.reason === 'offer' ? "Don't stop for offers" : "Don't stop before the deadline"}
+                </label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button className="btn btn-accent" onClick={() => answer(true)}>{pause.reason === 'offer' ? 'See the offer' : 'Go to trades'}</button>
+                  <button className="btn" onClick={() => answer(false)}>Keep simming</button>
+                </div>
+              </div>
+            )}
             <div className="mt-3 flex items-center justify-between">
               {done ? (
                 <>
@@ -97,7 +129,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
                   </span>
                   <button ref={closeBtn} className="btn btn-accent" onClick={onClose}>Close</button>
                 </>
-              ) : (
+              ) : pause ? <span /> : (
                 <button className="btn" onClick={() => (stop.current = true)}>Stop</button>
               )}
             </div>

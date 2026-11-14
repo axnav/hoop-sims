@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"hoopsim/engine"
 )
 
 type tc struct {
@@ -92,6 +94,7 @@ func TestFlow(t *testing.T) {
 	c.call("GET", "/api/player/"+itoa(pid), nil, 200)
 	c.call("GET", "/api/schedule?team=3", nil, 200)
 	c.call("GET", "/api/box/last", nil, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
 	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
 	st = c.call("GET", "/api/state", nil, 200)
 	if st["phase"] != "regular_done" || st["summary"] == nil {
@@ -149,10 +152,12 @@ func itoa(i int) string { b, _ := json.Marshal(i); return string(b) }
 func TestNoHiddenNumber(t *testing.T) {
 	c := newTC(t)
 	c.call("POST", "/api/new", M{"seed": 2, "team": 0}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
 	c.call("POST", "/api/sim", M{"days": 30}, 200)
 	for _, p := range []string{"/api/state", "/api/standings", "/api/leaders", "/api/team/0", "/api/player/1", "/api/schedule", "/api/box/last", "/api/history", "/api/playoffs"} {
 		c.call("GET", p, nil, 200) // checkNoImpact runs on every response
 	}
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
 	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
 	c.call("POST", "/api/playoffs/start", nil, 200)
 	c.call("POST", "/api/playoffs/all", nil, 200)
@@ -229,6 +234,7 @@ func TestTrades(t *testing.T) {
 	if n := len(c.call("GET", "/api/transactions", nil, 200)["transactions"].([]any)); n != 1 {
 		t.Fatalf("transactions %d", n)
 	}
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
 	c.call("POST", "/api/sim", M{"days": 60}, 200)
 	if c.call("GET", "/api/trade/status", nil, 200)["open"] != false {
 		t.Fatal("window should be closed after the deadline")
@@ -305,4 +311,121 @@ func TestDeals(t *testing.T) {
 	}
 	// a rejected deal is a 409
 	c.call("POST", "/api/deal/execute", M{"moves": []M{{"from": 3, "to": 4, "playerId": 0}}}, 409)
+}
+
+func TestNegotiationAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	blk := c.call("GET", "/api/trade/block/3", nil, 200)
+	for _, k := range []string{"players", "picks"} {
+		for _, x := range blk[k].([]any) {
+			if x.(M)["tier"] == "" || x.(M)["tier"] == nil {
+				t.Fatalf("%s row without tier: %v", k, x)
+			}
+		}
+	}
+	_, myWorst, _ := blockIDs(c, 3)
+	_, _, theirBest := blockIDs(c, 4)
+	moves := []M{{"from": 3, "to": 4, "playerId": myWorst}, {"from": 4, "to": 3, "playerId": theirBest}}
+	v := c.call("POST", "/api/deal/evaluate", M{"moves": moves}, 200)
+	if v["accept"] != false {
+		t.Fatalf("expected refusal: %v", v)
+	}
+	tv := v["teams"].([]any)[0].(M)
+	if tv["mood"] == "" || tv["mood"] == nil || tv["askText"] == "" || tv["askText"] == nil {
+		t.Fatalf("verdict: %v", tv)
+	}
+	if ask, ok := tv["ask"].(M); ok {
+		if tv["askLabel"] == "" || tv["askLabel"] == nil {
+			t.Fatalf("no askLabel: %v", tv)
+		}
+		v2 := c.call("POST", "/api/deal/evaluate", M{"moves": append(moves, ask)}, 200)
+		if v2["valid"] != true || v2["teams"].([]any)[0].(M)["accept"] != true {
+			t.Fatalf("ask did not satisfy: %v", v2)
+		}
+	}
+
+	// options
+	o := c.call("GET", "/api/options", nil, 200)
+	if o["noDeadlineStop"] != false || o["noOfferStop"] != false {
+		t.Fatalf("options: %v", o)
+	}
+	o = c.call("POST", "/api/options", M{"noOfferStop": true}, 200)
+	if o["noDeadlineStop"] != false || o["noOfferStop"] != true {
+		t.Fatalf("options: %v", o)
+	}
+	c.call("POST", "/api/options", M{"noOfferStop": false}, 200)
+
+	// a single manual day never pauses
+	r := c.call("POST", "/api/sim", M{"days": 1}, 200)
+	if r["pause"] != nil || r["newOffers"] == nil {
+		t.Fatalf("manual day: %v", r["pause"])
+	}
+}
+
+func TestDeadlinePause(t *testing.T) {
+	for _, off := range []bool{false, true} {
+		c := newTC(t)
+		c.call("POST", "/api/new", M{"seed": 7, "team": 2}, 200)
+		c.call("POST", "/api/options", M{"noDeadlineStop": off, "noOfferStop": true}, 200)
+		pauses := 0
+		for i := 0; i < 100; i++ {
+			r := c.call("POST", "/api/sim", M{"auto": true}, 200)
+			if r["state"].(M)["phase"] != "regular" {
+				break
+			}
+			if p, ok := r["pause"].(M); ok && p["reason"] == "deadline" {
+				pauses++
+				if num(r["state"].(M)["day"]) != engine.TradeDeadlineDay || len(r["days"].([]any)) != 0 {
+					t.Fatalf("bad deadline pause: %v", r["state"])
+				}
+			}
+		}
+		if (off && pauses != 0) || (!off && pauses != 1) {
+			t.Fatalf("noDeadlineStop=%v: %d pauses", off, pauses)
+		}
+	}
+}
+
+func TestOfferFlow(t *testing.T) {
+	for seed := 1; seed <= 6; seed++ {
+		c := newTC(t)
+		c.call("POST", "/api/new", M{"seed": seed, "team": 3}, 200)
+		c.call("POST", "/api/options", M{"noDeadlineStop": true}, 200)
+		got := 0
+		for i := 0; i < 70 && got < 2; i++ {
+			r := c.call("POST", "/api/sim", M{"auto": true}, 200)
+			p, _ := r["pause"].(M)
+			if p == nil || p["reason"] != "offer" || p["text"] == "" {
+				continue
+			}
+			got++
+			list := c.call("GET", "/api/offers", nil, 200)["offers"].([]any)
+			if len(list) == 0 || num(r["state"].(M)["offers"]) != len(list) {
+				t.Fatalf("offers %d vs state %v", len(list), r["state"].(M)["offers"])
+			}
+			o := list[0].(M)
+			if len(o["give"].([]any)) == 0 || len(o["get"].([]any)) == 0 || len(o["moves"].([]any)) == 0 || o["message"] == "" {
+				t.Fatalf("offer: %v", o)
+			}
+			id := itoa(num(o["id"]))
+			if got == 1 {
+				res := c.call("POST", "/api/offers/"+id+"/accept", nil, 200)
+				if res["state"] == nil || res["moved"] == nil {
+					t.Fatalf("accept: %v", res)
+				}
+				c.call("POST", "/api/offers/"+id+"/accept", nil, 404)
+			} else {
+				res := c.call("POST", "/api/offers/"+id+"/reject", nil, 200)
+				if res["ok"] != true || len(res["offers"].([]any)) != len(list)-1 {
+					t.Fatalf("reject: %v", res)
+				}
+				c.call("POST", "/api/offers/"+id+"/reject", nil, 404)
+			}
+		}
+		if got >= 2 {
+			return
+		}
+	}
+	t.Fatal("no seed produced two offer pauses")
 }
