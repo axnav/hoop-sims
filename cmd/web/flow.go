@@ -123,6 +123,9 @@ func (s *server) offseasonToDraft(r *http.Request) (any, error) {
 }
 
 func (s *server) offseasonFinish(r *http.Request) (any, error) {
+	if s.lg.FA == nil && s.lg.CanBeginFreeAgency(s.reportSeen) == nil {
+		s.lg.BeginFreeAgency()
+	}
 	if err := s.lg.CanFinishOffseason(s.reportSeen); err != nil {
 		return nil, conflict("%v", err)
 	}

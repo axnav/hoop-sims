@@ -102,8 +102,14 @@ func TestPhaseCycle(t *testing.T) {
 	wantErr(t, "FinishOffseason mid-draft", lg.CanFinishOffseason(true), true)
 
 	lg.DraftAutoAll()
-	wantPhase(t, lg, true, PhaseDraftDone, "start_season")
+	wantPhase(t, lg, true, PhaseDraftDone, "begin_free_agency")
 	wantErr(t, "UserPick after draft", lg.CanUserPick(), true)
+	wantErr(t, "FinishOffseason before free agency", lg.CanFinishOffseason(true), true)
+	wantErr(t, "BeginFreeAgency", lg.CanBeginFreeAgency(true), false)
+	if err := lg.BeginFreeAgency(); err != nil {
+		t.Fatal(err)
+	}
+	wantPhase(t, lg, true, PhaseFreeAgency, "fa_day", "start_season")
 	wantErr(t, "FinishOffseason", lg.CanFinishOffseason(true), false)
 
 	lg.FinishOffseason()

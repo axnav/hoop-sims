@@ -16,7 +16,8 @@ const (
 	PhasePlayoffsDone Phase = "playoffs_done" // champion decided
 	PhaseOffseason    Phase = "offseason"     // offseason report not yet seen
 	PhaseDraft        Phase = "draft"         // draft in progress
-	PhaseDraftDone    Phase = "draft_done"    // draft finished, next season not started
+	PhaseDraftDone    Phase = "draft_done"    // draft finished, free agency not begun
+	PhaseFreeAgency   Phase = "free_agency"   // free-agency days (lg.FA != nil)
 )
 
 // Action is one thing the user may do next: a stable ID and a button label.
@@ -32,6 +33,8 @@ var ErrUnknownPlayoffAction = errors.New("unknown playoff action")
 func (lg *League) Phase(reportSeen bool) Phase {
 	st := lg.Season
 	switch {
+	case lg.FA != nil:
+		return PhaseFreeAgency
 	case lg.Draft != nil && !reportSeen:
 		return PhaseOffseason
 	case lg.Draft != nil && lg.DraftDone():
@@ -76,7 +79,14 @@ func (lg *League) NextActions(reportSeen bool) (next Action, more []Action) {
 		}
 		more = []Action{{"draft_auto", "Auto-draft the rest"}}
 	case PhaseDraftDone:
-		next = Action{"start_season", fmt.Sprintf("Start the %d season", lg.Year+1)}
+		next = Action{"begin_free_agency", "Start free agency"}
+	case PhaseFreeAgency:
+		if lg.FA.DaysLeft() > 0 {
+			next = Action{"fa_day", "Next day of free agency"}
+			more = []Action{{"start_season", "Skip to the new season"}}
+		} else {
+			next = Action{"start_season", fmt.Sprintf("Start the %d season", lg.Year+1)}
+		}
 	}
 	return next, more
 }
@@ -138,8 +148,22 @@ func (lg *League) CanGoToDraft() error {
 }
 
 func (lg *League) CanFinishOffseason(reportSeen bool) error {
-	if lg.Phase(reportSeen) != PhaseDraftDone {
-		return errors.New("the draft is not finished")
+	switch lg.Phase(reportSeen) {
+	case PhaseFreeAgency:
+		return nil
+	case PhaseDraftDone:
+		return errors.New("free agency has not begun yet")
+	}
+	return errors.New("the draft is not finished")
+}
+
+// CanAdvanceFreeAgency is allowed while free-agency days remain.
+func (lg *League) CanAdvanceFreeAgency() error {
+	if lg.FA == nil {
+		return errors.New("free agency is not open")
+	}
+	if lg.FA.DaysLeft() == 0 {
+		return errors.New("free agency is over; start the new season")
 	}
 	return nil
 }

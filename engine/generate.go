@@ -152,6 +152,8 @@ type League struct {
 	// offseason's report.
 	Draft  *Draft
 	Report *OffseasonReport
+	// FA is non-nil during the free-agency period (after the draft).
+	FA *FreeAgency
 
 	// DraftClasses holds stored future rookies by draft year (real-data
 	// mode); a year with a stored class uses it instead of generating one.

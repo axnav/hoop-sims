@@ -395,7 +395,34 @@ func TestSixSeasons(t *testing.T) {
 		lg.StartSeason()
 		lg.SimRegularSeason()
 		lg.SimPlayoffs()
-		lg.Offseason()
+		// Offseason by hand: the user's team gets no computer offers and is
+		// filled only at FinishOffseason, with one-year minimum deals.
+		lg.BeginOffseason()
+		lg.DraftAutoAll()
+		if err := lg.BeginFreeAgency(); err != nil {
+			t.Fatal(err)
+		}
+		for lg.FA.DaysLeft() > 0 {
+			lg.AdvanceFreeAgency()
+		}
+		for _, s := range lg.FA.Log {
+			if s.Team == lg.UserTeamID {
+				t.Fatalf("user team signed %s without offering", s.Name)
+			}
+		}
+		had := map[int]bool{}
+		for _, p := range lg.Teams[lg.UserTeamID].Roster {
+			had[p.ID] = true
+		}
+		lg.FinishOffseason()
+		if n := len(lg.Teams[lg.UserTeamID].Roster); n != RosterSize {
+			t.Fatalf("user team has %d players after the offseason", n)
+		}
+		for _, p := range lg.Teams[lg.UserTeamID].Roster {
+			if !had[p.ID] && p.Contract != (Contract{Cap.MinSalary, 1}) {
+				t.Fatalf("auto-filled user player not on a one-year minimum: %+v", p.Contract)
+			}
+		}
 	}
 	t.Logf("average payrolls: %.0f", avgs)
 }

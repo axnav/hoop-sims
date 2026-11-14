@@ -55,10 +55,13 @@ func keepScore(p *Player) float64 {
 }
 
 // Offseason runs the whole offseason with the computer making every pick.
-// The season must be finished (regular season).
+// The season must be finished (regular season). It is an autopilot: the
+// user's team re-signs its expiring players like a computer team would, so a
+// hands-off team is not stripped.
 func (lg *League) Offseason() *OffseasonReport {
 	rep := lg.BeginOffseason()
 	lg.DraftAutoAll()
+	lg.reSignTeam(lg.Teams[lg.UserTeamID], lg.contendFactors())
 	lg.FinishOffseason()
 	return rep
 }
@@ -222,43 +225,26 @@ func (lg *League) DraftAutoAll() {
 // year. The draft must be finished.
 func (lg *League) FinishOffseason() {
 	c := &Progression
-	order := lg.Draft.Order
+	if lg.FA == nil {
+		// Callers that skip the free-agency screens: open it now.
+		if lg.BeginFreeAgency() != nil {
+			return
+		}
+	}
+	for lg.FA.Day < lg.FA.Days {
+		lg.AdvanceFreeAgency()
+	}
+	order := append([]int(nil), lg.Draft.Order...)
 	lg.Draft = nil
+	lg.FA = nil
 	lg.rollPicks(lg.Year)
 
-	// Contracts: computer teams re-sign who is worth it, then every player
-	// still expiring (the user's too) goes to free agency.
-	lg.reSignComputerTeams()
-	lg.releaseExpiring()
-
-	// Rosters: trim to 13, then fill from free agents.
+	// Rosters: trim to 13, then fill from free agents with minimum deals.
 	for _, t := range lg.Teams {
-		sort.SliceStable(t.Roster, func(i, j int) bool { return keepScore(t.Roster[i]) > keepScore(t.Roster[j]) })
-		if len(t.Roster) > RosterSize {
-			for _, p := range t.Roster[RosterSize:] {
-				lg.releaseToFA(p) // contract ends, no dead money
-			}
-			t.Roster = t.Roster[:RosterSize]
-		}
+		lg.trimRoster(t)
 	}
-	sortFA := func() {
-		sort.SliceStable(lg.FreeAgents, func(i, j int) bool {
-			a, b := lg.FreeAgents[i], lg.FreeAgents[j]
-			if a.Overall() != b.Overall() {
-				return a.Overall() > b.Overall()
-			}
-			return a.ID < b.ID
-		})
-	}
-	for _, tid := range order {
-		t := lg.Teams[tid]
-		for len(t.Roster) < RosterSize && len(lg.FreeAgents) > 0 {
-			sortFA()
-			p := lg.FreeAgents[0]
-			lg.signFromPool(tid, p)
-		}
-	}
-	sortFA()
+	lg.fillRosters(order)
+	lg.FreeAgents = lg.sortedPool()
 	if len(lg.FreeAgents) > c.FreeAgentPool {
 		lg.FreeAgents = lg.FreeAgents[:c.FreeAgentPool]
 	}

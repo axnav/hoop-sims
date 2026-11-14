@@ -283,6 +283,9 @@ func AskingContract(p *Player) (salary, years int) {
 
 // ReSign re-signs one of the team's expiring players at his ask.
 func (lg *League) ReSign(teamID, playerID int) error {
+	if lg.FA != nil {
+		return fmt.Errorf("Free agency has begun, so re-signing is closed. Bid for him as a free agent.")
+	}
 	if teamID < 0 || teamID >= len(lg.Teams) {
 		return fmt.Errorf("That is not a valid team.")
 	}
@@ -413,30 +416,34 @@ func (lg *League) scaleToTax(t *Team) {
 func (lg *League) reSignComputerTeams() {
 	cf := lg.contendFactors()
 	for _, t := range lg.Teams {
-		if t.ID == lg.UserTeamID {
+		if t.ID != lg.UserTeamID {
+			lg.reSignTeam(t, cf)
+		}
+	}
+}
+
+// reSignTeam is the computer re-sign decision for one team.
+func (lg *League) reSignTeam(t *Team, cf []float64) {
+	exp := lg.Expiring(t.ID)
+	vals := map[int]float64{}
+	for _, p := range exp {
+		vals[p.ID] = lg.value(p, t.ID, cf)
+	}
+	sort.SliceStable(exp, func(i, j int) bool {
+		if vals[exp[i].ID] != vals[exp[j].ID] {
+			return vals[exp[i].ID] > vals[exp[j].ID]
+		}
+		return exp[i].ID < exp[j].ID
+	})
+	for _, p := range exp {
+		if vals[p.ID] < Cap.ReSignMinValue {
 			continue
 		}
-		exp := lg.Expiring(t.ID)
-		vals := map[int]float64{}
-		for _, p := range exp {
-			vals[p.ID] = lg.value(p, t.ID, cf)
+		salary, years := AskingContract(p)
+		if lg.Payroll(t.ID)+salary > Cap.TaxLine {
+			continue
 		}
-		sort.SliceStable(exp, func(i, j int) bool {
-			if vals[exp[i].ID] != vals[exp[j].ID] {
-				return vals[exp[i].ID] > vals[exp[j].ID]
-			}
-			return exp[i].ID < exp[j].ID
-		})
-		for _, p := range exp {
-			if vals[p.ID] < Cap.ReSignMinValue {
-				continue
-			}
-			salary, years := AskingContract(p)
-			if lg.Payroll(t.ID)+salary > Cap.TaxLine {
-				continue
-			}
-			lg.Sign(t.ID, p, salary, years, SignOwn)
-		}
+		lg.Sign(t.ID, p, salary, years, SignOwn)
 	}
 }
 
