@@ -81,7 +81,11 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	before := map[int]int{}
 	for _, p := range lg.allPlayers() {
 		before[p.ID] = p.Overall()
-		p.Progress(r)
+		mpg := -1.0
+		if ps := lg.Season.statsFor(p.ID); ps != nil {
+			mpg = float64(ps.Min) / SeasonGames
+		}
+		p.ProgressMinutes(r, mpg)
 	}
 
 	// Retirement.

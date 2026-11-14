@@ -99,14 +99,10 @@ type side struct {
 }
 
 func newSide(t *Team, home bool) *side {
-	rot := t.Rotation()
 	s := &side{box: &TeamBox{Team: t}, home: home}
 	var totMin, def, reb float64
-	for i, p := range rot {
-		m := 0
-		if i < len(minutesByRank) {
-			m = minutesByRank[i]
-		}
+	for _, pm := range t.EffectiveMinutes() {
+		p, m := pm.Player, pm.Min
 		s.box.Lines = append(s.box.Lines, &StatLine{Player: p, Min: m})
 		rt := p.Effective()
 		s.eff = append(s.eff, rt)

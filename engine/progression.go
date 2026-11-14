@@ -46,6 +46,18 @@ type ProgressionConfigT struct {
 	StallMin    float64 // magnitude of the drop
 	StallMax    float64
 
+	// Minutes-based development (players aged MinutesDevMaxAge or under, from
+	// their regular-season minutes per team game, see MinutesAdjust). At or
+	// above MinutesDevFull minutes the yearly change gets +MinutesDevBonus
+	// rating points, at or below MinutesDevNone it gets -MinutesDevPenalty,
+	// linear in between with zero at MinutesDevNeutral. Both 0 = switched off.
+	MinutesDevMaxAge  int
+	MinutesDevFull    float64
+	MinutesDevNone    float64
+	MinutesDevNeutral float64
+	MinutesDevBonus   float64
+	MinutesDevPenalty float64
+
 	// Visible Potential estimate.
 	PotentialLearnRate float64 // share of the gap to true ceiling closed per year
 	PotentialEqualAge  int     // from this age Potential == Overall
@@ -123,6 +135,13 @@ var Progression = ProgressionConfigT{
 	StallMin:    2,
 	StallMax:    4,
 
+	MinutesDevMaxAge:  24,
+	MinutesDevFull:    26.0,
+	MinutesDevNone:    6.0,
+	MinutesDevNeutral: 15.5,
+	MinutesDevBonus:   0.8,
+	MinutesDevPenalty: 0.6,
+
 	PotentialLearnRate: 0.20,
 	PotentialEqualAge:  27,
 
@@ -168,8 +187,29 @@ func (p *Player) TrueCeiling() float64 {
 
 func round(v float64) int { return int(math.Floor(v + 0.5)) }
 
-// Progress ages the player one year: ratings, Potential, Age, Experience.
-func (p *Player) Progress(r *RNG) {
+// MinutesAdjust is the extra yearly rating change for a young player who
+// played mpg minutes per team game (negative mpg = no statistics, no change).
+func MinutesAdjust(age int, mpg float64) float64 {
+	c := &Progression
+	if mpg < 0 || age > c.MinutesDevMaxAge {
+		return 0
+	}
+	if mpg >= c.MinutesDevNeutral {
+		f := math.Min(1, (mpg-c.MinutesDevNeutral)/(c.MinutesDevFull-c.MinutesDevNeutral))
+		return c.MinutesDevBonus * f
+	}
+	f := math.Min(1, (c.MinutesDevNeutral-mpg)/(c.MinutesDevNeutral-c.MinutesDevNone))
+	return -c.MinutesDevPenalty * f
+}
+
+// Progress ages the player one year with no minutes adjustment.
+func (p *Player) Progress(r *RNG) { p.ProgressMinutes(r, -1) }
+
+// ProgressMinutes ages the player one year: ratings, Potential, Age,
+// Experience. mpg is his regular-season minutes per team game (negative if
+// he has no statistics); young players develop a little faster with many
+// minutes and slower with few (MinutesAdjust).
+func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 	c := &Progression
 	ovr := float64(p.Overall())
 	imp := float64(p.Impact)
@@ -195,6 +235,13 @@ func (p *Player) Progress(r *RNG) {
 		} else if x < c.LeapChance+c.StallChance {
 			delta -= c.StallMin + r.Float64()*(c.StallMax-c.StallMin)
 		}
+	}
+	if adj := MinutesAdjust(p.Age, mpg); adj > 0 {
+		// Minutes alone never push a player past his true ceiling.
+		adj = math.Min(adj, math.Max(0, p.TrueCeiling()-(ovr+delta)))
+		delta += adj
+	} else {
+		delta += adj
 	}
 	declining := p.Age >= c.DeclineStartAge
 	apply := func(v int, idx int) int {

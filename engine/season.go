@@ -300,3 +300,11 @@ func (s *Season) computeAwards() {
 		s.Awards.ScoringLeader = awardOf(l[0])
 	}
 }
+
+// statsFor returns a player's regular-season totals, nil if none (or no season).
+func (s *Season) statsFor(id int) *PlayerSeason {
+	if s == nil {
+		return nil
+	}
+	return s.Stats[id]
+}

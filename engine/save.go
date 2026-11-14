@@ -44,6 +44,9 @@ var saveUpgrades = []func(*League){
 // Save writes the whole league as JSON, creating the folder if needed.
 func (lg *League) Save(path string) error {
 	lg.Version = SaveVersion
+	for _, t := range lg.Teams {
+		t.pruneLineup()
+	}
 	data, err := json.Marshal(lg)
 	if err != nil {
 		return err

@@ -85,6 +85,9 @@ type Team struct {
 	Roster []*Player
 	// TaxPaid is the luxury tax the team paid, by season year (contract.go).
 	TaxPaid map[int]int `json:",omitempty"`
+	// Lineup is a custom starting five and minutes plan (lineup.go); nil
+	// means the automatic rotation.
+	Lineup *Lineup `json:",omitempty"`
 }
 
 func (t *Team) FullName() string { return t.City + " " + t.Name }
