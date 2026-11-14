@@ -36,7 +36,7 @@ type OffseasonReport struct {
 // Draft is a draft in progress. Picks are made one at a time.
 type Draft struct {
 	Pool    []*Player
-	Order   []int // team IDs for one round, first pick first
+	Order   []int // original team IDs for one round, first pick first (each pick's owner selects)
 	Made    int   // picks made so far
 	Total   int
 	Results []PickResult
@@ -146,7 +146,13 @@ func (lg *League) DraftDone() bool { return lg.Draft == nil || lg.Draft.Made >= 
 // DraftOnClock returns the team ID about to pick.
 func (lg *League) DraftOnClock() int {
 	d := lg.Draft
-	return d.Order[d.Made%len(d.Order)]
+	orig := d.Order[d.Made%len(d.Order)]
+	round := d.Made/len(d.Order) + 1
+	// Order gives the slot (by original team); the pick's owner selects.
+	if owner, ok := lg.PickOwner(lg.Year, round, orig); ok {
+		return owner
+	}
+	return orig
 }
 
 // DraftPick makes the on-the-clock team's pick: the given player, or the
@@ -208,6 +214,7 @@ func (lg *League) FinishOffseason() {
 	c := &Progression
 	order := lg.Draft.Order
 	lg.Draft = nil
+	lg.rollPicks(lg.Year)
 
 	// Rosters: trim to 13, then fill from free agents.
 	for _, t := range lg.Teams {

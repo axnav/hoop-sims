@@ -144,6 +144,10 @@ type League struct {
 	// mode); a year with a stored class uses it instead of generating one.
 	DraftClasses map[int][]*Player `json:",omitempty"`
 
+	// Picks holds every draft pick in the PickYearsAhead window, with its
+	// current owner (see DraftPick).
+	Picks []DraftPick
+
 	// Transactions is the log of executed trades, oldest first.
 	Transactions []TradeResult `json:",omitempty"`
 }
@@ -170,6 +174,7 @@ func GenerateLeague(seed uint64) *League {
 	}
 	lg.NextID = id
 	lg.dealEvenly()
+	lg.initPicks()
 	return lg
 }
 

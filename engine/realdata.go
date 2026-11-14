@@ -778,6 +778,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 		}
 	}
 	lg.NextID = nextID
+	lg.initPicks()
 	return lg, nil
 }
 
