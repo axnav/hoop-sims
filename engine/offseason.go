@@ -251,6 +251,7 @@ func (lg *League) FinishOffseason() {
 		lg.FreeAgents = lg.FreeAgents[:c.FreeAgentPool]
 	}
 
+	lg.clearOffseasonInjuries()
 	lg.Year++
 	lg.SimAITrades(NewRNG(lg.Seed*1000003 + uint64(lg.Year)*10007 + tradeOffset))
 }

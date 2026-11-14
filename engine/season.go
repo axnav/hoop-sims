@@ -181,6 +181,8 @@ func (lg *League) SimDay() bool {
 		return false
 	}
 	lg.newProposals = 0
+	lg.newInjuries = nil
+	ir := lg.dayRNG(s.Year, injuryOffset+s.Day)
 	r := lg.dayRNG(s.Year, s.Day)
 	for i := s.Day * GamesPerDay; i < (s.Day+1)*GamesPerDay; i++ {
 		g := &s.Games[i]
@@ -197,6 +199,7 @@ func (lg *League) SimDay() bool {
 		s.PointDiff[g.Home] += g.HomeScore - g.AwayScore
 		s.PointDiff[g.Away] += g.AwayScore - g.HomeScore
 		addStats(s.Stats, res)
+		lg.afterGame(ir, res)
 	}
 	s.Day++
 	if s.Done() {

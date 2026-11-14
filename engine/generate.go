@@ -91,11 +91,22 @@ func (t *Team) FullName() string { return t.City + " " + t.Name }
 // position slot (each filled by the best unused player who can play it),
 // then the bench sorted best-first by overall.
 func (t *Team) Rotation() []*Player {
+	// Injured players sit out; with fewer than five healthy players
+	// everyone is included so a game can always be played.
+	pool := make([]*Player, 0, len(t.Roster))
+	for _, p := range t.Roster {
+		if !p.Injured() {
+			pool = append(pool, p)
+		}
+	}
+	if len(pool) < 5 {
+		pool = t.Roster
+	}
 	used := map[*Player]bool{}
 	var starters []*Player
 	for pos := PG; pos <= C; pos++ {
 		var best *Player
-		for _, p := range t.Roster {
+		for _, p := range pool {
 			if !used[p] && p.CanPlay(pos) && (best == nil || p.OverallAt(pos) > best.OverallAt(pos)) {
 				best = p
 			}
@@ -107,7 +118,7 @@ func (t *Team) Rotation() []*Player {
 	}
 	sort.SliceStable(starters, func(i, j int) bool { return starters[i].Overall() > starters[j].Overall() })
 	var bench []*Player
-	for _, p := range t.Roster {
+	for _, p := range pool {
 		if !used[p] {
 			bench = append(bench, p)
 		}
@@ -161,6 +172,8 @@ type League struct {
 
 	// newProposals counts proposals created on the most recent SimDay (not saved).
 	newProposals int
+	// newInjuries lists injuries from the most recent day (not saved).
+	newInjuries []InjuryLine
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

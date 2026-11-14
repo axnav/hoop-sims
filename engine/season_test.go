@@ -13,7 +13,8 @@ func playSeason(lg *League) {
 func rotationAvg(lg *League) float64 {
 	sum, n := 0, 0
 	for _, t := range lg.Teams {
-		for _, p := range t.Rotation()[:10] {
+		rot := t.Rotation()
+		for _, p := range rot[:min(10, len(rot))] {
 			sum += p.Overall()
 			n++
 		}

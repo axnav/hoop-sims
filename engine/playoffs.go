@@ -205,6 +205,8 @@ func (lg *League) SimPlayoffDay() bool {
 	}
 	round := s.CurrentRound()
 	r := lg.dayRNG(s.Year, playoffOffset+s.PlayoffDay)
+	ir := lg.dayRNG(s.Year, injuryOffset+injuryPlayoffOffset+s.PlayoffDay)
+	lg.newInjuries = nil
 	for i := range s.Series {
 		sr := &s.Series[i]
 		if sr.Round != round || sr.Done {
@@ -240,6 +242,7 @@ func (lg *League) SimPlayoffDay() bool {
 			lg.LastBox = &lb
 		}
 		addStats(s.PlayoffStats, res)
+		lg.afterGame(ir, res)
 		if sr.HighWins == 4 || sr.LowWins == 4 {
 			sr.Done = true
 			sr.Winner = sr.High

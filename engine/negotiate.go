@@ -78,6 +78,8 @@ const (
 type Options struct {
 	NoDeadlineStop bool // true: multi-day sims do not pause before the deadline
 	NoOfferStop    bool // true: multi-day sims do not pause when an offer arrives
+	NoInjuries     bool // true: nobody gets hurt (existing injuries still heal)
+	Commissioner   bool // true: EditPlayer is allowed (commissioner.go)
 }
 
 // Proposal is a trade offer from a computer team to the user.

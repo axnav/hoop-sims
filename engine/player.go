@@ -54,6 +54,9 @@ type Player struct {
 	// really performs than the visible ratings suggest (roughly -8 to +8).
 	// The game sim uses it; the interface never shows it directly.
 	Impact int
+
+	// Injury is the current injury; nil means healthy (see injury.go).
+	Injury *Injury `json:",omitempty"`
 }
 
 // Positions lists every position the player can play, primary first.
