@@ -181,6 +181,11 @@ Written 2026-11-14 from the main session's general knowledge of console franchis
 
 ## Update log (newest first)
 
+### 2026-11-14, watch the next game
+- Owner asked to be able to watch the game when playing just the next day. New menu action `watch_day` ("Watch next game") in `NextActions` (`engine/phase.go`); the front end opens the sim window for one day with the live game forced on (`SimPlan.watch`), titled "Game day". "Sim next day" itself is unchanged (instant). `phase_test.go` expects the new action in the menu list (a spec change, not a weakened test).
+- Verified by the main session: `go vet`, `go test ./... -count=1`, web build; on port 8097 the menu showed the entry, the game played live, 64x finished it, the window showed the final and standings, no console errors. `main` was pushed earlier today at 84cace9 with the owner's go-ahead; this piece is merged locally only.
+- Not tried: the entry on the day before the trade deadline (the deadline pause should show first), phone width for this entry.
+
 ### 2026-11-14, in-season progression
 - Owner asked for it (idea 2 in section 11). Design chosen by the main session: four steps a season (after days 16, 32, 48, 64), half of the expected yearly trend arrives in them, and the offseason subtracts what already arrived, so the yearly total keeps its average. Own random stream 80000 (hashed per player). Switch `NoInSeasonDev` on the Settings page. New saved field `Player.SeasonDev` (nil in old saves, no version bump). Old saves get the feature from their next step day.
 - Arrows now show this season's change once the first step has happened, otherwise last year's total (`changeScope`). The sim window lists the user's players who moved ("Development"). Live game got a 64x speed. Risers and fallers in the offseason report now use the whole-year change.

@@ -91,6 +91,7 @@ Action ids and the route each calls (from `exec` in `web/src/flow.tsx`; the API 
 | Action id | Phase it appears in | What the front end calls |
 |---|---|---|
 | `sim_day` | `regular` | `POST /api/sim` with `{days: 1}` |
+| `watch_day` | `regular` | opens `SimOverlay` for 1 day with the live game forced on (`SimPlan.watch`) |
 | `sim_week` | `regular` | opens `SimOverlay` for 7 days (it calls `POST /api/sim` one day at a time with `auto: true`) |
 | `sim_to_end` | `regular` | opens `SimOverlay` with `toEnd` |
 | `start_playoffs` | `regular_done` | `POST /api/playoffs/start` |

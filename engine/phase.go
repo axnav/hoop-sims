@@ -58,7 +58,7 @@ func (lg *League) NextActions(reportSeen bool) (next Action, more []Action) {
 	switch lg.Phase(reportSeen) {
 	case PhaseRegular:
 		next = Action{"sim_day", "Sim next day"}
-		more = []Action{{"sim_week", "Sim week"}, {"sim_to_end", "Sim to end of season"}}
+		more = []Action{{"watch_day", "Watch next game"}, {"sim_week", "Sim week"}, {"sim_to_end", "Sim to end of season"}}
 	case PhaseRegularDone:
 		next = Action{"start_playoffs", "Start playoffs"}
 	case PhasePlayoffs:

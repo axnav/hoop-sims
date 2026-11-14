@@ -25,7 +25,8 @@ function OfferPause({ onChangeIt }: { onChangeIt: (id: number) => void }) {
   )
 }
 
-export type SimPlan = { days: number; toEnd: boolean }
+// watch: play the user's game live for this run even if the saved "Watch my games" switch is off.
+export type SimPlan = { days: number; toEnd: boolean; watch?: boolean }
 type Strip = { rank: number; team: Team; w: number; l: number }[]
 
 export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => void }) {
@@ -44,7 +45,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
   const [pause, setPause] = useState<SimPause | null>(null)
   const [noStop, setNoStop] = useState(false)
   const closeBtn = useRef<HTMLButtonElement>(null)
-  const [watch, setWatch] = useState(readWatch)
+  const [watch, setWatch] = useState(() => !!plan.watch || readWatch())
   const watchRef = useRef(watch)
   const [live, setLive] = useState<GameEvents | null>(null)
   const gameRes = useRef<(() => void) | null>(null)
@@ -136,7 +137,7 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
         <div className="grid gap-4 p-5 md:grid-cols-[1fr_260px]">
           <div>
             <div className="flex items-baseline justify-between">
-              <h2 className="text-lg font-extrabold">{done ? (stop.current ? 'Stopped' : 'Done') : 'Simulating season'}</h2>
+              <h2 className="text-lg font-extrabold">{done ? (stop.current ? 'Stopped' : 'Done') : plan.watch ? 'Game day' : 'Simulating season'}</h2>
               <label className="flex items-center gap-1.5 text-[13px] text-muted">
                 <input type="checkbox" checked={watch} onChange={(e) => toggleWatch(e.target.checked)} />Watch my games
               </label>

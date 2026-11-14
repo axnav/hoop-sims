@@ -47,6 +47,7 @@ export function FlowProvider({ children }: { children: ReactNode }) {
       try {
         switch (id) {
           case 'sim_day': apply(prev, (await api.sim({ days: 1 })).state); break
+          case 'watch_day': setPlan({ days: 1, toEnd: false, watch: true }); break
           case 'sim_week': setPlan({ days: 7, toEnd: false }); break
           case 'sim_to_end': setPlan({ days: 0, toEnd: true }); break
           case 'start_playoffs': apply(prev, (await api.playoffAction('start')).state); break

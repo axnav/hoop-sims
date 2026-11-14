@@ -42,7 +42,7 @@ func TestPhaseCycle(t *testing.T) {
 	lg.UserTeamID = 2
 	lg.StartSeason()
 
-	wantPhase(t, lg, true, PhaseRegular, "sim_day", "sim_week", "sim_to_end")
+	wantPhase(t, lg, true, PhaseRegular, "sim_day", "watch_day", "sim_week", "sim_to_end")
 	wantErr(t, "CanSimDay", lg.CanSimDay(true), false)
 	wantErr(t, "CanStartPlayoffs early", lg.CanStartPlayoffs(true), true)
 	wantErr(t, "playoff day early", lg.CanPlayoffAction("day", true), true)
@@ -114,5 +114,5 @@ func TestPhaseCycle(t *testing.T) {
 
 	lg.FinishOffseason()
 	lg.StartSeason()
-	wantPhase(t, lg, true, PhaseRegular, "sim_day", "sim_week", "sim_to_end")
+	wantPhase(t, lg, true, PhaseRegular, "sim_day", "watch_day", "sim_week", "sim_to_end")
 }
