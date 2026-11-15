@@ -21,7 +21,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 **Next, in order** (owner approved on 2026-11-15; no open question, start building):
 1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
 2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
-3. Plan piece 4: training focus. Section 13.
+3. ~~Plan piece 4: training focus.~~ Done 2026-11-15.
 4. Later, when the owner says: piece 5 (badges) and piece 3 (coaches, systems, fit), the two larger pieces. Then the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
@@ -255,6 +255,14 @@ Run each piece the usual way: its own `feat/` branch, two helpers on a named mid
 - Measure: `go run ./cmd/sim -mode develop -seasons 16` with everyone Balanced against automatic focus; the share must stay in 55 to 65%.
 
 ## Update log (newest first)
+
+### 2026-11-15, training focus and learning speeds (plan piece 4)
+- Built by two Sonnet helpers (engine + API, then screens). `engine/training.go`: saved `Player.Focus` (omitempty, zero = Balanced), `Aptitude` per rating from offset 90001 (Slow 0.9 / Normal 1.0 / Fast 1.12, nothing saved), age windows `Progression.GrowthWindowClose` (Inside and Rebounding close at 29, Athleticism at 25, others open). Growth steps are weighted (favoured x1.6, others x0.85, times speed and window) and rescaled so total growth is unchanged; decline untouched. `ProgressWeighted` beside `ProgressMinutes`. Computer teams pick a focus each offseason by the largest raw gap in open favoured ratings (no position weights; 30+ stay Balanced). Route `POST /api/training`; `training` on the player page, `focus` on user roster rows. Training panel in the drawer, focus label on roster rows. `cmd/sim -mode develop -focus auto|balanced`.
+- Main session found that the first auto rule (position weight x gap) pushed growth into the ratings that count most in Overall (seed 3 drift +2.59); the helper switched it to the raw gap and softened speeds.
+- **Test change, owner approved:** `TestLongStability` drift limit 2.0 -> 2.15 (seed 5 at -2.03; drifts -0.29, -1.34, +1.22, -0.11, -2.03).
+- Helper measurement, develop share within 4 (seeds 1-4, 16 seasons): main 60.9%, balanced 59.4%, auto 65.0% (at the band edge).
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 120 s), web build. Port 8097 fictional seed 1: focus changed in the drawer at 1400 and 390 px (saved, message, roster label), other team read-only, bad key 400, other team 409, no impact key, no console errors, no horizontal scroll.
+- Not tried: real-data league, an old save, how a focus plays out over seasons in the browser. The drawer header is cramped at 390 px (older issue).
 
 ### 2026-11-15, what players want, and extensions (plan piece 2)
 - Built by two Sonnet helpers in turn (engine + API, then screens against the final JSON). `engine/motivation.go`: `MotivationOf` (offset 90000, nothing saved), `StanceOf` (role vs rank and planned minutes, team direction, tenure, can the team pay), `ExtensionAsk`/`Extend`; saved `Player.TeamSince`, `Contract.NextSalary/NextYears`, `FreeAgency.Prev` (all omitempty, no version bump). `ReSign` and computer re-signing refuse "test" players. `playersDecide` weights salary/winning/role by motivation plus a loyalty bonus. Routes `GET /api/contracts/extension/{id}`, `POST /api/contracts/extend`. Screens: "What he wants" panel and extension form in the drawer, stance chips on roster and expiring rows, High values on free-agent rows. New `go run ./cmd/sim -mode resign`.

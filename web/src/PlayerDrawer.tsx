@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { api, type ExtensionAsk, type PlayerPage, type StatLine } from './api'
+import { api, type ExtensionAsk, type PlayerPage, type Training, type StatLine } from './api'
 import { useFlow } from './flow'
 import { Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
@@ -208,6 +208,51 @@ function Wants({ p }: { p: PlayerPage }) {
   )
 }
 
+function TrainingPanel({ id, ratings, t }: { id: number; ratings: PlayerPage['ratings']; t: Training }) {
+  const qc = useQueryClient()
+  const [msg, setMsg] = useState('')
+  const label = (k: string) => ratings.find((r) => r.key === k)?.label ?? k
+  const set = useMutation({
+    mutationFn: (focus: string) => api.setTraining(id, focus),
+    onSuccess: (r) => {
+      qc.setQueryData<PlayerPage>(['player', id], (old) => (old ? { ...old, training: r.training } : old))
+      qc.invalidateQueries({ queryKey: ['team'] })
+      setMsg(r.message)
+      setTimeout(() => setMsg(''), 3000)
+    },
+  })
+  const cur = t.options.find((o) => o.key === t.focus)?.label ?? t.focus
+  const speedCls = { Fast: 'bg-win/20 text-win', Normal: 'bg-panel2 text-ink', Slow: 'bg-panel2 text-muted' }
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-panel2/50 p-3">
+      <div className="h2 mb-2">Training</div>
+      <div className="text-[13px]"><span className="text-muted">Focus:</span> <span className="font-semibold">{cur}</span></div>
+      {t.editable && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {t.options.map((o) => (
+            <button key={o.key} disabled={set.isPending} onClick={() => o.key !== t.focus && set.mutate(o.key)}
+              className={`rounded-full px-2.5 py-1 text-[12px] font-semibold disabled:opacity-50 ${o.key === t.focus ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : 'bg-panel2 text-muted hover:text-ink'}`}>{o.label}</button>
+          ))}
+        </div>
+      )}
+      {set.isError && <ErrorBox error={set.error} />}
+      {msg && <div className="mt-1 text-[13px] text-win">{msg}</div>}
+      {t.skills.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {t.skills.map((s) => (
+            <div key={s.rating} className="flex items-center gap-2 text-[13px]">
+              <span className="w-24 shrink-0 text-muted">{label(s.rating)}</span>
+              <span className={`w-16 shrink-0 rounded px-1.5 py-px text-center text-[11px] font-semibold ${speedCls[s.speed]}`}>{s.speed}</span>
+              {s.open ? <span className="min-w-0">{s.stepsFor2} <span className="text-[11px] text-muted">steps for +2</span></span> : <span className="text-muted">Window closed</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 text-[12px] text-muted">Focus moves where growth goes; it does not add growth.</div>
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
@@ -285,6 +330,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
               </div>
             ))}
           </div>
+          {p.training && <TrainingPanel id={p.id} ratings={p.ratings} t={p.training} />}
           <div className="mt-3 text-muted">
             {p.experience} seasons played{p.draftPick > 0 && <> · Drafted {p.draftYear > 0 ? p.draftYear : ''} (pick {p.draftPick})</>}
           </div>

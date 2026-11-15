@@ -42,6 +42,10 @@ export type GameState = {
 }
 export type Level = 'Low' | 'Medium' | 'High'
 export type Motivation = { money: Level; winning: Level; role: Level; loyalty: Level }
+export type Training = {
+  focus: string; options: { key: string; label: string }[]; editable: boolean
+  skills: { rating: string; speed: 'Slow' | 'Normal' | 'Fast'; open: boolean; stepsFor2: string }[]
+}
 export type Stance = { key: 'resign' | 'open' | 'test'; label: string }
 export type FAPlayer = {
   motivation?: Motivation
@@ -76,7 +80,7 @@ export type RosterRow = {
   injury?: Injury
   salary: number; years: number; expiring: boolean
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
-  stance?: Stance; extended?: boolean
+  stance?: Stance; extended?: boolean; focus?: string
 }
 export type TeamStatus = { key: 'contender' | 'buyer' | 'seller' | 'rebuilding'; label: string; wants: string }
 export type TeamRow = {
@@ -93,7 +97,7 @@ export type PlayerPage = {
   ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
   prospect?: boolean; scout?: { level: number; ovrLo: number; ovrHi: number; potLo: number; potHi: number }
   season: StatLine; playoffs: StatLine
-  motivation?: Motivation; stance?: Stance & { reasons: string[] }; extension?: { salary: number; years: number }
+  motivation?: Motivation; stance?: Stance & { reasons: string[] }; extension?: { salary: number; years: number }; training?: Training
   career: { year: number; team: Team; age: number; ovr: number; pot: number; gp: number; ppg: number; rpg: number; apg: number }[]
 }
 export type ScheduleGame = { day: number; opp: Team; home: boolean; played: boolean; me?: number; them?: number; win?: boolean }
@@ -275,6 +279,7 @@ export const api = {
   extensionAsk: (id: number) => get<ExtensionAsk>(`/api/contracts/extension/${id}`),
   contractExtend: (playerId: number, salary: number, years: number) => post<{ message: string; state: GameState }>('/api/contracts/extend', { playerId, salary, years }),
   contractRelease: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/release', { playerId }),
+  setTraining: (playerId: number, focus: string) => post<{ training: Training; message: string }>('/api/training', { playerId, focus }),
   draftAuto: () => post<GameState>('/api/draft/auto'),
   freeAgents: () => get<FreeAgencyData>('/api/freeagents'),
   faBegin: () => post<{ freeAgency: FreeAgencyData; state: GameState }>('/api/freeagents/begin'),

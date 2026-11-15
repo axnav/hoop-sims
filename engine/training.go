@@ -64,7 +64,7 @@ var TrainingTuning = struct {
 	AutoMaxAge   int     // computer teams keep players this old or older Balanced
 }{
 	FavouredMult: 1.6, OtherMult: 0.85,
-	SlowMult: 0.8, NormalMult: 1.0, FastMult: 1.25,
+	SlowMult: 0.9, NormalMult: 1.0, FastMult: 1.12,
 	SlowShare: 0.25, FastShare: 0.25,
 	AutoMaxAge: 30,
 }
@@ -205,26 +205,26 @@ func (lg *League) SetFocus(teamID, playerID int, f Focus) error {
 	return nil
 }
 
-// autoFocus is the focus a computer team gives a player: the one whose
-// favoured ratings have the most room to grow, counted by how much each
-// rating matters at his position. Players at AutoMaxAge or older, and any
-// player whose favoured windows are all closed, stay Balanced. No randomness.
+// autoFocus is the focus a computer team gives a player: the one whose open
+// favoured ratings have the largest average gap to 99. Position weights are
+// deliberately not used (they would steer growth into the ratings that count
+// most in Overall). Players at AutoMaxAge or older stay Balanced. No randomness.
 func autoFocus(p *Player) Focus {
 	if p.Age >= TrainingTuning.AutoMaxAge {
 		return FocusBalanced
 	}
 	rt := p.Ratings.array()
-	ow := overallWeights[p.Pos]
 	best, bestScore := FocusBalanced, 0.0
 	for f := FocusShooting; f < numFocuses; f++ {
-		score := 0.0
+		sum, n := 0.0, 0
 		for _, i := range focusRatings[f] {
 			if windowOpen(p.Age, i) {
-				score += ow[i] * float64(99-rt[i])
+				sum += float64(99 - rt[i])
+				n++
 			}
 		}
-		if score > bestScore {
-			best, bestScore = f, score
+		if n > 0 && sum/float64(n) > bestScore {
+			best, bestScore = f, sum/float64(n)
 		}
 	}
 	return best

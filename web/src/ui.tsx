@@ -356,3 +356,11 @@ export function ValuesChips({ m }: { m?: Motivation }) {
     </span>
   )
 }
+
+export const focusLabels: Record<string, string> = { shooting: 'Shooting', inside: 'Inside', playmaking: 'Playmaking', defense: 'Defense', rebounding: 'Rebounding', body: 'Body' }
+
+// Small muted training-focus label for roster rows; nothing for balanced or unknown.
+export function FocusLabel({ focus }: { focus?: string }) {
+  if (!focus || !focusLabels[focus]) return null
+  return <span title="Training focus" className="ml-1.5 inline-block shrink-0 align-middle text-[10px] text-muted">{focusLabels[focus]}</span>
+}
