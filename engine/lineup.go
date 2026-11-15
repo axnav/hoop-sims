@@ -194,38 +194,15 @@ func (lg *League) AutoLineup(teamID int) Lineup {
 	t := lg.Teams[teamID]
 	auto := t.autoMinutes()
 	l := Lineup{Minutes: map[int]int{}}
-	var five []*Player
-	for i, pm := range auto {
-		if i < 5 {
-			five = append(five, pm.Player)
-		}
+	for _, pm := range auto {
 		if pm.Min > 0 {
 			l.Minutes[pm.Player.ID] = pm.Min
 		}
 	}
-	// Seat the five in position slots, each by the best fit still free.
-	used := map[*Player]bool{}
-	for pos := PG; pos <= C; pos++ {
-		var best *Player
-		for _, p := range five {
-			if used[p] {
-				continue
-			}
-			better := best == nil
-			if !better {
-				if p.CanPlay(pos) != best.CanPlay(pos) {
-					better = p.CanPlay(pos)
-				} else {
-					better = p.OverallAt(pos) > best.OverallAt(pos)
-				}
-			}
-			if better {
-				best = p
-			}
-		}
-		if best != nil {
-			used[best] = true
-			l.Starters[pos] = best.ID
+	// Seat the five in position slots by best total fit.
+	for pos, p := range t.StarterSlots() {
+		if p != nil {
+			l.Starters[pos] = p.ID
 		}
 	}
 	return l

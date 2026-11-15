@@ -297,3 +297,95 @@ func TestMinutesDevNeutral(t *testing.T) {
 		}
 	}
 }
+
+// slotTeam builds a team whose position slots would start two weak players:
+// three good guards, a good big and a good forward, plus weak SG/SF-only
+// players who would fill the SG and SF slots under position picking.
+func slotTeam() *Team {
+	guard := Ratings{Inside: 50, Mid: 70, Three: 72, Playmaking: 85, Rebounding: 40, Defense: 65, Athleticism: 70}
+	big := Ratings{Inside: 85, Mid: 40, Three: 30, Playmaking: 35, Rebounding: 85, Defense: 80, Athleticism: 65}
+	forward := Ratings{Inside: 75, Mid: 55, Three: 45, Playmaking: 40, Rebounding: 75, Defense: 70, Athleticism: 65}
+	weak := Ratings{Inside: 45, Mid: 45, Three: 45, Playmaking: 45, Rebounding: 45, Defense: 45, Athleticism: 45}
+	mk := func(id int, pos Position, r Ratings) *Player {
+		return &Player{ID: id, Name: "P", Age: 27, Pos: pos, Ratings: r, Potential: 60}
+	}
+	return &Team{Roster: []*Player{
+		mk(0, SG, weak), mk(1, SF, weak), mk(2, PG, guard), mk(3, PG, guard),
+		mk(4, PG, guard), mk(5, C, big), mk(6, PF, forward), mk(7, PG, weak),
+	}}
+}
+
+func TestRotationStartsBestFive(t *testing.T) {
+	tm := slotTeam()
+	rot := tm.Rotation()
+	if len(rot) != 8 {
+		t.Fatalf("rotation has %d players", len(rot))
+	}
+	// The five best by overall start (ties: lower ID), best first.
+	for i := 1; i < len(rot); i++ {
+		a, b := rot[i-1], rot[i]
+		if a.Overall() < b.Overall() || (a.Overall() == b.Overall() && a.ID > b.ID) {
+			t.Fatalf("rotation not sorted at %d: %d (%d) before %d (%d)", i, a.ID, a.Overall(), b.ID, b.Overall())
+		}
+	}
+	got := map[int]bool{}
+	for _, p := range rot[:5] {
+		got[p.ID] = true
+	}
+	for _, id := range []int{2, 3, 4, 5, 6} {
+		if !got[id] {
+			t.Errorf("player %d should start", id)
+		}
+	}
+	for _, id := range []int{0, 1, 7} {
+		if got[id] {
+			t.Errorf("weak player %d should not start", id)
+		}
+	}
+}
+
+func TestStarterSlotsSensible(t *testing.T) {
+	tm := slotTeam()
+	slots := tm.StarterSlots()
+	if slots[C] == nil || slots[C].ID != 5 {
+		t.Fatalf("the pure centre should play C, got %+v", slots[C])
+	}
+	if slots[PF] == nil || slots[PF].ID != 6 {
+		t.Fatalf("the forward should play PF, got %+v", slots[PF])
+	}
+	seen := map[int]bool{}
+	for _, p := range slots {
+		if p == nil || seen[p.ID] {
+			t.Fatalf("slots must hold five different players: %+v", slots)
+		}
+		seen[p.ID] = true
+	}
+	for _, p := range tm.Rotation()[:5] {
+		if !seen[p.ID] {
+			t.Fatalf("slot player set differs from the top five (missing %d)", p.ID)
+		}
+	}
+	again := slotTeam().StarterSlots()
+	for i := range slots {
+		if slots[i].ID != again[i].ID {
+			t.Fatalf("slot %d not deterministic", i)
+		}
+	}
+}
+
+func TestAutoLineupSeatsBestFive(t *testing.T) {
+	lg := lineupLeague(4)
+	for tid, tm := range lg.Teams[:6] {
+		l := lg.AutoLineup(tid)
+		rot := tm.Rotation()
+		top := map[int]bool{}
+		for _, p := range rot[:5] {
+			top[p.ID] = true
+		}
+		for _, id := range l.Starters {
+			if !top[id] {
+				t.Fatalf("team %d: starter %d is not among the five best", tid, id)
+			}
+		}
+	}
+}

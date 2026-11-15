@@ -95,9 +95,11 @@ type Team struct {
 
 func (t *Team) FullName() string { return t.City + " " + t.Name }
 
-// Rotation returns the roster in playing order: five starters, one per
-// position slot (each filled by the best unused player who can play it),
-// then the bench sorted best-first by overall.
+// Rotation returns the roster in playing order: the five healthy players
+// with the highest overall as starters (best first; ties go to the lower
+// ID), then the bench sorted best-first the same way. Positions play no part
+// in who starts; StarterSlots seats the five in PG..C afterwards. With fewer
+// than five healthy players everyone is included.
 func (t *Team) Rotation() []*Player {
 	// Injured players sit out; with fewer than five healthy players
 	// everyone is included so a game can always be played.
@@ -108,31 +110,57 @@ func (t *Team) Rotation() []*Player {
 		}
 	}
 	if len(pool) < 5 {
-		pool = t.Roster
+		pool = append(pool[:0], t.Roster...)
 	}
-	used := map[*Player]bool{}
-	var starters []*Player
-	for pos := PG; pos <= C; pos++ {
-		var best *Player
-		for _, p := range pool {
-			if !used[p] && p.CanPlay(pos) && (best == nil || p.OverallAt(pos) > best.OverallAt(pos)) {
-				best = p
+	sort.SliceStable(pool, func(i, j int) bool {
+		a, b := pool[i].Overall(), pool[j].Overall()
+		if a != b {
+			return a > b
+		}
+		return pool[i].ID < pool[j].ID
+	})
+	return pool
+}
+
+// StarterSlots seats the first five of the rotation in the position slots
+// PG, SG, SF, PF, C. It tries every assignment and keeps the one with the
+// highest total OverallAt (the first one found in a fixed order wins ties),
+// so a pure centre lands in the C slot. Fewer than five players fill the
+// slots in order and leave the rest nil.
+func (t *Team) StarterSlots() [5]*Player {
+	rot := t.Rotation()
+	var out [5]*Player
+	if len(rot) < 5 {
+		copy(out[:], rot)
+		return out
+	}
+	five := rot[:5]
+	var cur, best [5]int
+	var used [5]bool
+	bestSum := -1
+	var walk func(slot, sum int)
+	walk = func(slot, sum int) {
+		if slot == 5 {
+			if sum > bestSum {
+				bestSum, best = sum, cur
 			}
+			return
 		}
-		if best != nil {
-			used[best] = true
-			starters = append(starters, best)
+		for i, p := range five {
+			if used[i] {
+				continue
+			}
+			used[i] = true
+			cur[slot] = i
+			walk(slot+1, sum+p.OverallAt(Position(slot)))
+			used[i] = false
 		}
 	}
-	sort.SliceStable(starters, func(i, j int) bool { return starters[i].Overall() > starters[j].Overall() })
-	var bench []*Player
-	for _, p := range pool {
-		if !used[p] {
-			bench = append(bench, p)
-		}
+	walk(0, 0)
+	for slot, i := range best {
+		out[slot] = five[i]
 	}
-	sort.SliceStable(bench, func(i, j int) bool { return bench[i].Overall() > bench[j].Overall() })
-	return append(starters, bench...)
+	return out
 }
 
 type League struct {

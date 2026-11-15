@@ -119,7 +119,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
 | `player.go` | The `Player` type, positions, ratings, overall maths | `Player`, `Ratings`, `Position` (`PG`..`C`), `Overall`, `OverallAt`, `Effective` (ratings shifted by hidden `Impact`), `TrueOverall`, `ShotUsage`, `ScoringRole`, `CanPlay`, `PosLabel` | `overallWeights` (per-position weights) |
-| `generate.go` | Teams, the `League` type, new fictional league | `League`, `Team`, `GenerateLeague`, `GeneratePlayer`, `Team.Rotation` (auto starters by position, then bench), `RosterSize` (13) | uses `Progression` |
+| `generate.go` | Teams, the `League` type, new fictional league | `League`, `Team`, `GenerateLeague`, `GeneratePlayer`, `Team.Rotation` (the five best healthy players by overall start, then the bench best-first), `Team.StarterSlots` (seats those five in PG..C by best total `OverallAt`), `RosterSize` (13) | uses `Progression` |
 | `names.go` | Name lists | (unexported lists) | none |
 | `rng.go` | The only random source | `RNG`, `NewRNG`, `Between`, `Normal`, `Chance`, `Pick`, `PickWeighted` | none |
 | `phase.go` | League stages and guards | `Phase`, `Action`, `League.Phase`, `NextActions`, `Can...` guards, `PlayoffSeeds` (8), `UserPlayoffResult` | none |
@@ -539,7 +539,7 @@ Not covered: the front end (no tests; the type check in `npm run build` is the o
 - **One lock around everything.** `server.mu` is held for the whole of every request, so a long action (simulating a season) blocks all other requests, and only one league can exist in the server.
 - **A single save slot.** There is one save file and the server keeps one league; starting a new game replaces the one in memory, and saving overwrites the file.
 - **`reportSeen` is not saved.** The phase also depends on a server-side flag outside the league. Loading always sets it to true, so a game saved on the unseen offseason report resumes at the draft.
-- **Positions are not used in the game sim, but are used by the automatic rotation.** `newSide` in `game.go` weighs players by minutes and effective ratings only. `Team.Rotation` and `AutoLineup` do pick starters by position, and the overall formula is position-based, so position matters to who plays and how good a player looks, not to how a lineup plays together.
+- **Positions are not used in the game sim or in who starts; they only decide which slot each automatic starter is shown in.** `newSide` in `game.go` weighs players by minutes and effective ratings only. `Team.Rotation` picks the five best by overall, `StarterSlots` and `AutoLineup` only seat them in PG..C, and the overall formula is position-based, so position matters to how good a player looks, not to who plays or how a lineup plays together.
 - **Engine trade tests halve salaries.** `tradeLeague` in `engine/trade_test.go` halves every salary so all teams have cap room; salary matching is covered separately in `contract_test.go` and `deal_test.go`, but the trade value tests do not run under realistic payrolls.
 - **A compiled binary is tracked in git.** `cmd/web/web` (about 11 MB) is committed. `.gitignore` does not exclude it, and a plain `go build` inside `cmd/web` produces exactly that file, which is why `RULES.md` says to build with `-o` outside the repository.
 - **Real data is detected indirectly.** `server.isReal()` looks at the first player on the first roster for a `RealID`; the mode is not stored on the league.
