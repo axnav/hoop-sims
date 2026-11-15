@@ -29,6 +29,9 @@ type server struct {
 	reportSeen bool // the offseason report has been looked at; draft may start
 	savePath   string
 	realDir    string
+	photoDir   string
+	photos     map[string]string    // RealID -> file name, read once per game start or load
+	credits    map[string][3]string // file name -> artist, licence, source
 	webDir     string
 
 	metaOnce sync.Once
@@ -188,6 +191,7 @@ func (s *server) newGame(r *http.Request) (any, error) {
 	lg.UserTeamID = in.Team
 	lg.StartSeason()
 	s.lg, s.reportSeen = lg, true
+	s.loadPhotos()
 	return s.state(), nil
 }
 
@@ -197,6 +201,7 @@ func (s *server) load(r *http.Request) (any, error) {
 		return nil, bad("load failed: %v", err)
 	}
 	s.lg, s.reportSeen = lg, true
+	s.loadPhotos()
 	return s.state(), nil
 }
 
@@ -242,6 +247,8 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/teams", true, s.teamsList)
 	g("/api/team/{id}", true, s.teamPage)
 	g("/api/player/{id}", true, s.player)
+	mux.HandleFunc("GET /api/photo/{id}", s.photoFile)
+	mux.HandleFunc("GET /api/photo/{id}/credit", s.photoCredit)
 	g("/api/schedule", true, s.schedule)
 	g("/api/box/{id}", true, s.box)
 	g("/api/history", true, s.history)
@@ -295,8 +302,9 @@ func main() {
 	port := flag.Int("port", 8080, "port to listen on")
 	save := flag.String("save", engine.SavePath, "save file path")
 	web := flag.String("web", "web/dist", "built web app directory")
+	photos := flag.String("photos", "data/real/photos", "player photo directory (real-data league only)")
 	flag.Parse()
-	s := &server{savePath: *save, realDir: "data/real", webDir: *web}
+	s := &server{savePath: *save, realDir: "data/real", photoDir: *photos, webDir: *web}
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("listening on http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, s.routes()))

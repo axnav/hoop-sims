@@ -61,6 +61,7 @@ func (s *server) lineupObj() M {
 		}
 		addInjury(row, p)
 		addDev(row, p)
+		s.addPhoto(row, p)
 		rows = append(rows, row)
 	}
 	return M{"custom": custom, "total": engine.TeamMinutes, "maxMinutes": engine.MaxPlayerMinutes,

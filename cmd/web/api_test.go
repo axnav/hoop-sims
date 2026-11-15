@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1721,5 +1722,105 @@ func TestRestrictedAndExceptionAPI(t *testing.T) {
 	}
 	if e := fa["exception"].(M); e["kind"] == nil {
 		t.Fatalf("exception obj: %v", e)
+	}
+}
+
+func (c *tc) rawGet(path string) (int, []byte, http.Header) {
+	c.t.Helper()
+	resp, err := http.Get(c.ts.URL + path)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(resp.Body)
+	return resp.StatusCode, buf.Bytes(), resp.Header
+}
+
+func hasPhotoKey(v any) bool {
+	switch x := v.(type) {
+	case M:
+		for k, e := range x {
+			if k == "photo" || hasPhotoKey(e) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range x {
+			if hasPhotoKey(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestPhotosFictional(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 5, "team": 3}, 200)
+	team := c.call("GET", "/api/team/3", nil, 200)
+	pid := num(team["roster"].([]any)[0].(M)["id"])
+	for _, p := range []string{"/api/photo/" + itoa(pid), "/api/photo/999999", "/api/photo/abc", "/api/photo/" + itoa(pid) + "/credit"} {
+		if code, _, _ := c.rawGet(p); code != 404 {
+			t.Fatalf("%s: status %d, want 404", p, code)
+		}
+	}
+	for _, p := range []string{"/api/team/3", "/api/player/" + itoa(pid), "/api/lineup", "/api/freeagents"} {
+		if hasPhotoKey(c.call("GET", p, nil, 200)) {
+			t.Fatalf("%s: fictional league row has photo", p)
+		}
+	}
+}
+
+func TestPhotosReal(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 5, "team": 3}, 200)
+	dir := t.TempDir()
+	roster := c.s.lg.Teams[3].Roster
+	a, b := roster[0], roster[1]
+	a.RealID, b.RealID = "testpl01", "testpl02"
+	body := []byte("\xff\xd8\xff fake jpeg")
+	if err := os.WriteFile(filepath.Join(dir, "testpl01.jpg"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	csvText := "player_id,name,file,wikipedia_page,licence,artist,descriptionurl\n" +
+		"testpl01,Test,testpl01.jpg,p,CC BY 2.0,\"<a href=\"\"x\"\">Jane Doe</a>\",https://example.org/file\n"
+	os.WriteFile(filepath.Join(dir, "credits.csv"), []byte(csvText), 0o644)
+	c.s.photoDir = dir
+	c.s.loadPhotos()
+
+	rows := c.call("GET", "/api/team/3", nil, 200)["roster"].([]any)
+	for _, r := range rows {
+		row := r.(M)
+		id := num(row["id"])
+		_, has := row["photo"]
+		if want := id == a.ID; has != want {
+			t.Fatalf("player %d: photo=%v, want %v", id, has, want)
+		}
+	}
+	if pg := c.call("GET", "/api/player/"+itoa(a.ID), nil, 200); pg["photo"] != true {
+		t.Fatalf("player page lacks photo: %v", pg["photo"])
+	}
+	code, got, h := c.rawGet("/api/photo/" + itoa(a.ID))
+	if code != 200 || !bytes.Equal(got, body) || !strings.Contains(h.Get("Cache-Control"), "max-age") {
+		t.Fatalf("photo: %d %q %v", code, got, h)
+	}
+	if code, _, _ := c.rawGet("/api/photo/" + itoa(b.ID)); code != 404 {
+		t.Fatalf("player without file: %d", code)
+	}
+	code, got, _ = c.rawGet("/api/photo/" + itoa(a.ID) + "/credit")
+	var cr M
+	json.Unmarshal(got, &cr)
+	if code != 200 || cr["artist"] != "Jane Doe" || cr["licence"] != "CC BY 2.0" || cr["source"] != "https://example.org/file" {
+		t.Fatalf("credit: %d %v", code, cr)
+	}
+	c.checkNoImpact("credit", cr)
+	c.checkNoImpact("team", c.call("GET", "/api/team/3", nil, 200))
+}
+
+func TestCleanArtist(t *testing.T) {
+	in := "File:Jason Kidd Nets coach.jpg: <a href=\"x\">Keith Allison</a>\nderivative work: Chrishmt0423"
+	if got, want := cleanArtist(in), "Keith Allison; derivative work: Chrishmt0423"; got != want {
+		t.Fatalf("cleanArtist = %q, want %q", got, want)
 	}
 }

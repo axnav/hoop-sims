@@ -48,7 +48,9 @@ func (s *server) injuryLines(lines []engine.InjuryLine) []M {
 	for _, l := range lines {
 		row := M{"playerId": l.PlayerID, "name": l.Name, "team": s.team(l.TeamID),
 			"injury": l.Injury, "gamesLeft": l.GamesLeft, "serious": l.Serious}
-		addDev(row, s.lg.FindPlayer(l.PlayerID))
+		pl := s.lg.FindPlayer(l.PlayerID)
+		addDev(row, pl)
+		s.addPhoto(row, pl)
 		out = append(out, row)
 	}
 	return out

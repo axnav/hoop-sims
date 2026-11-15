@@ -16,6 +16,29 @@ function lum(hex: string) {
   return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
 }
 
+// Player picture: the photo when the server says there is one, else initials
+// on a circle in the team colour (also used when the image fails to load).
+export function Avatar({ id, name, photo, color, size = 32 }: { id: number; name: string; photo?: boolean; color?: string; size?: number }) {
+  const [failed, setFailed] = useState(false)
+  const base = { width: size, height: size, minWidth: size } as const
+  if (photo && !failed) {
+    return (
+      <img src={'/api/photo/' + id} alt={name} loading="lazy" onError={() => setFailed(true)}
+        className="inline-block shrink-0 rounded-full bg-panel2 align-middle"
+        style={{ ...base, objectFit: 'cover', objectPosition: 'top' }} />
+    )
+  }
+  const bg = color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#64748b'
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  const initials = (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1)).toUpperCase()
+  return (
+    <span role="img" aria-label={name} className="inline-flex shrink-0 select-none items-center justify-center rounded-full align-middle font-bold"
+      style={{ ...base, background: bg, color: lum(bg) > 0.6 ? '#10131a' : '#fff', fontSize: Math.max(8, Math.round(size * 0.38)) }}>
+      {initials}
+    </span>
+  )
+}
+
 export function TeamBadge({ team, size = 28 }: { team: Team; size?: number }) {
   return (
     <span

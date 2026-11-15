@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { api, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
+import { Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -138,13 +138,18 @@ function Body({ id, close }: { id: number; close: () => void }) {
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
   const { state } = useFlow()
   const [editing, setEditing] = useState(false)
+  const credit = useQuery({ queryKey: ['photo-credit', id], queryFn: () => api.photoCredit(id), enabled: !!q.data?.photo, retry: false, staleTime: Infinity })
   const ts = useQuery({ queryKey: ['trade-status', state?.phase, state?.day], queryFn: api.tradeStatus })
   return (
     <Q q={q} minH={300}>
       {(p) => (
         <div className="p-5">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex gap-3">
+              <div className="shrink-0">
+                <Avatar id={p.id} name={p.name} photo={p.photo} color={p.team?.primary} size={64} />
+              </div>
+              <div>
               <h2 className="text-2xl font-extrabold">{p.name}<InjuryTag injury={p.injury} /></h2>
               {p.injury && <div className="mt-1 text-sm font-semibold text-loss">Injured: {injuryText(p.injury)}</div>}
               <div className="mt-1 flex items-center gap-2 text-muted">
@@ -161,6 +166,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
                   <TeamBadge team={p.team} size={20} />{p.team.fullName}
                 </button>
               )}
+              </div>
             </div>
             <div className="flex gap-2">
               {p.prospect && p.scout ? (
@@ -206,6 +212,11 @@ function Body({ id, close }: { id: number; close: () => void }) {
           <div className="mt-3 text-muted">
             {p.experience} seasons played{p.draftPick > 0 && <> · Drafted {p.draftYear > 0 ? p.draftYear : ''} (pick {p.draftPick})</>}
           </div>
+          {p.photo && credit.data && (
+            <a href={credit.data.source} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-muted hover:underline">
+              Photo: {credit.data.artist} ({credit.data.licence}), Wikimedia Commons
+            </a>
+          )}
           <Stats title="Season" s={p.season} />
           <Stats title="Playoffs" s={p.playoffs} />
           {p.career.length > 0 && (

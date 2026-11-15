@@ -52,6 +52,7 @@ func (s *server) expiringView() M {
 			"pot": p.Potential, "tier": engine.PlayerTier(p), "askSalary": sal, "askYears": yrs,
 			"canReSign": problem == "", "problem": problem, "restricted": lg.RestrictedEligible(p)}
 		addDev(row, p)
+		s.addPhoto(row, p)
 		rows = append(rows, row)
 	}
 	return M{"players": rows, "payroll": s.payrollObj(u), "open": s.offseasonOpen()}

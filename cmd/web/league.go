@@ -91,6 +91,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		addInjury(row, p)
 		addContract(row, p)
 		addDev(row, p)
+		s.addPhoto(row, p)
 		row["expiring"] = expiring[p.ID]
 		roster = append(roster, row)
 	}
@@ -167,6 +168,9 @@ func (s *server) player(r *http.Request) (any, error) {
 	}
 	addInjury(out, p)
 	addContract(out, p)
+	if !s.inPool(p.ID) {
+		s.addPhoto(out, p)
+	}
 	if d, _ := devChange(p); !s.inPool(p.ID) && d != nil {
 		addDev(out, p)
 		rc := M{}

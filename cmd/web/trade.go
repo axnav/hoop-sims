@@ -62,6 +62,7 @@ func (s *server) playerRow(owner int, a engine.TradeAsset) M {
 	addInjury(row, pl)
 	addContract(row, pl)
 	addDev(row, pl)
+	s.addPhoto(row, pl)
 	return row
 }
 

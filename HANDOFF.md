@@ -19,7 +19,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 **Pushed:** `main` up to `b4f2528`. Later commits (documents only) are local; push needs the owner's go-ahead.
 
 **Next, in order** (owner approved on 2026-11-15; no open question, start building):
-1. Plan piece 6: show photos and avatars. Build steps in section 13.
+1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
 2. Plan piece 2: what players want, and extensions. Section 13.
 3. Plan piece 4: training focus. Section 13.
 4. Later, when the owner says: piece 5 (badges) and piece 3 (coaches, systems, fit), the two larger pieces. Then the older open items: section 5 problems 1 and 2, and section 7.
@@ -255,6 +255,11 @@ Run each piece the usual way: its own `feat/` branch, two helpers on a named mid
 - Measure: `go run ./cmd/sim -mode develop -seasons 16` with everyone Balanced against automatic focus; the share must stay in 55 to 65%.
 
 ## Update log (newest first)
+
+### 2026-11-15, player photos and avatars shown (plan piece 6)
+- Built by one Sonnet helper (server and screens together, one written contract; cheaper than two for a piece this small). New `cmd/web/photos.go`, `-photos` flag, `photo` key on player rows, `GET /api/photo/{id}` and `/credit`, `Avatar` in the drawer, roster rows and court tokens. Main session moved the credit line to a full-width line in the drawer and added `cleanArtist` (Commons author text had "File:x.jpg:" prefixes and line breaks).
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 50 s), web build. Port 8097, real-data league seed 1: 13 of 13 Dallas roster rows have photos, all 13 images load at 1400 and 390 px, drawer shows photo and credit, court tokens show photos, photo route 200 image/jpeg, unknown id and `..%2Fx` 404, no impact key, no console errors; fictional league: 0 rows with photos (initials avatars).
+- Not tried: a photo that fails to load in the browser (fallback only read in code), free agency and trade screens (no Avatar there yet), the Leaders page (rows not built with `addDev`, no `photo`).
 
 ### 2026-11-15, build plan approved for pieces 6, 2 and 4
 - The owner approved the plan in section 13 with the three recommended choices, and will play a test stretch and report changes. Pieces 5 and 3 wait. Nothing was built for these pieces yet. The owner is moving to a new chat; section 0 and the prompt in section 10 are current.

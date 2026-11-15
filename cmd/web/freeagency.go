@@ -107,6 +107,7 @@ func (s *server) freeAgencyView() M {
 		}
 		addInjury(row, p)
 		addDev(row, p)
+		s.addPhoto(row, p)
 		rows = append(rows, row)
 	}
 	for _, o := range lg.OffersBy(u) {

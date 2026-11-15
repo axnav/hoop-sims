@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { LineupPlayer } from './api'
-import { InjuryTag, ovrColor } from './ui'
+import { useFlow } from './flow'
+import { Avatar, InjuryTag, ovrColor } from './ui'
 
 type Sel = { kind: 'slot'; i: number } | { kind: 'player'; id: number } | null
 
@@ -41,6 +42,8 @@ export default function CourtLineup({ slots, starters, players, minutes, onSet }
   minutes: Record<number, number>
   onSet: (slot: number, id: number) => void // same as the page's starter dropdowns
 }) {
+  const { state } = useFlow()
+  const teamColor = state?.user.team.primary
   const [sel, setSel] = useState<Sel>(null)
   const [drag, setDrag] = useState<number | null>(null) // player id being dragged
   const [over, setOver] = useState<number | 'bench' | null>(null)
@@ -110,6 +113,7 @@ export default function CourtLineup({ slots, starters, players, minutes, onSet }
                     <span className="text-xs font-bold text-muted">{slot}</span>
                   )}
                 </button>
+                {p && <span className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 rounded-full ring-2 ring-panel"><Avatar id={p.id} name={p.name} photo={p.photo} color={teamColor} size={26} /></span>}
                 <span className="pointer-events-none absolute -top-1 left-0 rounded bg-panel px-1 text-[9px] font-bold uppercase tracking-wider text-muted ring-1 ring-line">{slot}</span>
                 {p?.injury && <span className="pointer-events-none absolute -bottom-1 left-1/2 -translate-x-1/2"><InjuryTag injury={p.injury} /></span>}
                 {p && (
