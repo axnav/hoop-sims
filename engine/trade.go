@@ -414,9 +414,11 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 	lg.Teams[a].Roster = append(lg.Teams[a].Roster, get...)
 	for _, p := range give {
 		p.TeamID = b
+		p.TeamSince = lg.Year
 	}
 	for _, p := range get {
 		p.TeamID = a
+		p.TeamSince = lg.Year
 	}
 	lg.fixRosters([]int{a, b}, &res)
 	lg.Transactions = append(lg.Transactions, res)

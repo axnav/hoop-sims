@@ -118,6 +118,11 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	// stay on the roster until FinishOffseason.
 	for _, t := range lg.Teams {
 		for _, p := range t.Roster {
+			if p.Contract.Years <= 1 && p.Contract.NextYears > 0 {
+				// an extension takes over instead of the player expiring
+				p.Contract = Contract{Salary: p.Contract.NextSalary, Years: p.Contract.NextYears}
+				continue
+			}
 			p.Contract.Years = max(0, p.Contract.Years-1)
 		}
 	}
@@ -221,6 +226,7 @@ func (lg *League) DraftPick(playerID int) error {
 	d.Made++
 	p.DraftPick = d.Made
 	p.TeamID = tid
+	p.TeamSince = lg.Year
 	_, round := d.slot(d.Made - 1)
 	p.Contract = RookieContract(d.Made, round) // draft picks always sign (see CanSign)
 	lg.Teams[tid].Roster = append(lg.Teams[tid].Roster, p)

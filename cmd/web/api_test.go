@@ -1824,3 +1824,136 @@ func TestCleanArtist(t *testing.T) {
 		t.Fatalf("cleanArtist = %q, want %q", got, want)
 	}
 }
+
+func TestMotivationAndExtensionAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 9, "team": 3}, 200)
+	lg := c.s.lg
+	u := lg.UserTeamID
+	levels := map[string]bool{"Low": true, "Medium": true, "High": true}
+	checkMot := func(where string, v any) {
+		m, ok := v.(M)
+		if !ok {
+			t.Fatalf("%s: no motivation", where)
+		}
+		for _, k := range []string{"money", "winning", "role", "loyalty"} {
+			if s, _ := m[k].(string); !levels[s] {
+				t.Fatalf("%s: motivation %v", where, m)
+			}
+		}
+	}
+
+	// every roster player of the user has a stance, others do not
+	team := c.call("GET", "/api/team/"+itoa(u), nil, 200)
+	for _, x := range team["roster"].([]any) {
+		st, ok := x.(M)["stance"].(M)
+		if !ok || st["key"] == "" || st["label"] == "" || st["reasons"] != nil {
+			t.Fatalf("roster stance: %v", x)
+		}
+	}
+	other := c.call("GET", "/api/team/"+itoa((u+1)%len(lg.Teams)), nil, 200)
+	for _, x := range other["roster"].([]any) {
+		if x.(M)["stance"] != nil {
+			t.Fatalf("stance on another team's row: %v", x)
+		}
+	}
+
+	// player page: motivation for all, stance and extension for the user's players
+	mine := lg.Teams[u].Roster
+	pl := c.call("GET", "/api/player/"+itoa(mine[0].ID), nil, 200)
+	checkMot("player", pl["motivation"])
+	st, ok := pl["stance"].(M)
+	if !ok || st["label"] == "" || st["reasons"] == nil || pl["extension"] != nil {
+		t.Fatalf("player stance: %v", pl)
+	}
+	foreign := lg.Teams[(u+1)%len(lg.Teams)].Roster[0]
+	fp := c.call("GET", "/api/player/"+itoa(foreign.ID), nil, 200)
+	checkMot("foreign player", fp["motivation"])
+	if fp["stance"] != nil {
+		t.Errorf("stance on a player of another team")
+	}
+
+	// extension route: find one who will talk and one who will not
+	for _, p := range mine {
+		p.Contract = engine.Contract{Salary: engine.MarketSalary(p) * 9 / 10 / 100 * 100, Years: 1}
+	}
+	var yes, no *engine.Player
+	for _, p := range mine {
+		r := c.call("GET", "/api/contracts/extension/"+itoa(p.ID), nil, 200)
+		if r["ok"] == true {
+			if yes == nil && num(r["salary"]) <= num(r["maxSalary"]) {
+				yes = p
+				if num(r["maxYears"]) != engine.Cap.MaxContractYears || num(r["current"]) != p.Contract.Salary || num(r["maxSalary"]) < num(r["current"]) {
+					t.Fatalf("extension ask: %v", r)
+				}
+			}
+		} else if r["reason"] == "" {
+			t.Fatalf("refusal without reason: %v", r)
+		} else if no == nil {
+			no = p
+		}
+	}
+	if yes == nil {
+		t.Fatal("nobody on the roster would extend")
+	}
+	t.Logf("extend: %s; refuse: %v", yes.Name, no != nil)
+	if no != nil {
+		c.call("POST", "/api/contracts/extend", M{"playerId": no.ID, "salary": engine.Cap.MaxSalary, "years": 2}, 409)
+	}
+	ask := c.call("GET", "/api/contracts/extension/"+itoa(yes.ID), nil, 200)
+	c.call("POST", "/api/contracts/extend", M{"playerId": yes.ID, "salary": num(ask["salary"]) - 100, "years": 2}, 409)
+	c.call("POST", "/api/contracts/extend", M{"playerId": yes.ID, "salary": num(ask["salary"]), "years": 9}, 409)
+	out := c.call("POST", "/api/contracts/extend", M{"playerId": yes.ID, "salary": num(ask["salary"]), "years": 3}, 200)
+	if msg, _ := out["message"].(string); msg == "" || out["state"] == nil {
+		t.Fatalf("extend response: %v", out)
+	}
+	pl = c.call("GET", "/api/player/"+itoa(yes.ID), nil, 200)
+	ext, ok := pl["extension"].(M)
+	if !ok || num(ext["salary"]) != num(ask["salary"]) || num(ext["years"]) != 3 {
+		t.Fatalf("player extension: %v", pl["extension"])
+	}
+	if r := c.call("GET", "/api/contracts/extension/"+itoa(yes.ID), nil, 200); r["ok"] != false {
+		t.Errorf("second ask: %v", r)
+	}
+	c.call("POST", "/api/contracts/extend", M{"playerId": yes.ID, "salary": num(ask["salary"]), "years": 3}, 409)
+	team = c.call("GET", "/api/team/"+itoa(u), nil, 200)
+	flagged := 0
+	for _, x := range team["roster"].([]any) {
+		if x.(M)["extended"] == true {
+			flagged++
+		}
+	}
+	if flagged != 1 {
+		t.Errorf("extended rows: %d", flagged)
+	}
+	c.call("POST", "/api/contracts/extend", M{"playerId": 999999, "salary": 5000, "years": 2}, 409)
+	c.call("GET", "/api/contracts/extension/x", nil, 400)
+}
+
+func TestMotivationOnFreeAgentRows(t *testing.T) {
+	c := newTC(t)
+	toDraftEnd(c)
+	ex := c.call("GET", "/api/contracts/expiring", nil, 200)
+	for _, x := range ex["players"].([]any) {
+		r := x.(M)
+		st, ok := r["stance"].(M)
+		if !ok || st["key"] == "" {
+			t.Fatalf("expiring row without stance: %v", r)
+		}
+		if st["key"] == "test" && (r["canReSign"] == true || r["problem"] != "He wants to test free agency.") {
+			t.Fatalf("a test player can be re-signed: %v", r)
+		}
+	}
+	c.call("POST", "/api/freeagents/begin", nil, 200)
+	fa := c.call("GET", "/api/freeagents", nil, 200)
+	rows := fa["players"].([]any)
+	if len(rows) == 0 {
+		t.Fatal("no free agents")
+	}
+	for _, x := range rows {
+		m, ok := x.(M)["motivation"].(M)
+		if !ok || m["money"] == nil || m["winning"] == nil || m["role"] == nil || m["loyalty"] == nil {
+			t.Fatalf("free-agent row without motivation: %v", x)
+		}
+	}
+}

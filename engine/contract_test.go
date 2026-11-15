@@ -141,7 +141,7 @@ func TestSigningRules(t *testing.T) {
 	if err := lg.Sign(tid, fa, Cap.MinSalary, 1, SignMinimum); err != nil {
 		t.Fatal(err)
 	}
-	if fa.TeamID != tid || fa.Contract != (Contract{Cap.MinSalary, 1}) || len(lg.Teams[tid].Roster) != RosterSize {
+	if fa.TeamID != tid || fa.Contract != (Contract{Salary: Cap.MinSalary, Years: 1}) || len(lg.Teams[tid].Roster) != RosterSize {
 		t.Error("signed player not on roster with contract")
 	}
 	for _, p := range lg.FreeAgents {
@@ -191,7 +191,7 @@ func TestTradeSalaryRules(t *testing.T) {
 	// Put both teams well over the cap and make one side far bigger.
 	for _, tm := range []*Team{a, b} {
 		for _, p := range tm.Roster {
-			p.Contract = Contract{12000, 2}
+			p.Contract = Contract{Salary: 12000, Years: 2}
 		}
 	}
 	big := a.Roster[0]
@@ -224,13 +224,13 @@ func TestTradeSalaryRules(t *testing.T) {
 	}
 	// hard ceiling applies even to a "matched" deal that grows payroll
 	for _, p := range b.Roster {
-		p.Contract = Contract{14500, 2}
+		p.Contract = Contract{Salary: 14500, Years: 2}
 	}
 	b.Roster[0].Contract.Salary = 14500
 	a.Roster[0].Contract.Salary = 14500
 	a.Roster[1].Contract.Salary = 14500
 	// both sides over the cap and above ceiling-after for team 5
-	if err := lg.salaryProblem(5, []*Player{b.Roster[0]}, []*Player{{Contract: Contract{49000, 1}}}); err == nil {
+	if err := lg.salaryProblem(5, []*Player{b.Roster[0]}, []*Player{{Contract: Contract{Salary: 49000, Years: 1}}}); err == nil {
 		t.Error("ceiling not enforced")
 	}
 }
@@ -240,11 +240,11 @@ func TestContractValueAdjust(t *testing.T) {
 	p := testPlayer(70, 27, 70)
 	base := tradeValue(p, 0.5, others)
 	market := MarketSalary(p)
-	p.Contract = Contract{market, 3}
+	p.Contract = Contract{Salary: market, Years: 3}
 	fair := tradeValue(p, 0.5, others)
-	p.Contract = Contract{Cap.MinSalary, 4}
+	p.Contract = Contract{Salary: Cap.MinSalary, Years: 4}
 	bargain := tradeValue(p, 0.5, others)
-	p.Contract = Contract{Cap.MaxSalary, 4}
+	p.Contract = Contract{Salary: Cap.MaxSalary, Years: 4}
 	over := tradeValue(p, 0.5, others)
 	if !(bargain > fair && fair > over) {
 		t.Errorf("bargain %.2f fair %.2f overpay %.2f", bargain, fair, over)
@@ -252,7 +252,7 @@ func TestContractValueAdjust(t *testing.T) {
 	if bargain > base*(1+Cap.ContractSwing)+1e-9 || over < base*(1-Cap.ContractSwing)-1e-9 {
 		t.Errorf("adjustment out of bounds: base %.2f bargain %.2f over %.2f", base, bargain, over)
 	}
-	p.Contract = Contract{market, 0}
+	p.Contract = Contract{Salary: market, Years: 0}
 	if rebuild, contend := tradeValue(p, 0, others), tradeValue(p, 1, others); rebuild >= contend {
 		t.Errorf("expiring player not worth less to a rebuilder: %.2f vs %.2f", rebuild, contend)
 	}
@@ -419,7 +419,7 @@ func TestSixSeasons(t *testing.T) {
 			t.Fatalf("user team has %d players after the offseason", n)
 		}
 		for _, p := range lg.Teams[lg.UserTeamID].Roster {
-			if !had[p.ID] && p.Contract != (Contract{Cap.MinSalary, 1}) {
+			if !had[p.ID] && p.Contract != (Contract{Salary: Cap.MinSalary, Years: 1}) {
 				t.Fatalf("auto-filled user player not on a one-year minimum: %+v", p.Contract)
 			}
 		}

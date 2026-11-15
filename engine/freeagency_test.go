@@ -47,7 +47,7 @@ func makeRoom(lg *League, n int) {
 		lg.Release(t.ID, lowest.ID)
 	}
 	for _, p := range t.Roster {
-		p.Contract = Contract{Cap.MinSalary, 2}
+		p.Contract = Contract{Salary: Cap.MinSalary, Years: 2}
 	}
 }
 
@@ -389,7 +389,7 @@ func resetTeam(lg *League, tid, n, payroll int) {
 		t.Roster = t.Roster[:n]
 	}
 	for _, p := range t.Roster {
-		p.Contract = Contract{Cap.MinSalary, 2}
+		p.Contract = Contract{Salary: Cap.MinSalary, Years: 2}
 	}
 	t.Roster[0].Contract.Salary += payroll - lg.Payroll(tid)
 }
@@ -567,7 +567,7 @@ func TestComputerRightsTeamMatches(t *testing.T) {
 	if !s.Matched || s.Team != 5 || s.SheetFrom != lg.UserTeamID || s.Salary != 30000 || s.Years != 3 || s.Via != "own" {
 		t.Fatalf("expected a match by team 5: %+v", s)
 	}
-	if p.TeamID != 5 || p.Contract != (Contract{30000, 3}) {
+	if p.TeamID != 5 || p.Contract != (Contract{Salary: 30000, Years: 3}) {
 		t.Errorf("player: team %d contract %+v", p.TeamID, p.Contract)
 	}
 	if lg.OffersFor(p.ID) != 0 {
@@ -644,7 +644,7 @@ func TestUserOfferSheetMatch(t *testing.T) {
 	if !g.Matched || g.Team != u || g.SheetFrom != 7 || g.Salary != 30000 || g.Via != "own" {
 		t.Errorf("match log row: %+v", g)
 	}
-	if p.TeamID != u || p.Contract != (Contract{30000, 3}) || lg.Payroll(u) <= Cap.SalaryCap {
+	if p.TeamID != u || p.Contract != (Contract{Salary: 30000, Years: 3}) || lg.Payroll(u) <= Cap.SalaryCap {
 		t.Errorf("after matching: team %d contract %+v payroll %d", p.TeamID, p.Contract, lg.Payroll(u))
 	}
 	if len(lg.PendingSheets()) != 0 || lg.OffersFor(p.ID) != 0 {
@@ -715,7 +715,7 @@ func TestNoScreensPathsNeverWait(t *testing.T) {
 	lg, p = userSheet(t)
 	resetTeam(lg, lg.UserTeamID, 12, 100000)
 	lg.finishOffseason(true)
-	if lg.FA != nil || p.TeamID != 0 || p.Contract != (Contract{30000, 3}) {
+	if lg.FA != nil || p.TeamID != 0 || p.Contract != (Contract{Salary: 30000, Years: 3}) {
 		t.Fatalf("automatic path should match: FA %v, player team %d %+v", lg.FA != nil, p.TeamID, p.Contract)
 	}
 	lg, p = userSheet(t) // payroll 155000: matching would pass the tax line, so it declines

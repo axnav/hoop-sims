@@ -105,6 +105,7 @@ func (s *server) freeAgencyView() M {
 		if rt, ok := lg.RightsTeam(p.ID); ok {
 			row["restricted"], row["rightsTeam"], row["mine"] = true, s.team(rt), rt == u
 		}
+		row["motivation"] = s.motivationObj(p)
 		addInjury(row, p)
 		addDev(row, p)
 		s.addPhoto(row, p)

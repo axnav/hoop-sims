@@ -58,6 +58,10 @@ type Player struct {
 	// Contract is the player's deal (see contract.go); zero for free agents.
 	Contract Contract
 
+	// TeamSince is the league year he joined his current team (draft, signing
+	// or trade); 0 = unknown, treated as neutral (see motivation.go).
+	TeamSince int `json:",omitempty"`
+
 	// Injury is the current injury; nil means healthy (see injury.go).
 	Injury *Injury `json:",omitempty"`
 

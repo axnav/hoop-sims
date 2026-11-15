@@ -151,6 +151,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
 | `contract.go` | Contracts, cap rules, payroll, re-signing, release | `Cap`, `Contract`, `MarketSalary`, `RookieContract`, `Payroll`, `CapRoom`, `TaxBill`, `CanSign`, `Sign`, `SignKind`, `AskingContract`, `ReSign`, `Release`, `Expiring` | `Cap` |
+| `motivation.go` | Motivations (Money, Winning, Role, Loyalty; Low/Medium/High), stance on re-signing, extensions | `Motivation`, `Level`, `MotivationOf`, `Stance`, `StanceOf`, `ExtensionAsk`, `ExtensionLimit`, `Extend` | `MotivationTuning`, `Cap.ExtensionMaxRaise`, `Cap.ExtensionOpenMult`, `motivationOffset` |
 | `freeagency.go` | The free-agency period | `FreeAgency`, `FAOffer`, `FASigning`, `BeginFreeAgency`, `AdvanceFreeAgency`, `MakeOffer`, `WithdrawOffer`, `OffersBy`, `FreeAgentAsk` | `FATuning`, `freeAgencyOffset` |
 
 ### Draft
@@ -228,7 +229,8 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 | `Experience`, `DraftYear`, `DraftPick` | Career facts; `DraftPick` 0 means undrafted |
 | `RealID` | Real-data player id; empty in fictional leagues (the server uses it to tell which mode a league is in) |
 | `Impact` | The hidden number, roughly -8 to +8. Used by `Effective` in the game sim and by progression. Never sent to the browser |
-| `Contract` | `Contract{Salary, Years}`; `Years` counts seasons left including the current one, 0 means none or expiring in the offseason |
+| `Contract` | `Contract{Salary, Years, NextSalary, NextYears}`; `Years` counts seasons left including the current one, 0 means none or expiring in the offseason. `NextSalary`/`NextYears` (omitempty) are an extension signed in the last year; `BeginOffseason` makes them the contract when the current one runs out |
+| `TeamSince` | League year he joined his team (draft, signing, trade; omitempty, 0 = unknown = neutral); feeds the Loyalty part of `StanceOf` |
 | `Injury` | `*Injury{Name, GamesLeft, Serious}`; nil means healthy |
 | `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. It is the whole year (in-season steps plus the offseason) |
 | `SeasonDev` | `*DevChange`: change so far this season from in-season steps; nil before the first step, cleared by `ProgressMinutes`. `addDev` in `cmd/web/admin.go` sends `SeasonDev` if present (`changeScope` "season"), else `Dev` ("year"), as `ovrChange`, `potChange`, `ratingChanges` |
@@ -249,7 +251,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### FreeAgency
 
-`FreeAgency{Day, Days, NextOfferID, Offers, Log, Rights, Sheets}` exists only during free agency. `Rights` maps a restricted player to the team that may match; `Sheets` are offer sheets waiting for the user's answer. `Day` is days already resolved; `Days` is 10. `FAOffer{ID, Team, PlayerID, Salary, Years, Day}` is a standing offer; `FASigning` is a log row.
+`FreeAgency{Day, Days, NextOfferID, Offers, Log, Rights, Prev, Sheets}` exists only during free agency. `Rights` maps a restricted player to the team that may match; `Prev` (omitempty) maps each player released into this free agency to his previous team (the Loyalty bonus in `playersDecide`); `Sheets` are offer sheets waiting for the user's answer. `Day` is days already resolved; `Days` is 10. `FAOffer{ID, Team, PlayerID, Salary, Years, Day}` is a standing offer; `FASigning` is a log row.
 
 ### Proposal and trade records
 
@@ -311,6 +313,8 @@ All numbers are in the `Cap` block in `engine/contract.go`, in thousands of doll
 
 **Re-signing.** After `BeginOffseason`, a player whose `Contract.Years` has dropped to 0 is "expiring" and stays on his roster. `ReSign` signs him at `AskingContract` (his market salary now; 4 years if 25 or younger, 3 if 28 or younger, 2 if 31 or younger, else 1). It is refused once free agency has begun. Computer teams do this in `reSignComputerTeams` when free agency begins, keeping players worth their ask while staying under the tax line.
 
+**Stance and extensions (`motivation.go`).** `StanceOf` gives a player on a team "resign", "open" or "test" from role (rank by overall and minutes), team direction, years with the team and whether the team can pay his market value, each weighted by his motivation (`MotivationTuning`). A "test" player is refused by `ReSign` and skipped by `reSignTeam` ("He wants to test free agency."). `ExtensionAsk`/`Extend` work for a player on the team with `Contract.Years == 1` and no extension, from the regular season (playoffs included) until free agency begins; the ask is his market salary ("open": times `Cap.ExtensionOpenMult`), refused above `Cap.ExtensionMaxRaise` (140%) of his salary. `Extend` also refuses when next season's payroll (contracts with more than one year left, extensions, plus this one) would pass the hard ceiling; there is no cap-room test. Current-season payroll ignores the extension; it becomes the contract in `BeginOffseason`, so payroll counts it from then on. Computer teams never extend.
+
 **Release.** `Release` sends a player to free agency and deletes the contract with no dead money; it is allowed only in the offseason.
 
 **Free agency days.** `BeginFreeAgency` opens a 10-day period (`FATuning.Days`). A free agent's asking salary starts at his `AskingContract` and softens linearly to 70% by the last day (`soften`, never below the minimum). The user places standing offers with `MakeOffer` (replaces his earlier offer for that player, needs a roster spot, must respect cap room after his other pending offers, and can only be accepted from the next day). Rival bids are hidden; only a count of offers is shown. Each `AdvanceFreeAgency` day, computer teams with open spots make up to 2 offers (plus a chance of a second) at 92% to 112% of the ask, minimum offers start on day 5, and a full team may bid for a clear upgrade and cut its worst player if it signs him. Then `playersDecide` runs for each free agent with offers made before today: he considers offers at or above 95% of his current ask (late in the period, 50% of his original ask), ranks them by an appeal score (salary, a small bonus per contract year, team quality, and a bonus if he would be among the team's best eight), and signs the best one that passes the cap rules. After the last day, players whose original ask was at least four times the minimum take the best real offer they have. Anyone left unsigned is a free agent when the season starts, and short rosters are filled with minimum deals by `fillRosters`.
@@ -340,6 +344,7 @@ Streams in the code today:
 | 70001, 70003 | Hashed streams (no draw order): computer team draft noise per team and prospect (70001), per-rating scouting errors (70003) | `computerDraftScore`, `ScoutRatings` |
 | 70004 | Hashed stream used only to repair an old save's missing scouting errors | `ensureDraft` |
 | 80000 + step | Hashed stream per player for in-season development steps 1 to 4 | `inSeasonDev` |
+| 90000 | Hashed stream per player (seed, 90000, player ID; no year, so a player keeps his motivations) | `MotivationOf` |
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 
@@ -416,6 +421,8 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/lineup/auto` | Clear the custom lineup | `lineupAuto` (lineup.go) |
 | GET | `/api/injuries` | Injury report; `?team=` an id or `all` (default user) | `injuries` (admin.go) |
 | GET | `/api/contracts/expiring` | The user's expiring players and their asks | `expiring` (contracts.go) |
+| GET | `/api/contracts/extension/{id}` | Extension ask for one of the user's players: `{ok:true, salary, maxSalary, maxYears, current}` or `{ok:false, reason}` (200 both ways) | `extensionAsk` (motivation.go) |
+| POST | `/api/contracts/extend` | Extend `{playerId, salary, years}`; returns `{message, state}` | `extend` (motivation.go) |
 | POST | `/api/contracts/resign` | Re-sign `{playerId}` at his ask | closure over `League.ReSign` (main.go), `contractAction` (contracts.go) |
 | POST | `/api/contracts/release` | Release `{playerId}` | closure over `League.Release` (main.go), `contractAction` (contracts.go) |
 | GET | `/api/freeagents` | Pool, the user's offers, cap numbers, day | `freeAgents` (freeagency.go) |

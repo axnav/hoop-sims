@@ -98,6 +98,9 @@ type FreeAgency struct {
 	Log         []FASigning
 	// Rights maps a restricted player to the team holding his rights.
 	Rights map[int]int `json:",omitempty"`
+	// Prev maps a player released into this free agency to the team he
+	// played for (his Loyalty bonus in playersDecide).
+	Prev map[int]int `json:",omitempty"`
 	// Sheets are the pending offer sheets against the user's rights.
 	Sheets []OfferSheet `json:",omitempty"`
 }
@@ -145,13 +148,24 @@ func (lg *League) BeginFreeAgency() error {
 			rights[p.ID] = t.ID
 		}
 	}
+	prev := map[int]int{}
+	for _, t := range lg.Teams {
+		for _, p := range lg.Expiring(t.ID) {
+			prev[p.ID] = t.ID
+		}
+	}
 	lg.releaseExpiring()
 	for _, t := range lg.Teams {
 		if t.ID != lg.UserTeamID {
+			if len(t.Roster) > RosterSize {
+				for _, p := range t.Roster {
+					prev[p.ID] = t.ID // the weakest are trimmed below
+				}
+			}
 			lg.trimRoster(t)
 		}
 	}
-	lg.FA = &FreeAgency{Days: FATuning.Days, Rights: rights}
+	lg.FA = &FreeAgency{Days: FATuning.Days, Rights: rights, Prev: prev}
 	return nil
 }
 
@@ -862,9 +876,14 @@ func (lg *League) playersDecide(cf []float64, final bool) []FASigning {
 			}
 			need = float64(Cap.MinSalary + 1)
 		}
+		mot := lg.MotivationOf(p)
+		mw := &MotivationTuning.FAWeight
 		appeal := func(o FAOffer) float64 {
-			a := float64(o.Salary) * (1 + FATuning.YearBonus*float64(o.Years-1))
-			a *= 1 - FATuning.TeamSwing + 2*FATuning.TeamSwing*cf[o.Team]
+			// Motivation scales how far each part moves the base salary:
+			// Money the salary and years part, Winning the team part, Role the
+			// top-eight part, Loyalty a bonus for his previous team.
+			a := math.Pow(float64(o.Salary)/float64(max(1, orig)), mw[mot.Money]) * (1 + FATuning.YearBonus*float64(o.Years-1))
+			a *= 1 - FATuning.TeamSwing*mw[mot.Winning] + 2*FATuning.TeamSwing*mw[mot.Winning]*cf[o.Team]
 			better := 0
 			for _, q := range lg.Teams[o.Team].Roster {
 				if q.Overall() > p.Overall() {
@@ -872,7 +891,10 @@ func (lg *League) playersDecide(cf []float64, final bool) []FASigning {
 				}
 			}
 			if better < 8 {
-				a *= 1 + FATuning.RoleBonus
+				a *= 1 + FATuning.RoleBonus*mw[mot.Role]
+			}
+			if prev, ok := fa.Prev[p.ID]; ok && prev == o.Team {
+				a *= 1 + MotivationTuning.LoyaltyBonus[mot.Loyalty]
 			}
 			return a
 		}

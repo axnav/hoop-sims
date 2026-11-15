@@ -93,6 +93,9 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		addDev(row, p)
 		s.addPhoto(row, p)
 		row["expiring"] = expiring[p.ID]
+		if id == lg.UserTeamID {
+			s.addStance(row, p)
+		}
 		roster = append(roster, row)
 	}
 	st := lg.Season
@@ -170,6 +173,20 @@ func (s *server) player(r *http.Request) (any, error) {
 	addContract(out, p)
 	if !s.inPool(p.ID) {
 		s.addPhoto(out, p)
+		if status != "Retired" {
+			out["motivation"] = s.motivationObj(p)
+		}
+		if p.TeamID == lg.UserTeamID && status == "Active" {
+			st := lg.StanceOf(p)
+			reasons := st.Reasons
+			if reasons == nil {
+				reasons = []string{}
+			}
+			out["stance"] = M{"key": st.Key, "label": st.Label, "reasons": reasons}
+			if p.Contract.NextYears > 0 {
+				out["extension"] = M{"salary": p.Contract.NextSalary, "years": p.Contract.NextYears}
+			}
+		}
 	}
 	if d, _ := devChange(p); !s.inPool(p.ID) && d != nil {
 		addDev(out, p)

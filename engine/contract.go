@@ -54,6 +54,13 @@ var Cap = struct {
 	// them is at least this (about a 62-rated player).
 	ReSignMinValue float64
 
+	// Extensions (see ExtensionAsk): in his last contract year a player may
+	// extend. The ask is his market salary (resign stance), times
+	// ExtensionOpenMult for an "open" stance; it may be at most
+	// ExtensionMaxRaise times his current salary (the NBA 140% rule).
+	ExtensionMaxRaise float64
+	ExtensionOpenMult float64
+
 	// Mid-level exception: once per offseason a team may sign one free agent
 	// without cap room. Up to MidLevel for MidLevelYears if the payroll stays
 	// at or under the tax line; otherwise the smaller taxpayer version
@@ -74,8 +81,9 @@ var Cap = struct {
 	MarketOldAge: 31, MarketOldStep: 0.05, MarketOldMin: 0.6,
 
 	ContractSwing: 0.30, ContractFullYears: 4, ExpiringRebuildCut: 0.08,
-	ReSignMinValue: 4.5,
-	MidLevel:       12800, MidLevelYears: 4, TaxMidLevel: 5200, TaxMidLevelYears: 2,
+	ReSignMinValue:    4.5,
+	ExtensionMaxRaise: 1.40, ExtensionOpenMult: 1.10,
+	MidLevel: 12800, MidLevelYears: 4, TaxMidLevel: 5200, TaxMidLevelYears: 2,
 }
 
 // contractOffset is the RNG stream for contract randomness (initial contract
@@ -89,6 +97,11 @@ const contractOffset = 40000
 type Contract struct {
 	Salary int
 	Years  int
+	// NextSalary and NextYears are an extension signed in the last contract
+	// year (see Extend). Zero NextYears = none. BeginOffseason makes them the
+	// contract when the current one runs out.
+	NextSalary int `json:",omitempty"`
+	NextYears  int `json:",omitempty"`
 }
 
 // counted is what the contract adds to a payroll: nothing once it has run out.
@@ -140,14 +153,14 @@ func contractAdjust(p *Player, contend float64) float64 {
 func RookieContract(pick, round int) Contract {
 	c := &Cap
 	if round >= 2 {
-		return Contract{c.MinSalary, c.RookieYearsRound2}
+		return Contract{Salary: c.MinSalary, Years: c.RookieYearsRound2}
 	}
 	f := float64(pick-1) / 29
 	if f > 1 {
 		f = 1
 	}
 	s := float64(c.RookieTop) + f*float64(c.RookieLastFirst-c.RookieTop)
-	return Contract{int(math.Round(s/100)) * 100, c.RookieYearsRound1}
+	return Contract{Salary: int(math.Round(s/100)) * 100, Years: c.RookieYearsRound1}
 }
 
 // Payroll is the total of a team's contracts that are still running.
@@ -344,9 +357,10 @@ func (lg *League) forceSign(teamID int, p *Player, salary, years int) {
 			break
 		}
 	}
-	p.Contract = Contract{salary, years}
+	p.Contract = Contract{Salary: salary, Years: years}
 	if lg.findRosterPlayer(teamID, p.ID) == nil {
 		p.TeamID = teamID
+		p.TeamSince = lg.Year
 		lg.Teams[teamID].Roster = append(lg.Teams[teamID].Roster, p)
 	}
 }
@@ -378,6 +392,15 @@ func AskingContract(p *Player) (salary, years int) {
 	return MarketSalary(p), min(years, Cap.MaxContractYears)
 }
 
+// CanReSign says why the team cannot re-sign the expiring player now (nil if
+// it can, as far as his stance goes).
+func (lg *League) CanReSign(p *Player) error {
+	if lg.StanceOf(p).Key == "test" {
+		return errTestsFA
+	}
+	return nil
+}
+
 // ReSign re-signs one of the team's expiring players at his ask.
 func (lg *League) ReSign(teamID, playerID int) error {
 	if lg.FA != nil {
@@ -389,6 +412,9 @@ func (lg *League) ReSign(teamID, playerID int) error {
 	p := lg.findRosterPlayer(teamID, playerID)
 	if p == nil || p.Contract.Years > 0 {
 		return fmt.Errorf("That player is not an expiring player on your team.")
+	}
+	if lg.StanceOf(p).Key == "test" {
+		return errTestsFA
 	}
 	salary, years := AskingContract(p)
 	return lg.Sign(teamID, p, salary, years, SignOwn)
@@ -479,7 +505,7 @@ func (lg *League) assignInitialContracts() {
 			if p.Overall() < 58 {
 				w[0] += 1
 			}
-			p.Contract = Contract{MarketSalary(p), 1 + r.PickWeighted(w)}
+			p.Contract = Contract{Salary: MarketSalary(p), Years: 1 + r.PickWeighted(w)}
 		}
 		lg.scaleToTax(t)
 	}
@@ -533,7 +559,7 @@ func (lg *League) reSignTeam(t *Team, cf []float64) {
 		return exp[i].ID < exp[j].ID
 	})
 	for _, p := range exp {
-		if vals[p.ID] < Cap.ReSignMinValue {
+		if vals[p.ID] < Cap.ReSignMinValue || lg.StanceOf(p).Key == "test" {
 			continue
 		}
 		salary, years := AskingContract(p)

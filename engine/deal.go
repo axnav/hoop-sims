@@ -412,6 +412,7 @@ func ExecuteDeal(lg *League, deal Deal, userTeam int) (TradeResult, error) {
 	}
 	for _, x := range moving {
 		x.p.TeamID = x.to
+		x.p.TeamSince = lg.Year
 		lg.Teams[x.to].Roster = append(lg.Teams[x.to].Roster, x.p)
 	}
 	lg.fixRosters(teams, &res)
