@@ -290,6 +290,7 @@ func (s *server) routes() *http.ServeMux {
 	p("/api/freeagents/sheet", true, s.faSheet)
 	g("/api/contracts/extension/{id}", true, s.extensionAsk)
 	p("/api/contracts/extend", true, s.extend)
+	p("/api/training", true, s.setTraining)
 	p("/api/contracts/resign", true, func(r *http.Request) (any, error) { return s.contractAction(s.lg.ReSign)(r) })
 	p("/api/contracts/release", true, func(r *http.Request) (any, error) { return s.contractAction(s.lg.Release)(r) })
 	p("/api/admin/player/{id}", true, s.adminPlayer)

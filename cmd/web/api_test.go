@@ -1957,3 +1957,75 @@ func TestMotivationOnFreeAgentRows(t *testing.T) {
 		}
 	}
 }
+
+func TestTrainingRoute(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	lg := c.s.lg
+	u := lg.UserTeamID
+	mine := lg.Teams[u].Roster[0]
+	pl := c.call("GET", "/api/player/"+itoa(mine.ID), nil, 200)
+	tr, ok := pl["training"].(M)
+	if !ok || tr["focus"] != "balanced" || tr["editable"] != true || len(tr["options"].([]any)) != len(engine.AllFocuses()) {
+		t.Fatalf("training block: %v", pl["training"])
+	}
+	skills := tr["skills"].([]any)
+	if len(skills) != len(engine.RatingKeys()) {
+		t.Fatalf("skills: %v", skills)
+	}
+	for i, x := range skills {
+		sk := x.(M)
+		if sk["rating"] != engine.RatingKeys()[i].Key || sk["speed"] == "" || sk["stepsFor2"] == "" {
+			t.Fatalf("skill line: %v", sk)
+		}
+		if _, ok := sk["open"].(bool); !ok {
+			t.Fatalf("skill open: %v", sk)
+		}
+	}
+	// good
+	out := c.call("POST", "/api/training", M{"playerId": mine.ID, "focus": "shooting"}, 200)
+	if msg, _ := out["message"].(string); msg == "" || out["training"].(M)["focus"] != "shooting" || out["training"].(M)["editable"] != true {
+		t.Fatalf("response: %v", out)
+	}
+	if mine.Focus != engine.FocusShooting {
+		t.Fatalf("focus not set: %v", mine.Focus)
+	}
+	team := c.call("GET", "/api/team/"+itoa(u), nil, 200)
+	for _, x := range team["roster"].([]any) {
+		r := x.(M)
+		want := "balanced"
+		if num(r["id"]) == mine.ID {
+			want = "shooting"
+		}
+		if r["focus"] != want {
+			t.Fatalf("roster focus: %v", r)
+		}
+	}
+	other := c.call("GET", "/api/team/"+itoa((u+1)%len(lg.Teams)), nil, 200)
+	for _, x := range other["roster"].([]any) {
+		if x.(M)["focus"] != nil {
+			t.Fatalf("focus on another team's row: %v", x)
+		}
+	}
+	// bad key, other team's player, unknown player
+	c.call("POST", "/api/training", M{"playerId": mine.ID, "focus": "dunking"}, 400)
+	foreign := lg.Teams[(u+1)%len(lg.Teams)].Roster[0]
+	c.call("POST", "/api/training", M{"playerId": foreign.ID, "focus": "body"}, 409)
+	if foreign.Focus != engine.FocusBalanced {
+		t.Error("another team's player changed")
+	}
+	fp := c.call("GET", "/api/player/"+itoa(foreign.ID), nil, 200)
+	if fp["training"].(M)["editable"] != false {
+		t.Errorf("foreign player editable: %v", fp["training"])
+	}
+	c.call("POST", "/api/training", M{"playerId": 999999, "focus": "body"}, 409)
+
+	// prospects: no training block, route refuses
+	toDraftStart(c, 11)
+	pr := c.s.lg.Draft.Pool[0]
+	pp := c.call("GET", "/api/player/"+itoa(pr.ID), nil, 200)
+	if pp["training"] != nil {
+		t.Fatalf("training on a prospect: %v", pp["training"])
+	}
+	c.call("POST", "/api/training", M{"playerId": pr.ID, "focus": "body"}, 404)
+}

@@ -167,6 +167,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
 | `progression.go` | Yearly development, retirement, rookie generation | `Player.Progress`, `ProgressMinutes`, `RetireChance`, `TrueCeiling`, `MinutesAdjust`, `GenerateRookie` | `Progression` (also roster and draft sizes, `FreeAgentPool`) |
+| `training.go` | Training focus (`Player.Focus`, saved, omitempty) and learning speeds (`Aptitude`, hashed, offset 90001, nothing saved). Every growth step is split over the ratings by weight = focus x speed x age window, then scaled so total positive growth is unchanged (`reweightGrowth`); decline untouched. Computer teams pick a focus at the end of each offseason (`autoFocus`). `ProgressWeighted` is `ProgressMinutes` with weights (nil = equal) | `Focus`, `FocusFromKey`, `AllFocuses`, `Aptitude`, `AptitudeLabel`, `SetFocus`, `TrainingView` | `TrainingTuning`, `Progression.GrowthWindowClose` |
 | `inseason.go` | In-season development: after days 16, 32, 48 and 64 `SimDay` calls `inSeasonDev`, which gives every player a small step (half of the expected yearly trend over the four steps). The steps are an advance: `ProgressMinutes` starts from the season-start overall and subtracts the in-season gain, so the yearly total keeps its average. `expectedTrend` is the one copy of the yearly formula | `DevLine`, `DevChangesLastDay` | `Progression.InSeason...`; switch `Options.NoInSeasonDev` |
 
 ### Saving
@@ -345,6 +346,7 @@ Streams in the code today:
 | 70004 | Hashed stream used only to repair an old save's missing scouting errors | `ensureDraft` |
 | 80000 + step | Hashed stream per player for in-season development steps 1 to 4 | `inSeasonDev` |
 | 90000 | Hashed stream per player (seed, 90000, player ID; no year, so a player keeps his motivations) | `MotivationOf` |
+| 90001 | Hashed stream per player for learning speeds (seed, 90001, player ID) | `Aptitude` |
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 
@@ -422,6 +424,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/injuries` | Injury report; `?team=` an id or `all` (default user) | `injuries` (admin.go) |
 | GET | `/api/contracts/expiring` | The user's expiring players and their asks | `expiring` (contracts.go) |
 | GET | `/api/contracts/extension/{id}` | Extension ask for one of the user's players: `{ok:true, salary, maxSalary, maxYears, current}` or `{ok:false, reason}` (200 both ways) | `extensionAsk` (motivation.go) |
+| POST | `/api/training` | Set a user-team player's focus `{playerId, focus}`; returns `{training, message}` (`training` block also on `GET /api/player/{id}`, never for prospects) | `setTraining` (training.go) |
 | POST | `/api/contracts/extend` | Extend `{playerId, salary, years}`; returns `{message, state}` | `extend` (motivation.go) |
 | POST | `/api/contracts/resign` | Re-sign `{playerId}` at his ask | closure over `League.ReSign` (main.go), `contractAction` (contracts.go) |
 | POST | `/api/contracts/release` | Release `{playerId}` | closure over `League.Release` (main.go), `contractAction` (contracts.go) |

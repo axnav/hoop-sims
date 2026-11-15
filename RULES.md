@@ -57,7 +57,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
    | 80000 + step | In-season development (hashed per player, steps 1 to 4) |
    | 90000 | Player motivations (`MotivationOf`, hashed per player from seed and ID; nothing saved) |
 
-   Take the next free ten-thousand (90001 is reserved for training aptitude, then 100000) for a new feature and add it here and to
+   | 90001 | Training learning speeds (`Aptitude`, hashed per player from seed and ID; nothing saved) |
+
+   Take the next free ten-thousand (100000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

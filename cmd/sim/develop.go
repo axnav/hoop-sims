@@ -32,6 +32,13 @@ func runDevelop(seed uint64, n, leagues int) {
 			lg.SimPlayoffs()
 			year := lg.Year
 			lg.Offseason()
+			if focusMode == "balanced" {
+				for _, t := range lg.Teams {
+					for _, p := range t.Roster {
+						p.Focus = engine.FocusBalanced
+					}
+				}
+			}
 			for _, pk := range picks {
 				pk.peak = max(pk.peak, pk.p.Overall())
 			}
@@ -70,7 +77,7 @@ func runDevelop(seed uint64, n, leagues int) {
 		within += lw
 		total += lt
 	}
-	fmt.Printf("ALL: %d/%d (%.1f%%) within 4 points; mean (peak - potential) %.2f; in-season development %s\n",
+	fmt.Printf("ALL: %d/%d (%.1f%%) within 4 points; mean (peak - potential) %.2f; in-season development %s, focus %s\n",
 		within, total, 100*float64(within)/float64(max(total, 1)), float64(sumDiff)/float64(max(total, 1)),
-		map[bool]string{true: "OFF", false: "ON"}[noInSeasonDev])
+		map[bool]string{true: "OFF", false: "ON"}[noInSeasonDev], focusMode)
 }

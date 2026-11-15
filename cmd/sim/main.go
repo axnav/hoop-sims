@@ -30,6 +30,9 @@ func printBox(b *engine.TeamBox) {
 // noInSeasonDev is set by -noinseason and copied into every league built here.
 var noInSeasonDev bool
 
+// focusMode is set by -focus: auto (computer picks, the default) or balanced (develop mode resets everyone to Balanced).
+var focusMode = "auto"
+
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
@@ -37,8 +40,10 @@ func main() {
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
+	focus := flag.String("focus", "auto", "develop mode: auto (computer teams pick a training focus) or balanced (everyone Balanced)")
 	flag.Parse()
 	noInSeasonDev = *noInSeason
+	focusMode = *focus
 
 	if *mode == "seasons" {
 		runSeasons(*seed, *seasons, *reveal)

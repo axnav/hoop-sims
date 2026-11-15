@@ -95,6 +95,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		row["expiring"] = expiring[p.ID]
 		if id == lg.UserTeamID {
 			s.addStance(row, p)
+			row["focus"] = p.Focus.Key()
 		}
 		roster = append(roster, row)
 	}
@@ -176,6 +177,7 @@ func (s *server) player(r *http.Request) (any, error) {
 		if status != "Retired" {
 			out["motivation"] = s.motivationObj(p)
 		}
+		out["training"] = s.trainingObj(p, p.TeamID == lg.UserTeamID && status == "Active")
 		if p.TeamID == lg.UserTeamID && status == "Active" {
 			st := lg.StanceOf(p)
 			reasons := st.Reasons

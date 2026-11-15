@@ -61,6 +61,11 @@ func ratingStep(age, idx int, d float64) float64 {
 	return d
 }
 
+// athleticismGrowth: false for athleticism at an age where it no longer grows.
+func athleticismGrows(age, idx int) bool {
+	return !(idx == 6 && age >= Progression.AthleticismGrowthStop)
+}
+
 // inSeasonDev runs one in-season step (1-based) for every player on a team or
 // in free agency. Each player has his own hashed random stream.
 func (lg *League) inSeasonDev(step int) {
@@ -78,13 +83,25 @@ func (lg *League) inSeasonDev(step int) {
 		base := float64(oldOvr) - gain
 		r := NewRNG(mix64(lg.Seed, uint64(lg.Season.Year), uint64(inSeasonOffset+step), uint64(p.ID)))
 		s := expectedTrend(p, base)*c.InSeasonShare/float64(c.InSeasonSteps) + r.Normal(0, c.InSeasonNoiseSD)
-		whole, frac := math.Modf(math.Abs(s))
 		sign := 1.0
 		if s < 0 {
 			sign = -1
 		}
+		// Growth is split over the ratings by training weights (training.go),
+		// total unchanged; a loss is spread equally.
+		var x [NumRatings]float64
+		for i := range x {
+			x[i] = math.Abs(s)
+			if s > 0 && !athleticismGrows(p.Age, i) {
+				x[i] = 0
+			}
+		}
+		if s > 0 {
+			reweightGrowth(&x, lg.growthWeights(p))
+		}
 		a := p.Ratings.array()
 		for i := range a {
+			whole, frac := math.Modf(x[i])
 			k := whole
 			if r.Float64() < frac {
 				k++

@@ -62,6 +62,9 @@ type Player struct {
 	// or trade); 0 = unknown, treated as neutral (see motivation.go).
 	TeamSince int `json:",omitempty"`
 
+	// Focus is the training focus (see training.go); zero = Balanced.
+	Focus Focus `json:",omitempty"`
+
 	// Injury is the current injury; nil means healthy (see injury.go).
 	Injury *Injury `json:",omitempty"`
 

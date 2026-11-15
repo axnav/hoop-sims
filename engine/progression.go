@@ -36,6 +36,11 @@ type ProgressionConfigT struct {
 	AthleticismDeclineMult float64 // athleticism falls this much faster in decline
 	ShootingDeclineMult    float64 // Mid/Three fall this fraction as fast in decline
 	AthleticismGrowthStop  int     // no athleticism growth at or after this age
+	// GrowthWindowClose is the age at which each rating (order of
+	// Ratings.array) stops growing when a training weight is used; 0 = never.
+	// Athleticism uses AthleticismGrowthStop instead. Only applies to growth
+	// split by training weights, decline is unaffected.
+	GrowthWindowClose [7]int
 
 	// Leap / stall events (players under LeapMaxAge, one roll per offseason).
 	LeapMaxAge  int
@@ -135,6 +140,7 @@ var Progression = ProgressionConfigT{
 	AthleticismDeclineMult: 1.5,
 	ShootingDeclineMult:    0.5,
 	AthleticismGrowthStop:  25,
+	GrowthWindowClose:      [7]int{29, 0, 0, 0, 29, 0, 0}, // inside and rebounding close at 29
 
 	LeapMaxAge:  25,
 	LeapChance:  0.06,
@@ -225,11 +231,16 @@ type DevChange struct {
 // Progress ages the player one year with no minutes adjustment.
 func (p *Player) Progress(r *RNG) { p.ProgressMinutes(r, -1) }
 
-// ProgressMinutes ages the player one year: ratings, Potential, Age,
+// ProgressMinutes ages the player one year with no training weights.
+func (p *Player) ProgressMinutes(r *RNG, mpg float64) { p.ProgressWeighted(r, mpg, nil) }
+
+// ProgressWeighted ages the player one year: ratings, Potential, Age,
 // Experience. mpg is his regular-season minutes per team game (negative if
 // he has no statistics); young players develop a little faster with many
 // minutes and slower with few (MinutesAdjust).
-func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
+// w splits the positive growth across the ratings (see training.go); nil =
+// every rating equal.
+func (p *Player) ProgressWeighted(r *RNG, mpg float64, w *[NumRatings]float64) {
 	c := &Progression
 	oldOvr, oldPot, oldRt := p.Overall(), p.Potential, p.Ratings
 	// In-season changes already made this season came ahead of the yearly
@@ -267,13 +278,16 @@ func (p *Player) ProgressMinutes(r *RNG, mpg float64) {
 		delta += adj
 	}
 	delta -= gain
-	apply := func(v int, idx int) int {
-		d := ratingStep(p.Age, idx, delta+r.Normal(0, c.RatingNoiseSD))
-		return clamp(v+round(d), 25, 99)
+	var ds [NumRatings]float64
+	for i := range ds {
+		ds[i] = ratingStep(p.Age, i, delta+r.Normal(0, c.RatingNoiseSD))
+	}
+	if w != nil {
+		reweightGrowth(&ds, w)
 	}
 	a := p.Ratings.array()
 	for i := range a {
-		a[i] = apply(a[i], i)
+		a[i] = clamp(a[i]+round(ds[i]), 25, 99)
 	}
 	p.Ratings = Ratings{a[0], a[1], a[2], a[3], a[4], a[5], a[6]}
 
