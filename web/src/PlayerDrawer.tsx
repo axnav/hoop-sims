@@ -3,9 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { api, type PlayerPage, type StatLine } from './api'
+import { api, type ExtensionAsk, type PlayerPage, type StatLine } from './api'
 import { useFlow } from './flow'
-import { Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, TeamBadge, injuryText, ovrColor, f1, money, rangeText } from './ui'
+import { Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -133,6 +133,81 @@ function ScoutPanel({ id, level, maxLevel }: { id: number; level: number; maxLev
   )
 }
 
+function ExtensionForm({ id, ask, onDone }: { id: number; ask: Extract<ExtensionAsk, { ok: true }>; onDone: () => void }) {
+  const qc = useQueryClient()
+  const [salary, setSalary] = useState(String(ask.salary))
+  const [years, setYears] = useState(ask.maxYears)
+  const [msg, setMsg] = useState('')
+  const go = useMutation({
+    mutationFn: () => api.contractExtend(id, Math.round(Number(salary)), years),
+    onSuccess: (r) => {
+      qc.setQueryData(['state'], r.state)
+      for (const k of ['player', 'team', 'contracts', 'trade-block']) qc.invalidateQueries({ queryKey: [k] })
+      setMsg(r.message)
+      onDone()
+    },
+  })
+  const n = Number(salary)
+  const bad = !Number.isFinite(n) || n < ask.salary || n > ask.maxSalary
+  return (
+    <div className="mt-2 space-y-2 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5">Salary (thousands)
+          <input type="number" inputMode="numeric" min={ask.salary} max={ask.maxSalary} step={10} value={salary} onChange={(e) => setSalary(e.target.value)}
+            className="w-24 rounded border border-line bg-panel px-2 py-1 text-right tabular-nums" />
+        </label>
+        <label className="flex items-center gap-1.5">Years
+          <select value={years} onChange={(e) => setYears(Number(e.target.value))} className="rounded border border-line bg-panel px-2 py-1">
+            {Array.from({ length: ask.maxYears }, (_, i) => i + 1).map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </label>
+        <button className="btn btn-accent" disabled={go.isPending || bad} onClick={() => go.mutate()}>Confirm</button>
+      </div>
+      <div className="text-muted">Ask {money(ask.salary)}, maximum {money(ask.maxSalary)} (now {money(ask.current)}). Starts next season.</div>
+      {go.isError && <div className="text-loss">{go.error instanceof Error ? go.error.message : String(go.error)}</div>}
+      {msg && <div className="font-semibold text-win">{msg}</div>}
+    </div>
+  )
+}
+
+function Wants({ p }: { p: PlayerPage }) {
+  const [ask, setAsk] = useState<ExtensionAsk | null>(null)
+  const [done, setDone] = useState(false)
+  const fetchAsk = useMutation({ mutationFn: () => api.extensionAsk(p.id), onSuccess: setAsk })
+  if (!p.motivation && !p.stance) return null
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-panel2/50 p-3">
+      <div className="h2 mb-2">What he wants</div>
+      {p.motivation && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+          {motivationRows.map(([k, l]) => (
+            <div key={k} className="flex items-center justify-between gap-2">
+              <span className="text-muted">{l}</span>
+              <span className={`rounded px-1.5 py-px text-[11px] font-semibold ${levelClass(p.motivation![k])}`}>{p.motivation![k]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {p.stance && (
+        <div className="mt-3">
+          <div className="flex flex-wrap items-center gap-1"><StanceChip stance={p.stance} /><span className="ml-1 text-[13px]">{p.stance.label}</span></div>
+          {p.stance.reasons?.length > 0 && <ul className="mt-1 list-disc pl-5 text-[13px] text-muted">{p.stance.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+          {p.extension ? (
+            <div className="mt-2 text-sm font-semibold">Extended: {money(p.extension.salary)} for {p.extension.years} {p.extension.years === 1 ? 'year' : 'years'} <span className="font-normal text-muted">(starts next season)</span></div>
+          ) : done ? null : ask === null ? (
+            <button className="btn mt-2" disabled={fetchAsk.isPending} onClick={() => fetchAsk.mutate()}>Offer extension</button>
+          ) : ask.ok ? (
+            <ExtensionForm id={p.id} ask={ask} onDone={() => setDone(true)} />
+          ) : (
+            <div className="mt-2 text-[13px] text-loss">{ask.reason}</div>
+          )}
+          {fetchAsk.isError && <ErrorBox error={fetchAsk.error} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
@@ -188,6 +263,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
+          <Wants p={p} />
           {p.prospect && p.scout && <ScoutPanel id={p.id} level={p.scout.level} maxLevel={3} />}
           {p.editable && !editing && <button className="btn mt-3 ml-2" onClick={() => setEditing(true)}>Edit</button>}
           {p.editable && editing && <EditForm p={p} onDone={() => setEditing(false)} />}

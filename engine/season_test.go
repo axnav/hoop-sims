@@ -158,9 +158,11 @@ func TestLongStability(t *testing.T) {
 		seasonBand = 4.0 // any single season vs the starting value
 		// Players rated 90+ in any season: at least 2, and at most 15 on seed 1
 		// (the long-standing check). Seeds 2 to 5 were first measured on
-		// 2026-11-15 and peak between 11 and 16, so they get a guard of 18.
+		// 2026-11-15 and peak between 11 and 16, so they got a guard of 18.
+		// Raised to 20 with the owner's approval (2026-11-15) when players who
+		// test free agency moved peaks to 10-19 with no drift in the averages.
 		max90Seed1 = 15
-		max90Other = 18
+		max90Other = 20
 	)
 	seeds := []uint64{1, 2, 3, 4, 5}
 	runs := make([]longRun, len(seeds))

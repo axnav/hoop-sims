@@ -20,7 +20,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Next, in order** (owner approved on 2026-11-15; no open question, start building):
 1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
-2. Plan piece 2: what players want, and extensions. Section 13.
+2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
 3. Plan piece 4: training focus. Section 13.
 4. Later, when the owner says: piece 5 (badges) and piece 3 (coaches, systems, fit), the two larger pieces. Then the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
@@ -255,6 +255,13 @@ Run each piece the usual way: its own `feat/` branch, two helpers on a named mid
 - Measure: `go run ./cmd/sim -mode develop -seasons 16` with everyone Balanced against automatic focus; the share must stay in 55 to 65%.
 
 ## Update log (newest first)
+
+### 2026-11-15, what players want, and extensions (plan piece 2)
+- Built by two Sonnet helpers in turn (engine + API, then screens against the final JSON). `engine/motivation.go`: `MotivationOf` (offset 90000, nothing saved), `StanceOf` (role vs rank and planned minutes, team direction, tenure, can the team pay), `ExtensionAsk`/`Extend`; saved `Player.TeamSince`, `Contract.NextSalary/NextYears`, `FreeAgency.Prev` (all omitempty, no version bump). `ReSign` and computer re-signing refuse "test" players. `playersDecide` weights salary/winning/role by motivation plus a loyalty bonus. Routes `GET /api/contracts/extension/{id}`, `POST /api/contracts/extend`. Screens: "What he wants" panel and extension form in the drawer, stance chips on roster and expiring rows, High values on free-agent rows. New `go run ./cmd/sim -mode resign`.
+- **Test change, owner approved:** `TestLongStability` 90+ limit for seeds 2 to 5 raised from 18 to 20 (seed 4 reached 19; peaks now 14/18/10/19/13 against 13/16/11/14/14; no drift in averages).
+- Helper measurement (seed 1, 6 offseasons, before/after): re-signed 59/53, 44/38, 70/54, 105/92, 75/74, 78/76; reaching free agency up 6 to 12 per offseason; league payroll up to 3 points of the cap lower; about 22 to 25% of expiring players say "test". Computer teams never extend.
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 50 s), web build. Port 8097 fictional seed 1: stance chips on the roster, a test-stance/not-last-year refusal shown in the drawer at 1400 and 390 px, team 1 player extended through the drawer form (Extended line, Ext badge, second ask refused), no impact key, no console errors, no horizontal scroll.
+- Not tried in the browser: the Free Agency page values chips (no free agents in season), extension in the offseason, an old save. Note for the owner's test stretch: on team 0 at day 0, 6 of 13 players say "test" (a Seller team with a deep bench); tunables are in `MotivationTuning` if it feels too harsh.
 
 ### 2026-11-15, player photos and avatars shown (plan piece 6)
 - Built by one Sonnet helper (server and screens together, one written contract; cheaper than two for a piece this small). New `cmd/web/photos.go`, `-photos` flag, `photo` key on player rows, `GET /api/photo/{id}` and `/credit`, `Avatar` in the drawer, roster rows and court tokens. Main session moved the credit line to a full-width line in the drawer and added `cleanArtist` (Commons author text had "File:x.jpg:" prefixes and line breaks).

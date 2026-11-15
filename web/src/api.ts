@@ -40,7 +40,11 @@ export type GameState = {
   fa?: { day: number; days: number; daysLeft: number }
   pendingSheets?: number
 }
+export type Level = 'Low' | 'Medium' | 'High'
+export type Motivation = { money: Level; winning: Level; role: Level; loyalty: Level }
+export type Stance = { key: 'resign' | 'open' | 'test'; label: string }
 export type FAPlayer = {
+  motivation?: Motivation
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; interest: number
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
@@ -72,6 +76,7 @@ export type RosterRow = {
   injury?: Injury
   salary: number; years: number; expiring: boolean
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
+  stance?: Stance; extended?: boolean
 }
 export type TeamStatus = { key: 'contender' | 'buyer' | 'seller' | 'rebuilding'; label: string; wants: string }
 export type TeamRow = {
@@ -88,6 +93,7 @@ export type PlayerPage = {
   ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
   prospect?: boolean; scout?: { level: number; ovrLo: number; ovrHi: number; potLo: number; potHi: number }
   season: StatLine; playoffs: StatLine
+  motivation?: Motivation; stance?: Stance & { reasons: string[] }; extension?: { salary: number; years: number }
   career: { year: number; team: Team; age: number; ovr: number; pot: number; gp: number; ppg: number; rpg: number; apg: number }[]
 }
 export type ScheduleGame = { day: number; opp: Team; home: boolean; played: boolean; me?: number; them?: number; win?: boolean }
@@ -148,7 +154,9 @@ export type ExpiringPlayer = {
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   askSalary: number; askYears: number; canReSign: boolean; problem: string
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number; restricted?: boolean
+  stance?: Stance; extended?: boolean
 }
+export type ExtensionAsk = { ok: true; salary: number; maxSalary: number; maxYears: number; current: number } | { ok: false; reason: string }
 export type Expiring = { players: ExpiringPlayer[]; payroll: Payroll; open: boolean }
 export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; noInSeasonDev: boolean; commissioner: boolean }
 export type AdminEdit = { age?: number; potential?: number; ratings?: Record<string, number>; heal?: boolean }
@@ -264,6 +272,8 @@ export const api = {
   adminEditPlayer: (id: number, b: AdminEdit) => post<PlayerPage>(`/api/admin/player/${id}`, b),
   contractsExpiring: () => get<Expiring>('/api/contracts/expiring'),
   contractResign: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/resign', { playerId }),
+  extensionAsk: (id: number) => get<ExtensionAsk>(`/api/contracts/extension/${id}`),
+  contractExtend: (playerId: number, salary: number, years: number) => post<{ message: string; state: GameState }>('/api/contracts/extend', { playerId, salary, years }),
   contractRelease: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/release', { playerId }),
   draftAuto: () => post<GameState>('/api/draft/auto'),
   freeAgents: () => get<FreeAgencyData>('/api/freeagents'),

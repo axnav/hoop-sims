@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Avatar, Card, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
+import { Avatar, Card, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, StanceChip, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -11,7 +11,7 @@ export default function TeamPage() {
   const open = useOpenPlayer()
   const cols: Col<RosterRow>[] = [
     { accessorKey: 'starter', header: '', cell: (i) => (i.getValue() ? <Star size={12} className="fill-accent text-accent" /> : null), sortingFn: 'basic' },
-    { accessorKey: 'name', header: 'Player', cell: (i) => <><Avatar id={i.row.original.id} name={i.getValue()} photo={i.row.original.photo} color={q.data?.team.primary} size={28} /> <PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} />{i.row.original.expiring && <ExpiringChip />}</>, sortDescFirst: false },
+    { accessorKey: 'name', header: 'Player', cell: (i) => <><Avatar id={i.row.original.id} name={i.getValue()} photo={i.row.original.photo} color={q.data?.team.primary} size={28} /> <PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} />{i.row.original.expiring && <ExpiringChip />}<StanceChip stance={i.row.original.stance} extended={i.row.original.extended} /></>, sortDescFirst: false },
     { accessorKey: 'pos', header: 'Pos', sortDescFirst: false },
     { accessorKey: 'age', header: 'Age', num: true },
     { accessorKey: 'ovr', header: 'OVR', num: true, cell: (i) => <><b style={{ color: ovrColor(i.getValue()) }}>{i.getValue()}</b><Delta value={i.row.original.ovrChange} scope={i.row.original.changeScope} /></> },

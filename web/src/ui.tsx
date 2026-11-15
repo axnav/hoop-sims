@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Injury, Payroll, Team, TeamStatus } from './api'
+import type { Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -319,5 +319,40 @@ export function StatusChip({ status }: { status?: TeamStatus }) {
   if (!status) return null
   return (
     <span title={status.wants} className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${statusStyle[status.key]}`}>{status.label}</span>
+  )
+}
+
+const stanceStyle: Record<Stance['key'], string> = {
+  resign: 'bg-win/20 text-win ring-win/50',
+  open: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
+  test: 'bg-loss/20 text-loss ring-loss/50',
+}
+const stanceShort: Record<Stance['key'], string> = { resign: 'Re-sign', open: 'Open', test: 'Test FA' }
+
+// Small pill for a player's re-sign stance (short text; full label as tooltip) and an "Ext" badge when extended.
+export function StanceChip({ stance, extended }: { stance?: Stance; extended?: boolean }) {
+  if (!stance && !extended) return null
+  return (
+    <>
+      {stance && <span title={stance.label} className={`ml-1.5 inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${stanceStyle[stance.key]}`}>{stanceShort[stance.key]}</span>}
+      {extended && <span title="Contract extended: new deal starts next season" className="ml-1.5 inline-block shrink-0 rounded bg-sky-400/15 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-sky-400/40">Ext</span>}
+    </>
+  )
+}
+
+export const levelClass = (l: Level) => (l === 'High' ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : l === 'Medium' ? 'bg-panel2 text-ink' : 'bg-panel2 text-muted')
+
+export const motivationRows: [keyof Motivation, string][] = [['money', 'Money'], ['winning', 'Winning'], ['role', 'Role'], ['loyalty', 'Loyalty']]
+export const motivationTitle = (m: Motivation) => motivationRows.map(([k, l]) => `${l}: ${m[k]}`).join(', ')
+
+// Compact list of the traits a player rates High, with a tooltip listing all four. Nothing when none is High.
+export function ValuesChips({ m }: { m?: Motivation }) {
+  if (!m) return null
+  const high = motivationRows.filter(([k]) => m[k] === 'High')
+  return (
+    <span title={motivationTitle(m)} className="ml-1.5 inline-flex flex-wrap items-center gap-1 align-middle">
+      {high.length > 0 && <span className="text-[10px] text-muted">Values</span>}
+      {high.map(([k, l]) => <span key={k} className={`rounded px-1.5 py-px text-[10px] font-semibold ${levelClass('High')}`}>{l}</span>)}
+    </span>
   )
 }
