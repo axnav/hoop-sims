@@ -1,8 +1,35 @@
 # HoopSim handoff
 
-Last full refresh: 2026-11-14. Module `hoopsim`, Go (standard library only) with a React + TypeScript front end.
+Last full refresh: 2026-11-14. State block below updated 2026-11-15. Module `hoopsim`, Go (standard library only) with a React + TypeScript front end.
 
 Legend: **verified** means a person or session ran it or read the code and saw it. **reported** means a helper said so and it was not re-run.
+
+## 0. Where things stand (2026-11-15), read this first
+
+**Built and merged to `main` since the 2026-11-14 refresh** (details in the update log, newest first):
+- Progression arrows on every player list (last change, this season or last year) and per rating in the player drawer.
+- In-season progression: four steps a season; switch on the Settings page; `go run ./cmd/sim -mode develop -seasons 16` measures the development target.
+- Sim window: live game ("Watch my games", speeds 1x to 64x), trade offers answered in the window, a Development box. "Watch next game" in the sim menu.
+- Teams tab and team direction labels (Contender, Buyer, Seller, Rebuilding).
+- Court view on the Lineup page (plan piece 1).
+- Free agency: mid-level exception and restricted free agency with offer sheets.
+- `TestLongStability` reworked to five seeds and a drift check (owner approved).
+- Player photos downloaded to `data/real/photos/` (1,754), NOT shown in the game yet.
+
+**Pushed:** `main` up to `b4f2528`. Later commits (documents only) are local; push needs the owner's go-ahead.
+
+**Next, in order** (the owner approved the plan in section 12):
+1. Decide with the owner: plan piece 6 first (show photos and avatars; steps in `ARCHITECTURE.md` section 16) or plan piece 2 (what players want, and extensions). The owner was asked and had not answered.
+2. Then the remaining pieces of section 12 in order: 2, 3, 4, 5.
+3. Older open items still stand: section 5 problems 1 and 2 (star variety in real mode, automatic lineup) and section 7.
+
+**Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
+
+**Lessons from this stretch:**
+- Two helpers on one feature need the exact JSON shape written out, including what each route returns. "Same as the other routes" caused a page-blanking bug.
+- The browser pass on port 8097 found two bugs that the tests and the type check missed. Keep doing it.
+- A small-model helper told to "stop your background work" may stop other jobs too, and can loop. Give it one foreground task, one report, no background processes.
+- Timings taken while another test run is going are not trustworthy; re-time on a quiet machine before calling something slow.
 
 ## 1. Summary
 
@@ -142,9 +169,11 @@ RULES.md (the rules), and ARCHITECTURE.md when you need to find or change code.
 They replace any earlier conversation.
 Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
 and tell me the result.
-Then restate in plain words what you understand the state to be, and propose the first
-item from HANDOFF.md section 7 (the open decisions) as a simple either/or question
-with your recommendation. Wait for my answer before changing code.
+Then restate in plain words what you understand the state to be (HANDOFF.md section 0),
+and ask the one open question there as a simple either/or with your recommendation:
+show player photos first (plan piece 6) or build player motivations and extensions (plan piece 2).
+Wait for my answer before changing code. Keep token use low: cheaper named models for
+helpers, scripts for long jobs, short answers.
 The owner is learning Go and may dictate by voice: use plain words, write the code for them.
 Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
 Never show the hidden Impact number or true prospect values; never commit data/real/.
