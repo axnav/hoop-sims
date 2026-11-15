@@ -8,7 +8,7 @@ Money in the code is an integer number of thousands of dollars. Day and year num
 
 HoopSim is a basketball general-manager game. You run one team of a 30-team league: you set the lineup and minutes, trade players and draft picks, re-sign or release players, scout and make draft picks, bid for free agents, and then advance the calendar while the computer plays every game. There is no on-court play and no graphics of play beyond an optional replay of a finished game.
 
-There are two league modes. The default is a fictional league made from generated players and team names. The second mode builds the league from private Basketball-Reference CSV files in `data/real/` (the 2010-11 season is the starting year); it only works if those files are present on the machine, and they are never committed (`.gitignore` excludes `/data/real/` and `/saves/`). The files there are `Advanced.csv`, `Draft Pick History.csv`, `Player Career Info.csv`, `Player Totals.csv`, `Team Abbrev.csv` and `Team Summaries.csv`. Everything after the start is simulated by the same engine in both modes.
+There are two league modes. The default is a fictional league made from generated players and team names. The second mode builds the league from private Basketball-Reference CSV files in `data/real/` (the 2010-11 season is the starting year); it only works if those files are present on the machine, and they are never committed (`.gitignore` excludes `/data/real/` and `/saves/`). It also holds `photos/` (player photos, see section 16) and `phototool/` (the downloader). The CSV files there are `Advanced.csv`, `Draft Pick History.csv`, `Player Career Info.csv`, `Player Totals.csv`, `Team Abbrev.csv` and `Team Summaries.csv`. Everything after the start is simulated by the same engine in both modes.
 
 The game is simulation only: results come from a possession-by-possession model in `engine/game.go`. Every player also has a hidden number, `Player.Impact`, that shifts his real performance away from his visible ratings. It exists by design and is never shown.
 
@@ -538,3 +538,30 @@ Not covered: the front end (no tests; the type check in `npm run build` is the o
 - **Year means two things.** During an offseason `League.Year` is still the season just played, and `Season.Year < Year` is how several functions detect "offseason with no draft". The draft pick `Year` follows the same rule.
 - **Old offsets are not in the rules table.** See section 9; a newcomer adding a stream should read the table here as well as `RULES.md`.
 - **Player ID 0 is valid.** That is why an empty starter slot is `NoPlayer` (-1); code that treats 0 as "none" would be wrong.
+
+## 16. Player photos (private, local only)
+
+**What exists.** `data/real/photos/` holds one free-licence photo per real-data player, named by the player's Basketball-Reference ID, which is `Player.RealID` in the engine: `data/real/photos/jamesle01.jpg` (a few are `.png`). `credits.csv` there has one row per photo (`player_id,name,file,wikipedia_page,licence,artist,descriptionurl`); `skipped.csv` lists players with no usable photo and why. `data/real/phototool/photos.py` is the downloader (see its `README.txt`): it reads `wikidata_p18.csv` (player ID to Wikimedia Commons file name, from one Wikidata query on property P2685), asks the Commons API for thumbnails and licences in batches of 50, keeps only Creative Commons and public domain files, and is safe to re-run. `python3 -I data/real/phototool/photos.py --status` prints the counts. The whole of `data/real/` is git-ignored; none of this is ever committed or shipped.
+
+**What the game does with them today.** Nothing. No code reads the folder.
+
+**What has to change to show them** (plan piece 6 in `HANDOFF.md` section 12), following the layer rules:
+
+| Step | File | Change |
+|---|---|---|
+| 1 | `cmd/web/main.go` | A new flag for the photo folder (default `data/real/photos`), kept on the server like the real-data folder |
+| 2 | `cmd/web/photos.go` (new) | Route `GET /api/photo/{playerId}`: look the player up with `FindPlayer`, and if he has a `RealID` and a file `<RealID>.jpg` or `.png` exists in the photo folder, serve it with a cache header; otherwise answer 404. Never build a path from request text: only from the `RealID` of a player found by id. Never serve a photo for a draft-pool prospect if that would reveal who he is beyond what the prospect row already shows |
+| 3 | `cmd/web/main.go` | Register the route in `routes()`. It serves a file, so it does not go through the JSON `api()` wrapper |
+| 4 | the row helpers in `cmd/web` | A shared helper next to `addDev` that sets `"photo": true` on a player row when a photo file exists (check the folder once and keep the set of ids in memory; refresh it when a game is started or loaded) |
+| 5 | `web/src/api.ts` | `photo?: boolean` on the player row types and the player page type |
+| 6 | `web/src/ui.tsx` | An `Avatar` component: when `photo` is true an `<img src="/api/photo/{id}">` cropped to a circle or rounded square (the photos are ordinary pictures, not headshots, so crop from the top: `object-fit: cover; object-position: top`); otherwise a generated avatar drawn from the player id (initials on a team-coloured shape is enough to start), and the same fallback when the image fails to load |
+| 7 | pages | Use `Avatar` in the player drawer first, then roster rows, the court view tokens, trade and free agency rows as wanted |
+| 8 | `cmd/web/api_test.go` | The route answers 404 in a fictional league and for an unknown id; a row has `photo` only when a file exists (use a temporary folder with one small file) |
+| 9 | a credits view | Because the licences ask for attribution, show the author and licence from `credits.csv` somewhere reachable (for example in the player drawer under the photo, from a small `GET /api/photo/{playerId}/credit`) |
+
+The fictional league has no `RealID`, so it always uses generated avatars.
+
+**Before going live.** The owner will say when. Then: delete `data/real/photos/` and `data/real/phototool/` (or simply ship without `data/real/`, which is already the rule). With no files present the route answers 404 and every screen falls back to generated avatars, so no code has to change. If the photo route and the `photo` key are to go as well, remove steps 1 to 4 and 9 and keep the `Avatar` fallback.
+
+**To refresh or extend.** `python3 -I data/real/phototool/photos.py --refresh-wikidata` re-runs the Wikidata query; a plain run then downloads anything new. It skips players who already have a file.
+
