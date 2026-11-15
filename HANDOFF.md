@@ -22,7 +22,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
 2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
 3. ~~Plan piece 4: training focus.~~ Done 2026-11-15.
-4. Later, when the owner says: piece 5 (badges) and piece 3 (coaches, systems, fit), the two larger pieces. Then the older open items: section 5 problems 1 and 2, and section 7.
+4. Next (owner approved 2026-11-15): piece 5 (badges), then piece 3 (coaches, systems, fit). Build plan in section 14. Then the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
 **Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
@@ -254,7 +254,31 @@ Run each piece the usual way: its own `feat/` branch, two helpers on a named mid
 - Screens: a Training panel in the player drawer with the focus picker.
 - Measure: `go run ./cmd/sim -mode develop -seasons 16` with everyone Balanced against automatic focus; the share must stay in 55 to 65%.
 
+## 14. Build plan for pieces 5 and 3 (owner approved 2026-11-15)
+
+Order: piece 5 (badges) first, because piece 3's system fit uses badges. Each piece the usual way: `feat/` branch, an engine + API helper then a screens helper (named mid-size model) coding against the final JSON, checks once, browser pass on port 8097, local merge, update log.
+
+**Owner decisions:** (1) Mentor makes teammates aged 24 and under grow about 5% faster. (2) Coach Development makes growth up to about 8% faster or slower, centred so the league average is unchanged. (3) Coaches are hired and fired in the offseason only. (4) System fit effect is small: perfect against terrible fit is about 1.5 points of team shooting %.
+
+### Piece 5: badges (medium)
+- `engine/badges.go` (new): twelve badges of our own in four groups (finishing: e.g. Rim Finisher, Power Inside, Foul Magnet; shooting: Spot-Up, Midrange Maestro, Deep Range; playmaking: Floor General, Ball Security, Lob Passer; defense/rebounding: Lockdown, Rim Protector, Glass Cleaner), tiers Bronze/Silver/Gold.
+- Rating badges derived from rating thresholds (not saved). Performance badges from last season's stats, awarded at season end, saved field `Player.PerfBadges` (omitempty, no version bump). Personality badges Leader, Mentor, Star from a hashed stream at offset 100000 plus age and experience (not saved). Add the offset to `RULES.md` section 3 and `ARCHITECTURE.md` section 9.
+- Small game effects through existing sim hooks (`engine/game.go`): shot badges add to that shot kind's make chance, playmaking badges lower turnovers and raise assists, defense badges add to team defense, Glass Cleaner to offensive rebounds, Star raises shot share, Leader a tiny team boost; Mentor +5% growth for teammates 24 and under (through the training weights / growth path). All as tunables.
+- API and screens: `badges` on the player page (name, group, tier, rule, effect) and a count on roster rows; chips in the drawer; badge filter on Leaders. No badges for draft prospects.
+- Measure: points, home wins, FT%/3P% before and after (`-mode sanity`); badges per tier league-wide; `TestLongStability` must pass.
+
+### Piece 3: coaches, systems and roster fit (large)
+- `engine/coach.go` (new): `Coach{Name, Offense, Defense, Development, System}`, fictional names in both modes, no salary. Saved `Team.Coach` and an offseason coach pool: **SaveVersion 3 -> 4** with an upgrade that gives every team a generated coach (`RULES.md` section 4). Random stream offset 110000.
+- `engine/system.go` (new): six systems of our own (Balanced, Pace and Space, Run and Gun, Inside-Out, Star-Led, Defense First), each setting pace (`possMean`), three-point share (`threeShotWt`), star usage (`shootExp`) and defensive effort, and naming the ratings and badges it needs.
+- Fit: grade A to D per player, team fit = minutes-weighted average of players with minutes; small effect (decision 4). Running a system other than the coach's favourite costs fit. Coach Offense/Defense small game effect; Development per decision 2 (feeds training growth).
+- Offseason only: the user may fire the coach and hire from the pool; computer teams replace weak coaches.
+- API and screens: Coach page (coach, system picker, team fit, player grades with reasons), fit grades on the Lineup page, hiring step in the offseason flow.
+- Measure: scoring, home-win rate and the spread of wins before and after; `TestLongStability`.
+
 ## Update log (newest first)
+
+### 2026-11-15, plan approved for pieces 5 and 3
+- Section 14 records the build plan and four owner decisions (Mentor growth boost, coach Development speeds growth, offseason-only coaching changes, small fit effect). Nothing built yet.
 
 ### 2026-11-15, automatic lineup plays the best five (section 5 problem 2)
 - Owner chose "the automatic lineup plays the best players". A Sonnet helper changed `Team.Rotation()` (engine/generate.go): the five healthy players with the highest overall start, bench best-first; new `Team.StarterSlots()` seats them in PG..C by trying all 120 seatings for the best fit, used by `AutoLineup`. Positions still do not affect the sim.
