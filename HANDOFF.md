@@ -18,10 +18,12 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Pushed:** `main` up to `b4f2528`. Later commits (documents only) are local; push needs the owner's go-ahead.
 
-**Next, in order** (the owner approved the plan in section 12):
-1. Decide with the owner: plan piece 6 first (show photos and avatars; steps in `ARCHITECTURE.md` section 16) or plan piece 2 (what players want, and extensions). The owner was asked and had not answered.
-2. Then the remaining pieces of section 12 in order: 2, 3, 4, 5.
-3. Older open items still stand: section 5 problems 1 and 2 (star variety in real mode, automatic lineup) and section 7.
+**Next, in order** (owner approved on 2026-11-15; no open question, start building):
+1. Plan piece 6: show photos and avatars. Build steps in section 13.
+2. Plan piece 2: what players want, and extensions. Section 13.
+3. Plan piece 4: training focus. Section 13.
+4. Later, when the owner says: piece 5 (badges) and piece 3 (coaches, systems, fit), the two larger pieces. Then the older open items: section 5 problems 1 and 2, and section 7.
+The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
 **Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
 
@@ -169,10 +171,10 @@ RULES.md (the rules), and ARCHITECTURE.md when you need to find or change code.
 They replace any earlier conversation.
 Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
 and tell me the result.
-Then restate in plain words what you understand the state to be (HANDOFF.md section 0),
-and ask the one open question there as a simple either/or with your recommendation:
-show player photos first (plan piece 6) or build player motivations and extensions (plan piece 2).
-Wait for my answer before changing code. Keep token use low: cheaper named models for
+Then restate in two or three sentences what you understand the state to be (HANDOFF.md
+section 0) and start plan piece 6 from HANDOFF.md section 13 (show photos and avatars);
+its plan and choices are already approved, so do not ask again. After it is merged,
+continue with piece 2, then piece 4. Keep token use low: cheaper named models for
 helpers, scripts for long jobs, short answers.
 The owner is learning Go and may dictate by voice: use plain words, write the code for them.
 Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
@@ -221,7 +223,41 @@ Six pieces, in this order, one at a time, each with checks, a pass on port 8097 
 
 Left for later on purpose: fatigue on back-to-backs, chemistry between personalities, promises with a trust rating, the room and bi-annual exceptions, more 3D court work (the owner parked it for cost).
 
+## 13. Build plan for pieces 6, 2 and 4 (owner approved 2026-11-15)
+
+Run each piece the usual way: its own `feat/` branch, two helpers on a named mid-size model with ONE written contract that spells out every JSON key and what each route returns, checks once, a browser pass on port 8097, local fast-forward merge, update log. Push only on the owner's say.
+
+**Owner decisions for these pieces:**
+1. A player whose stance is "Will test free agency" refuses to re-sign or extend early. The user can still keep him by matching an offer sheet if he is restricted, or by winning the bidding.
+2. Extensions have a pay limit like the NBA's: the first-year salary may be at most 140% of the current salary. A player whose market value is well above that will not extend.
+3. Learning speeds are visible for every player except draft prospects.
+
+### Piece 6: photos and avatars (small; no engine change, no saved field)
+- `cmd/web/photos.go` (new): `GET /api/photo/{playerId}` serves `data/real/photos/<RealID>.jpg|png` for a player found by id, else 404; `addPhoto(row, p)` sets `"photo": true` on player rows. Full step list, path-safety and prospect rules, credits route and removal steps: `ARCHITECTURE.md` section 16.
+- `web/src/ui.tsx`: `Avatar` (photo when `photo` is true, cropped from the top; otherwise a drawn avatar from initials and team colour; same fallback when the image fails). Use it in the player drawer, roster rows and the court tokens.
+- Tests: 404 in a fictional league and for an unknown id; `photo` only when a file exists (temporary folder).
+- Browser pass needs a real-data league (`data/real/` is present on this machine).
+
+### Piece 2: what players want, and extensions (medium)
+- `engine/motivation.go` (new): `Motivation{Money, Winning, Role, Loyalty}` each Low/Medium/High, derived from the league seed and player ID with a hashed stream (offset 90000; add it to the tables in `RULES.md` section 3 and `ARCHITECTURE.md` section 9), so nothing is saved. `Stance(player)` returns a key (`resign`, `open`, `test`), a label ("Will re-sign", "Open to it", "Will test free agency") and reasons in plain words, from: minutes against what his rank on the roster deserves, the team's direction (`TeamStatusOf`), and years with the team.
+- New saved field `Player.TeamSince` (league year he joined; 0 = unknown, treated as neutral; set on draft, signing and trade). No version bump.
+- `engine/contract.go`: `ExtensionAsk(player)` and `Extend(team, player, salary, years)`, allowed when `Contract.Years == 1`, in the regular season and in the offseason before free agency. New saved contract fields `NextSalary`, `NextYears` (zero = none) that take over when the current deal runs out in `BeginOffseason`. Ask: market salary for `resign`, about 10% more for `open`, refused for `test`; refused when the ask is above 140% of the current salary (tunables in `Cap`). `ReSign` also refuses a `test` player. Computer teams follow the same stance rule in `reSignComputerTeams`.
+- `engine/freeagency.go`: in `playersDecide` the existing appeal score (salary, years, team quality, top-eight role) is weighted by the player's motivations; Loyalty adds a bonus for his previous team.
+- API: `motivation` on the player page and on free-agent rows; `stance` on the user's roster and expiring rows; `GET /api/contracts/extension/{id}` (ask, or the refusal sentence) and `POST /api/contracts/extend`.
+- Screens: "What he wants" panel and "Offer extension" in the player drawer; a stance chip on roster rows; what each free agent values on the Free Agency page.
+- Measure: league payroll over six seasons before and after; how many players re-sign, extend, and reach free agency per offseason.
+
+### Piece 4: training focus (medium)
+- `engine/training.go` (new): saved field `Player.Focus` (Balanced, Shooting, Inside scoring, Playmaking, Defense, Rebounding, Body; zero = Balanced = today's behaviour). `Aptitude(player)`: a learning speed per rating from a hashed stream (offset 90001), shown as Fast/Normal/Slow. Age windows as tunables in `Progression` (Body closes at 25 like athleticism today).
+- `engine/progression.go`, `engine/inseason.go`: both already send every rating change through `ratingStep`. Add a weight per rating there (focus x learning speed x age window), scaled so total growth is unchanged; decline is not affected. `ProgressMinutes` is a `Player` method with no league, so the weights must be passed in. Computer teams pick a focus each offseason.
+- API: `POST /api/training {playerId, focus}`; a `training` block on the player page (focus, options, each skill's speed and whether its window is open, a rough "about N steps for +2"); `focus` on roster rows.
+- Screens: a Training panel in the player drawer with the focus picker.
+- Measure: `go run ./cmd/sim -mode develop -seasons 16` with everyone Balanced against automatic focus; the share must stay in 55 to 65%.
+
 ## Update log (newest first)
+
+### 2026-11-15, build plan approved for pieces 6, 2 and 4
+- The owner approved the plan in section 13 with the three recommended choices, and will play a test stretch and report changes. Pieces 5 and 3 wait. Nothing was built for these pieces yet. The owner is moving to a new chat; section 0 and the prompt in section 10 are current.
 
 ### 2026-11-15, player photos downloaded (not yet shown in the game)
 - Result (main session ran the status command and read the log): 1,754 photos saved, 0 left, 212 players without one (205 have no image on Wikidata, 7 had a missing file or a licence we do not accept; listed in `data/real/photos/skipped.csv`). 85 MB. Every photo has a row in `data/real/photos/credits.csv` (author, licence, source page). Licences are Creative Commons or public domain.
