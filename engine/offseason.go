@@ -89,12 +89,13 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	lg.recordTax()
 
 	// Progression.
+	mentors := lg.mentorTeams()
 	for _, p := range lg.allPlayers() {
 		mpg := -1.0
 		if ps := lg.Season.statsFor(p.ID); ps != nil {
 			mpg = float64(ps.Min) / SeasonGames
 		}
-		p.ProgressWeighted(r, mpg, lg.growthWeights(p))
+		p.ProgressMentored(r, mpg, lg.growthWeights(p), lg.growthMult(p, mentors))
 	}
 
 	// Retirement.

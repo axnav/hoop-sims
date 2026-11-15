@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
+import type { Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -363,4 +363,35 @@ export const focusLabels: Record<string, string> = { shooting: 'Shooting', insid
 export function FocusLabel({ focus }: { focus?: string }) {
   if (!focus || !focusLabels[focus]) return null
   return <span title="Training focus" className="ml-1.5 inline-block shrink-0 align-middle text-[10px] text-muted">{focusLabels[focus]}</span>
+}
+
+export const tierLabel: Record<string, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', hof: 'Hall of Fame', legend: 'Legend' }
+export const tierShort: Record<string, string> = { bronze: 'B', silver: 'S', gold: 'G', hof: 'HOF', legend: 'L' }
+export const tierOrder = ['legend', 'hof', 'gold', 'silver', 'bronze']
+export const groupLabel: Record<string, string> = { finishing: 'Finishing', shooting: 'Shooting', playmaking: 'Playmaking', defense: 'Defense', rebounding: 'Rebounding', general: 'General', personality: 'Personality' }
+export const groupOrder = ['finishing', 'shooting', 'playmaking', 'defense', 'rebounding', 'general', 'personality']
+const tierStyle: Record<string, string> = {
+  bronze: 'bg-amber-700/25 text-amber-300 ring-amber-600/60',
+  silver: 'bg-slate-300/15 text-slate-200 ring-slate-300/50',
+  gold: 'bg-yellow-400/20 text-yellow-300 ring-yellow-400/60',
+  hof: 'bg-purple-500/25 text-purple-200 ring-purple-400/60',
+  legend: 'bg-gradient-to-r from-red-600/50 to-orange-500/50 text-orange-100 ring-orange-400/80',
+  '': 'bg-sky-400/15 text-sky-200 ring-sky-400/50',
+}
+
+export function BadgeChip({ b, active, onClick }: { b: Badge; active?: boolean; onClick?: () => void }) {
+  const tip = b.tier ? `${b.name} (${tierLabel[b.tier]})` : b.name
+  return (
+    <button type="button" title={tip} aria-expanded={active} onClick={onClick}
+      className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${tierStyle[b.tier] ?? tierStyle['']} ${active ? 'outline outline-2 outline-ink/70' : ''}`}>
+      <span className="truncate">{b.name}</span>
+      {b.tier && <span className="shrink-0 text-[10px] font-extrabold opacity-80">{tierShort[b.tier]}</span>}
+      {b.kind === 'performance' && <span className="shrink-0" title="Raised by last season's stats">↑</span>}
+    </button>
+  )
+}
+
+export function BadgeCount({ n }: { n?: number }) {
+  if (!n) return null
+  return <span title={`${n} badges`} className="ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full bg-panel2 px-1.5 py-px align-middle text-[10px] font-semibold tabular-nums text-muted ring-1 ring-line">{n} ⬢</span>
 }

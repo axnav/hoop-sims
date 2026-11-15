@@ -241,6 +241,13 @@ func (p *Player) ProgressMinutes(r *RNG, mpg float64) { p.ProgressWeighted(r, mp
 // w splits the positive growth across the ratings (see training.go); nil =
 // every rating equal.
 func (p *Player) ProgressWeighted(r *RNG, mpg float64, w *[NumRatings]float64) {
+	p.ProgressMentored(r, mpg, w, 1)
+}
+
+// ProgressMentored is ProgressWeighted with every positive rating step
+// multiplied by grow (1 = unchanged; a Mentor on the team makes it 1.05 for
+// young teammates, see badges.go).
+func (p *Player) ProgressMentored(r *RNG, mpg float64, w *[NumRatings]float64, grow float64) {
 	c := &Progression
 	oldOvr, oldPot, oldRt := p.Overall(), p.Potential, p.Ratings
 	// In-season changes already made this season came ahead of the yearly
@@ -281,6 +288,9 @@ func (p *Player) ProgressWeighted(r *RNG, mpg float64, w *[NumRatings]float64) {
 	var ds [NumRatings]float64
 	for i := range ds {
 		ds[i] = ratingStep(p.Age, i, delta+r.Normal(0, c.RatingNoiseSD))
+		if ds[i] > 0 {
+			ds[i] *= grow
+		}
 	}
 	if w != nil {
 		reweightGrowth(&ds, w)

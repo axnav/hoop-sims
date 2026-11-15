@@ -1,11 +1,25 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { Card, Page, PlayerLink, Q, TeamLink, f1 } from '../ui'
+import { Card, Page, groupLabel, groupOrder, PlayerLink, Q, TeamLink, f1 } from '../ui'
 
 export default function Leaders() {
-  const q = useQuery({ queryKey: ['leaders'], queryFn: api.leaders })
+  const [badge, setBadge] = useState('')
+  const q = useQuery({ queryKey: ['leaders', badge], queryFn: () => api.leaders(badge) })
+  const defs = useQuery({ queryKey: ['badges'], queryFn: api.badges, staleTime: Infinity })
+  const select = (
+    <label className="flex items-center gap-2 text-xs text-muted">Badge
+      <select aria-label="Filter by badge" value={badge} onChange={(e) => setBadge(e.target.value)} className="max-w-[55vw] rounded border border-line bg-panel px-2 py-1 text-[13px] text-ink">
+        <option value="">Any</option>
+        {groupOrder.map((g) => {
+          const list = (defs.data?.badges ?? []).filter((b) => b.group === g)
+          return list.length === 0 ? null : <optgroup key={g} label={groupLabel[g]}>{list.map((b) => <option key={b.key} value={b.key}>{b.name}</option>)}</optgroup>
+        })}
+      </select>
+    </label>
+  )
   return (
-    <Page title="League leaders">
+    <Page title="League leaders" right={select}>
       <Q q={q} minH={400}>
         {(d) => (
           <>

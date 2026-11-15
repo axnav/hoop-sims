@@ -263,6 +263,11 @@ func TestTeamBalance(t *testing.T) {
 		lg := GenerateLeague(seed)
 		for y := 0; y < 5; y++ {
 			s := playSeasonStats(lg)
+			mx, mn := 0, SeasonGames
+			for _, w := range s.Wins {
+				mx, mn = max(mx, w), min(mn, w)
+			}
+			t.Logf("seed %d year %d: most wins %d, fewest %d", seed, s.Year, mx, mn)
 			for id, w := range s.Wins {
 				if w > 70 || w < 12 {
 					t.Errorf("seed %d year %d: team %d went %d-%d", seed, s.Year, id, w, s.Losses[id])

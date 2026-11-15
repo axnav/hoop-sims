@@ -3,9 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { api, type ExtensionAsk, type PlayerPage, type Training, type StatLine } from './api'
+import { api, type ExtensionAsk, type PlayerPage, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
-import { Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
+import { BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -25,6 +25,52 @@ function Stats({ title, s }: { title: string; s: StatLine }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function BadgesSection({ badges }: { badges: Badge[] }) {
+  const [all, setAll] = useState(false)
+  const [sel, setSel] = useState('')
+  if (badges.length === 0) return null
+  const pers = badges.filter((b) => b.kind === 'personality')
+  const skills = badges.filter((b) => b.kind !== 'personality')
+  const counts = tierOrder.map((t) => [t, skills.filter((b) => b.tier === t).length] as const).filter(([, n]) => n > 0)
+  const shown = all ? skills : skills.slice(0, 10)
+  const chosen = badges.find((b) => b.key === sel)
+  const toggle = (k: string) => setSel(sel === k ? '' : k)
+  const detail = chosen && (
+    <div className="mt-2 rounded-lg border border-line bg-panel2 p-2.5 text-xs">
+      <div className="font-bold">{chosen.name}{chosen.tier && <span className="text-muted"> · {tierLabel[chosen.tier]}</span>}</div>
+      <div className="mt-1"><span className="text-muted">Rule: </span>{chosen.rule}</div>
+      <div className="mt-0.5"><span className="text-muted">Effect: </span>{chosen.effect}</div>
+      {chosen.kind === 'performance' && <div className="mt-0.5 text-muted">Raised one tier by last season's stats.</div>}
+      {chosen.next && <div className="mt-0.5"><span className="text-muted">Next: </span>{chosen.next}</div>}
+    </div>
+  )
+  return (
+    <div className="mt-5">
+      <div className="h2 mb-1">Badges</div>
+      <div className="mb-2 text-xs text-muted">
+        {badges.length} badges{counts.map(([t, n]) => ` · ${n} ${tierLabel[t]}`).join('')}
+      </div>
+      {pers.length > 0 && <div className="mb-2 flex flex-wrap gap-1.5">{pers.map((b) => <BadgeChip key={b.key} b={b} active={sel === b.key} onClick={() => toggle(b.key)} />)}</div>}
+      {groupOrder.map((g) => {
+        const list = shown.filter((b) => b.group === g)
+        if (list.length === 0) return null
+        return (
+          <div key={g} className="mb-2">
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">{groupLabel[g]}</div>
+            <div className="flex flex-wrap gap-1.5">{list.map((b) => <BadgeChip key={b.key} b={b} active={sel === b.key} onClick={() => toggle(b.key)} />)}</div>
+          </div>
+        )
+      })}
+      {detail}
+      {skills.length > 10 && (
+        <button type="button" className="mt-1 text-xs font-semibold text-accent hover:underline" onClick={() => setAll(!all)}>
+          {all ? 'Show fewer' : `Show all ${skills.length}`}
+        </button>
+      )}
     </div>
   )
 }
@@ -330,6 +376,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
               </div>
             ))}
           </div>
+          {p.badges && !p.prospect && <BadgesSection badges={p.badges} />}
           {p.training && <TrainingPanel id={p.id} ratings={p.ratings} t={p.training} />}
           <div className="mt-3 text-muted">
             {p.experience} seasons played{p.draftPick > 0 && <> · Drafted {p.draftYear > 0 ? p.draftYear : ''} (pick {p.draftPick})</>}

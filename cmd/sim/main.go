@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, develop or resign")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, develop or resign")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -61,10 +61,14 @@ func main() {
 		runRatings(*seed)
 		return
 	}
+	if *mode == "badges" {
+		runBadges(*seed)
+		return
+	}
 
 	lg := engine.GenerateLeague(*seed)
 	r := engine.NewRNG(*seed)
-	g := engine.SimGame(r, lg.Teams[0], lg.Teams[1])
+	g := lg.SimGame(r, lg.Teams[0], lg.Teams[1])
 	printBox(g.Home)
 	printBox(g.Away)
 	if g.Overtimes > 0 {
@@ -80,7 +84,7 @@ func main() {
 		if b >= a {
 			b++
 		}
-		res := engine.SimGame(r, lg.Teams[a], lg.Teams[b])
+		res := lg.SimGame(r, lg.Teams[a], lg.Teams[b])
 		if res.Home.Score > res.Away.Score {
 			homeWins++
 		}
@@ -273,5 +277,66 @@ func runSeasons(seed uint64, n int, reveal bool) {
 			}
 		}
 		fmt.Println()
+	}
+}
+
+// runBadges prints the badge spread of a fresh league: tier counts, badges per
+// player (overall 80+, other starters, bench) by group, and the Legend list.
+func runBadges(seed uint64) {
+	lg := engine.GenerateLeague(seed)
+	groups := []string{"finishing", "shooting", "playmaking", "defense", "rebounding", "general", "personality"}
+	type band struct {
+		n, total int
+		byGroup  map[string]int
+		min, max int
+	}
+	newBand := func() *band { return &band{byGroup: map[string]int{}, min: 999} }
+	bands := map[string]*band{"80+": newBand(), "starters": newBand(), "bench": newBand()}
+	var tiers [6]int
+	var legends []string
+	for _, t := range lg.Teams {
+		isStarter := map[int]bool{}
+		for i, p := range t.Rotation() {
+			if i < 5 {
+				isStarter[p.ID] = true
+			}
+		}
+		for _, p := range t.Roster {
+			bs := lg.BadgesOf(p)
+			name := "bench"
+			if p.Overall() >= 80 {
+				name = "80+"
+			} else if isStarter[p.ID] {
+				name = "starters"
+			}
+			b := bands[name]
+			b.n++
+			b.total += len(bs)
+			b.min, b.max = min(b.min, len(bs)), max(b.max, len(bs))
+			for _, x := range bs {
+				b.byGroup[x.Group]++
+				tiers[x.Tier]++
+				if x.Tier == engine.Legend {
+					legends = append(legends, fmt.Sprintf("%s (%s, %d) %s", p.Name, p.PosLabel(), p.Overall(), x.Name))
+				}
+			}
+		}
+	}
+	fmt.Printf("Skill badges in the league: Bronze %d, Silver %d, Gold %d, Hall of Fame %d, Legend %d\n", tiers[1], tiers[2], tiers[3], tiers[4], tiers[5])
+	for _, name := range []string{"80+", "starters", "bench"} {
+		b := bands[name]
+		if b.n == 0 {
+			continue
+		}
+		fmt.Printf("%-8s (%3d players): average %.1f badges (min %d, max %d); per player by group:", name, b.n, float64(b.total)/float64(b.n), b.min, b.max)
+		for _, g := range groups {
+			fmt.Printf(" %s %.1f", g, float64(b.byGroup[g])/float64(b.n))
+		}
+		fmt.Println()
+	}
+	sort.Strings(legends)
+	fmt.Printf("Legend badges (%d):\n", len(legends))
+	for _, l := range legends {
+		fmt.Println("  " + l)
 	}
 }

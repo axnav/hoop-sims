@@ -214,6 +214,8 @@ type League struct {
 	newInjuries []InjuryLine
 	// newDev lists user-team overall changes from the most recent day (not saved).
 	newDev []DevLine
+	// bmeans caches the league badge means for one day of games (badges.go; not saved).
+	bmeans *badgeMeans
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

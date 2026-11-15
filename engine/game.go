@@ -96,13 +96,30 @@ type side struct {
 	defense, rebound float64
 	home             bool
 	rec              *recorder
+	bd               *sideBadges
 }
 
-func newSide(t *Team, home bool) *side {
+// newSide precomputes a team's weights and badge effects for one game. lg may
+// be nil (no personality badges).
+func newSide(lg *League, t *Team, home bool) *side {
 	s := &side{box: &TeamBox{Team: t}, home: home}
+	pms := t.EffectiveMinutes()
+	s.bd = newSideBadges(len(pms))
 	var totMin, def, reb float64
-	for _, pm := range t.EffectiveMinutes() {
+	var means *badgeMeans
+	if lg != nil {
+		means = lg.badgeMeansNow()
+		for _, pm := range pms {
+			totMin += float64(pm.Min)
+		}
+	}
+	teamMin := totMin
+	totMin = 0
+	for i, pm := range pms {
 		p, m := pm.Player, pm.Min
+		if lg != nil {
+			s.bd.add(lg.badgeSet(p), means, i, float64(m), teamMin)
+		}
 		s.box.Lines = append(s.box.Lines, &StatLine{Player: p, Min: m})
 		rt := p.Effective()
 		s.eff = append(s.eff, rt)
@@ -114,41 +131,56 @@ func newSide(t *Team, home bool) *side {
 		scoring := (float64(top) + float64(second)) / 2
 		fm := float64(m)
 		usageWeight := 0.8 + float64(p.ShotUsage())/250
-		s.shootW = append(s.shootW, fm*math.Pow(scoring, shootExp)*usageWeight)
+		s.shootW = append(s.shootW, fm*math.Pow(scoring, shootExp)*usageWeight*s.bd.usage[i])
 		pm := float64(rt.Playmaking)
-		s.astW = append(s.astW, fm*math.Pow(pm, 2.5))
+		s.astW = append(s.astW, fm*math.Pow(pm, 2.5)*s.bd.astMult[i])
 		rb := float64(rt.Rebounding)
 		s.rebW = append(s.rebW, fm*rb*rb)
 		totMin += fm
 		def += fm * float64(rt.Defense)
 		reb += fm * rb
 	}
-	s.defense = def / totMin
+	s.defense = def/totMin + s.bd.defT
 	s.rebound = reb / totMin
+	if lg != nil {
+		s.bd.finish(means)
+	}
 	return s
 }
 
 func SimGame(r *RNG, home, away *Team) *GameResult { return SimGameRec(r, home, away, false) }
 
 // SimGameRec is SimGame with an optional play-by-play log. Recording never
-// touches the random stream, so results are identical either way.
+// touches the random stream, so results are identical either way. It knows
+// no league, so personality badges (Leader, Star) have no effect.
 func SimGameRec(r *RNG, home, away *Team, record bool) *GameResult {
-	h, a := newSide(home, true), newSide(away, false)
+	return (*League)(nil).SimGameRec(r, home, away, record)
+}
+
+// SimGame plays one game with this league's badges, personality included.
+func (lg *League) SimGame(r *RNG, home, away *Team) *GameResult {
+	return lg.SimGameRec(r, home, away, false)
+}
+
+// SimGameRec is SimGame with an optional play-by-play log (see the plain
+// SimGameRec). The league may be nil.
+func (lg *League) SimGameRec(r *RNG, home, away *Team, record bool) *GameResult {
+	h, a := newSide(lg, home, true), newSide(lg, away, false)
 	var rc *recorder
 	if record {
 		rc = &recorder{h: h, a: a}
 		h.rec, a.rec = rc, rc
 	}
-	n := int(r.Normal(possMean, possSD))
+	n := int(r.Normal(possMean+h.bd.paceT+a.bd.paceT, possSD))
 	for i := 0; i < n; i++ {
 		if rc != nil {
 			rc.per, rc.clk = rc.clk0(2*i, 2*n)
 		}
-		possession(r, h, a)
+		possession(r, h, a, lateAndClose(h, a, i, n))
 		if rc != nil {
 			rc.per, rc.clk = rc.clk0(2*i+1, 2*n)
 		}
-		possession(r, a, h)
+		possession(r, a, h, lateAndClose(h, a, i, n))
 	}
 	res := &GameResult{Home: h.box, Away: a.box}
 	for h.box.Score == a.box.Score {
@@ -157,11 +189,11 @@ func SimGameRec(r *RNG, home, away *Team, record bool) *GameResult {
 			if rc != nil {
 				rc.at(2*i, 2*overtimePoss, 300, 4+res.Overtimes)
 			}
-			possession(r, h, a)
+			possession(r, h, a, lateAndClose(h, a, n, n))
 			if rc != nil {
 				rc.at(2*i+1, 2*overtimePoss, 300, 4+res.Overtimes)
 			}
-			possession(r, a, h)
+			possession(r, a, h, lateAndClose(h, a, n, n))
 		}
 	}
 	if rc != nil {
@@ -176,13 +208,24 @@ func (rc *recorder) clk0(idx, total int) (int, int) {
 	return el/720 + 1, 720 - el%720
 }
 
-func possession(r *RNG, off, def *side) {
+// lateAndClose says whether this possession (number i of n per team) is in the
+// last ClutchShare of regulation, or overtime (i >= n), with the score close.
+func lateAndClose(h, a *side, i, n int) bool {
+	t := &BadgeTuning
+	if i < n && float64(i) < float64(n)*(1-t.ClutchShare) {
+		return false
+	}
+	d := h.box.Score - a.box.Score
+	return d <= t.ClutchMargin && d >= -t.ClutchMargin
+}
+
+func possession(r *RNG, off, def *side, clutch bool) {
 	for attempt := 0; attempt < 3; attempt++ {
 		si := r.PickWeighted(off.shootW)
 		sl := off.box.Lines[si]
 		rt := off.eff[si]
 
-		tov := baseTov + (def.defense-60)*0.003 - (float64(rt.Playmaking)-60)*0.0008
+		tov := baseTov + (def.defense-60)*0.003 - (float64(rt.Playmaking)-60)*0.0008 - off.bd.tovCut[si] + def.bd.stealT
 		if r.Chance(tov) {
 			sl.Tov++
 			if off.rec != nil {
@@ -194,8 +237,8 @@ func possession(r *RNG, off, def *side) {
 		in, mid, three := float64(rt.Inside), float64(rt.Mid), float64(rt.Three)
 		kind := r.PickWeighted([]float64{in * in, mid * mid * midShotWeight, three * three * threeShotWt})
 
-		if kind == 0 && r.Chance(foulChance) {
-			p := ftBase + (mid-60)*0.004
+		if kind == 0 && r.Chance(foulChance+off.bd.foulAdd[si]-def.bd.foulT) {
+			p := ftBase + (mid-60)*0.004 + off.bd.ftAdd[si]
 			ftm0 := sl.FTM
 			for i := 0; i < 2; i++ {
 				sl.FTA++
@@ -225,6 +268,13 @@ func possession(r *RNG, off, def *side) {
 		if off.home {
 			p += homeEdge
 		}
+		p += off.bd.kind[si][kind] + off.bd.leader
+		if clutch {
+			p += off.bd.clutch[si]
+		}
+		if kind == 0 {
+			p -= def.bd.rimT
+		}
 		sl.FGA++
 		if pts == 3 {
 			sl.TPA++
@@ -237,7 +287,7 @@ func possession(r *RNG, off, def *side) {
 			sl.Pts += pts
 			off.box.Score += pts
 			ast := -1
-			if r.Chance(assistChance) {
+			if r.Chance(min(assistChance+off.bd.astT, 0.97)) {
 				if ai := r.PickWeighted(off.astW); ai != si {
 					off.box.Lines[ai].Ast++
 					ast = off.box.Lines[ai].Player.ID
@@ -260,7 +310,7 @@ func possession(r *RNG, off, def *side) {
 			}
 			off.rec.add(off, si, typ, 0, -1)
 		}
-		oreb := orebBase + (off.rebound-def.rebound)*0.004
+		oreb := orebBase + (off.rebound+off.bd.orebT-def.rebound-def.bd.drebT)*0.004
 		if r.Chance(oreb) {
 			ri := r.PickWeighted(off.rebW)
 			off.box.Lines[ri].Reb++

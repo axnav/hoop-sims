@@ -73,6 +73,8 @@ export type Meta = {
 export type StandRow = { rank: number; team: Team; w: number; l: number; pct: number; gb: number; pd: number; inPlayoffs: boolean }
 export type Standings = { year: number; conferences: { conf: number; name: string; rows: StandRow[] }[]; playoffLine: number; userTeam: number }
 export type Leader = { ovrChange?: number; changeScope?: ChangeScope; potChange?: number; playerId: number; name: string; team: Team; gp: number; value: number }
+export type Badge = { key: string; name: string; group: string; tier: string; kind: 'rating' | 'performance' | 'personality'; rule: string; effect: string; next: string }
+export type BadgeDef = { key: string; name: string; group: string; kind: string; rule: string; effect: string }
 export type Leaders = { minGP: number; pts: Leader[]; reb: Leader[]; ast: Leader[] }
 export type RosterRow = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; starter: boolean
@@ -80,7 +82,7 @@ export type RosterRow = {
   injury?: Injury
   salary: number; years: number; expiring: boolean
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
-  stance?: Stance; extended?: boolean; focus?: string
+  stance?: Stance; extended?: boolean; focus?: string; badgeCount?: number
 }
 export type TeamStatus = { key: 'contender' | 'buyer' | 'seller' | 'rebuilding'; label: string; wants: string }
 export type TeamRow = {
@@ -95,6 +97,7 @@ export type PlayerPage = {
   role: string; usage: number; salary: number; years: number
   injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
   ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
+  badges?: Badge[]
   prospect?: boolean; scout?: { level: number; ovrLo: number; ovrHi: number; potLo: number; potHi: number }
   season: StatLine; playoffs: StatLine
   motivation?: Motivation; stance?: Stance & { reasons: string[] }; extension?: { salary: number; years: number }; training?: Training
@@ -239,7 +242,8 @@ export const api = {
   state: () => get<GameState>('/api/state'),
   sim: (b: { days?: number; toEnd?: boolean; auto?: boolean }) => post<SimResult>('/api/sim', b),
   standings: () => get<Standings>('/api/standings'),
-  leaders: () => get<Leaders>('/api/leaders'),
+  leaders: (badge = '') => get<Leaders>('/api/leaders' + (badge ? `?badge=${encodeURIComponent(badge)}` : '')),
+  badges: () => get<{ badges: BadgeDef[] }>('/api/badges'),
   teams: () => get<{ teams: TeamRow[] }>('/api/teams'),
   team: (id: number) => get<TeamPage>(`/api/team/${id}`),
   player: (id: number) => get<PlayerPage>(`/api/player/${id}`),

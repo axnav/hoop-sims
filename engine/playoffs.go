@@ -207,6 +207,7 @@ func (lg *League) SimPlayoffDay() bool {
 	r := lg.dayRNG(s.Year, playoffOffset+s.PlayoffDay)
 	ir := lg.dayRNG(s.Year, injuryOffset+injuryPlayoffOffset+s.PlayoffDay)
 	lg.newInjuries = nil
+	lg.bmeans = nil
 	for i := range s.Series {
 		sr := &s.Series[i]
 		if sr.Round != round || sr.Done {
@@ -217,7 +218,7 @@ func (lg *League) SimPlayoffDay() bool {
 		if homePattern[g] == 'A' {
 			h, aw = aw, h
 		}
-		res := SimGameRec(r, lg.Teams[h], lg.Teams[aw], true)
+		res := lg.SimGameRec(r, lg.Teams[h], lg.Teams[aw], true)
 		homeWon := res.Home.Score > res.Away.Score
 		if homeWon == (h == sr.High) {
 			sr.HighWins++
