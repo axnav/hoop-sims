@@ -50,9 +50,26 @@ func (s *server) standings(r *http.Request) (any, error) {
 
 func (s *server) leaders(r *http.Request) (any, error) {
 	st := s.lg.Season
+	badge := r.URL.Query().Get("badge")
+	if badge != "" && !engine.ValidBadgeKey(badge) {
+		return nil, bad("unknown badge %q", badge)
+	}
 	list := func(stat string, f func(*engine.PlayerSeason) float64) []M {
 		out := []M{}
-		for _, ps := range st.Leaders(stat, 10) {
+		rows := st.Leaders(stat, 10)
+		if badge != "" {
+			// Only players who have the badge: filter the full ranking, then take ten.
+			rows = rows[:0:0]
+			for _, ps := range st.Leaders(stat, len(st.Stats)) {
+				if p := s.lg.FindPlayer(ps.PlayerID); p != nil && s.lg.HasBadge(p, badge) {
+					rows = append(rows, ps)
+				}
+			}
+			if len(rows) > 10 {
+				rows = rows[:10]
+			}
+		}
+		for _, ps := range rows {
 			out = append(out, M{"playerId": ps.PlayerID, "name": ps.Name, "team": s.team(ps.TeamID), "gp": ps.GP, "value": f(ps)})
 		}
 		return out
@@ -173,6 +190,7 @@ func (s *server) player(r *http.Request) (any, error) {
 	addInjury(out, p)
 	addContract(out, p)
 	if !s.inPool(p.ID) {
+		out["badges"] = s.badgesObj(p)
 		s.addPhoto(out, p)
 		if status != "Retired" {
 			out["motivation"] = s.motivationObj(p)

@@ -2029,3 +2029,161 @@ func TestTrainingRoute(t *testing.T) {
 	}
 	c.call("POST", "/api/training", M{"playerId": pr.ID, "focus": "body"}, 404)
 }
+
+func TestBadgesAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	lg := c.s.lg
+
+	// Catalogue.
+	cat := c.call("GET", "/api/badges", nil, 200)
+	list := cat["badges"].([]any)
+	if len(list) != 40 {
+		t.Fatalf("catalogue has %d badges", len(list))
+	}
+	keys := map[string]bool{}
+	for _, x := range list {
+		b := x.(M)
+		for _, k := range []string{"key", "name", "group", "kind", "rule", "effect"} {
+			if s, _ := b[k].(string); s == "" {
+				t.Fatalf("catalogue entry without %s: %v", k, b)
+			}
+		}
+		if strings.Contains(strings.ToLower(b["rule"].(string)+b["effect"].(string)), "impact") {
+			t.Fatalf("catalogue mentions the hidden number: %v", b)
+		}
+		keys[b["key"].(string)] = true
+	}
+	if !keys["rim_finisher"] || !keys["mentor"] {
+		t.Fatalf("catalogue keys: %v", keys)
+	}
+
+	// Player page: an array on every player, with the contract fields.
+	best := lg.Teams[0].Roster[0]
+	for _, tm := range lg.Teams {
+		for _, p := range tm.Roster {
+			if lg.BadgeCount(p) > lg.BadgeCount(best) {
+				best = p
+			}
+		}
+	}
+	if lg.BadgeCount(best) < 2 {
+		t.Fatal("no player with two badges in the test league")
+	}
+	pl := c.call("GET", "/api/player/"+itoa(best.ID), nil, 200)
+	bl, ok := pl["badges"].([]any)
+	if !ok || len(bl) != lg.BadgeCount(best) {
+		t.Fatalf("badges on player page: %v", pl["badges"])
+	}
+	lastRank := 6
+	rank := map[string]int{"legend": 5, "hof": 4, "gold": 3, "silver": 2, "bronze": 1, "": 0}
+	for _, x := range bl {
+		b := x.(M)
+		tier, _ := b["tier"].(string)
+		r, known := rank[tier]
+		if !known || r > lastRank {
+			t.Fatalf("badge order or tier: %v", bl)
+		}
+		lastRank = r
+		kind := b["kind"]
+		if (kind == "personality") != (tier == "") || (kind != "rating" && kind != "performance" && kind != "personality") {
+			t.Fatalf("kind/tier: %v", b)
+		}
+		g := b["group"]
+		if g != "finishing" && g != "shooting" && g != "playmaking" && g != "defense" && g != "rebounding" && g != "general" && g != "personality" {
+			t.Fatalf("group: %v", b)
+		}
+		for _, k := range []string{"key", "name", "rule", "effect"} {
+			if s, _ := b[k].(string); s == "" {
+				t.Fatalf("badge without %s: %v", k, b)
+			}
+		}
+		if _, ok := b["next"].(string); !ok {
+			t.Fatalf("badge without next: %v", b)
+		}
+		if strings.Contains(strings.ToLower(b["rule"].(string)+b["effect"].(string)), "impact") {
+			t.Fatalf("badge text mentions the hidden number: %v", b)
+		}
+	}
+	for _, tm := range lg.Teams {
+		for _, p := range tm.Roster {
+			if bs := lg.BadgesOf(p); len(bs) > 0 && bs[0].Tier == engine.Legend {
+				lp := c.call("GET", "/api/player/"+itoa(p.ID), nil, 200)
+				b, _ := json.Marshal(lp["badges"].([]any)[0])
+				t.Logf("example badge object (live player page): %s", b)
+				goto done
+			}
+		}
+	}
+done:
+	// A player with none gets an empty array, not null.
+	none := lg.Teams[0].Roster[0]
+	for _, tm := range lg.Teams {
+		for _, p := range tm.Roster {
+			if lg.BadgeCount(p) == 0 {
+				none = p
+			}
+		}
+	}
+	np := c.call("GET", "/api/player/"+itoa(none.ID), nil, 200)
+	if arr, ok := np["badges"].([]any); !ok || len(arr) != 0 {
+		t.Fatalf("player without badges: %v", np["badges"])
+	}
+
+	// Roster rows carry badgeCount.
+	team := c.call("GET", "/api/team/"+itoa(best.TeamID), nil, 200)
+	seen := false
+	for _, x := range team["roster"].([]any) {
+		r := x.(M)
+		n, ok := r["badgeCount"].(float64)
+		if !ok {
+			t.Fatalf("roster row without badgeCount: %v", r)
+		}
+		if num(r["id"]) == best.ID {
+			seen = true
+			if int(n) != lg.BadgeCount(best) {
+				t.Fatalf("badgeCount %v, want %d", n, lg.BadgeCount(best))
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("player not on his team page")
+	}
+
+	// Leaders: filter by badge. Play some days so there are leaders.
+	lg.SimDays(engine.MinGPLeaders + 5)
+	all := c.call("GET", "/api/leaders", nil, 200)
+	if len(all["pts"].([]any)) != 10 {
+		t.Fatalf("plain leaders: %v", all["pts"])
+	}
+	c.call("GET", "/api/leaders?badge=nonsense", nil, 400)
+	for _, key := range []string{"rim_finisher", "star", "floor_general", "rim_protector"} {
+		f := c.call("GET", "/api/leaders?badge="+key, nil, 200)
+		for _, stat := range []string{"pts", "reb", "ast"} {
+			rows := f[stat].([]any)
+			if len(rows) > 10 {
+				t.Fatalf("%s %s: %d rows", key, stat, len(rows))
+			}
+			for _, x := range rows {
+				p := lg.FindPlayer(num(x.(M)["playerId"]))
+				if p == nil || !lg.HasBadge(p, key) {
+					t.Fatalf("%s %s: row without the badge: %v", key, stat, x)
+				}
+			}
+		}
+	}
+
+	// Prospects: no badges key, no badgeCount anywhere.
+	toDraftStart(c, 11)
+	pr := c.s.lg.Draft.Pool[0]
+	pp := c.call("GET", "/api/player/"+itoa(pr.ID), nil, 200)
+	if _, has := pp["badges"]; has {
+		t.Fatalf("badges on a prospect: %v", pp["badges"])
+	}
+	board := c.call("GET", "/api/draft", nil, 200)
+	for _, x := range board["prospects"].([]any) {
+		if _, has := x.(M)["badgeCount"]; has {
+			t.Fatalf("badgeCount on a prospect row: %v", x)
+		}
+	}
+}

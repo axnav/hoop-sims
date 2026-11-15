@@ -65,6 +65,10 @@ type Player struct {
 	// Focus is the training focus (see training.go); zero = Balanced.
 	Focus Focus `json:",omitempty"`
 
+	// PerfBadges are the badges lifted one tier by last season's statistics
+	// (key to 1, see badges.go); nil = none (or an old save).
+	PerfBadges map[string]int `json:",omitempty"`
+
 	// Injury is the current injury; nil means healthy (see injury.go).
 	Injury *Injury `json:",omitempty"`
 

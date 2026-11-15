@@ -183,12 +183,13 @@ func (lg *League) SimDay() bool {
 	lg.newProposals = 0
 	lg.newInjuries = nil
 	lg.newDev = nil
+	lg.bmeans = nil
 	ir := lg.dayRNG(s.Year, injuryOffset+s.Day)
 	r := lg.dayRNG(s.Year, s.Day)
 	for i := s.Day * GamesPerDay; i < (s.Day+1)*GamesPerDay; i++ {
 		g := &s.Games[i]
 		user := g.Home == lg.UserTeamID || g.Away == lg.UserTeamID
-		res := SimGameRec(r, lg.Teams[g.Home], lg.Teams[g.Away], user)
+		res := lg.SimGameRec(r, lg.Teams[g.Home], lg.Teams[g.Away], user)
 		g.Played, g.HomeScore, g.AwayScore = true, res.Home.Score, res.Away.Score
 		if g.HomeScore > g.AwayScore {
 			s.Wins[g.Home]++
@@ -209,6 +210,7 @@ func (lg *League) SimDay() bool {
 	}
 	if s.Done() {
 		s.computeAwards()
+		lg.awardPerfBadges()
 	}
 	lg.updateProposals()
 	return true

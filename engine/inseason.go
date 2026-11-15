@@ -74,6 +74,7 @@ func (lg *League) inSeasonDev(step int) {
 	for _, p := range lg.Teams[lg.UserTeamID].Roster {
 		user[p.ID] = true
 	}
+	mentors := lg.mentorTeams()
 	for _, p := range lg.allPlayers() {
 		gain := 0.0
 		if p.SeasonDev != nil {
@@ -86,6 +87,8 @@ func (lg *League) inSeasonDev(step int) {
 		sign := 1.0
 		if s < 0 {
 			sign = -1
+		} else {
+			s *= lg.growthMult(p, mentors)
 		}
 		// Growth is split over the ratings by training weights (training.go),
 		// total unchanged; a loss is spread equally.
