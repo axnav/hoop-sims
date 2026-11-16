@@ -271,6 +271,7 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/trade/needs/{id}", true, s.tradeNeeds)
 	g("/api/trade/whatwouldittake/{id}", true, s.whatWouldItTake)
 	g("/api/trade/advisor", true, s.tradeAdvisor)
+	p("/api/trade/find", true, s.tradeFind)
 	p("/api/trade/evaluate", true, s.tradeEvaluate)
 	p("/api/trade/counter", true, s.tradeCounter)
 	p("/api/trade/execute", true, s.tradeExecute)

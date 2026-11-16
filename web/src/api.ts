@@ -187,6 +187,12 @@ export type TakeAsset =
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number }
 export type TakePackage = { label: string; give: TakeAsset[]; receive: TakeAsset[]; note: string; cost: number; cheapest: boolean; deal: { moves: DealMove[] } }
 export type WhatWouldItTake = { player: TradeAssetRow; team: Team; possible: boolean; reason: string; packages: TakePackage[] }
+export type FindOffer = { team: Team; direction: TeamStatus; receive: TakeAsset[]; value: number; salaryIn: number; salaryOut: number; note: string; deal: { moves: DealMove[] } }
+export type FindOffers = {
+  possible: boolean; reason: string; want: string; wants: { key: string; label: string }[]
+  give: TakeAsset[]; giveValue: number; offers: FindOffer[]; passed: { team: Team; reason: string }[]
+}
+export type FindBody = { players: number[]; picks: { year: number; round: number; original: number }[]; want?: string }
 export type Advice = 'keep' | 'shop' | 'sell'
 export type AdvisorRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; salary: number; years: number; advice: Advice; reasons: string[] }
 export type Advisor = { team: Team; direction: TeamStatus; players: AdvisorRow[]; summary: string }
@@ -305,6 +311,7 @@ export const api = {
   tradeBlock: (id: number) => get<TradeBlockData>(`/api/trade/block/${id}`),
   tradeNeeds: (id: number) => get<TeamNeeds>(`/api/trade/needs/${id}`),
   whatWouldItTake: (id: number) => get<WhatWouldItTake>(`/api/trade/whatwouldittake/${id}`),
+  tradeFind: (b: FindBody) => post<FindOffers>('/api/trade/find', b),
   tradeAdvisor: () => get<Advisor>('/api/trade/advisor'),
   tradeEvaluate: (o: TradeOfferIn) => post<TradeVerdict>('/api/trade/evaluate', o),
   tradeCounter: (o: TradeOfferIn) =>

@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Sparkles } from 'lucide-react'
-import { api, type TakeAsset, type TakePackage } from './api'
+import { Search, Sparkles } from 'lucide-react'
+import { api, type FindBody, type FindOffer, type TakeAsset, type TakePackage } from './api'
 import { AdviceChip, ErrorBox, PlayerLink, Spinner, StatusChip, TeamBadge, money, ovrColor } from './ui'
 
 // "What they want": direction, what the team values and what it lacks.
@@ -84,6 +85,73 @@ export function TakePanel({ playerId, bump, onLoad, onClose, disabled }: {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  )
+}
+
+// Trade finder: what each computer team would give for the players and picks you offer.
+export function FinderPanel({ give, bump, onLoad, onClose, disabled }: {
+  give: Omit<FindBody, 'want'>; bump?: unknown; disabled?: boolean; onClose: () => void
+  onLoad: (teamId: number, o: Pick<FindOffer, 'deal'>, labels: string[]) => void
+}) {
+  const [want, setWant] = useState('any')
+  const empty = give.players.length + give.picks.length === 0
+  const body = { ...give, want }
+  const q = useQuery({ queryKey: ['trade-find', JSON.stringify(body), bump], queryFn: () => api.tradeFind(body), enabled: !empty, staleTime: 0 })
+  const d = q.data
+  return (
+    <section className="card mb-3 border-accent/50 p-3" aria-label="Find offers" id="finder-panel">
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="h2 flex items-center gap-1.5"><Search size={14} className="text-accent" />Find offers</h2>
+        <button className="btn ml-auto px-2 py-1 text-[12px]" onClick={onClose}>Close</button>
+      </div>
+      {empty && <div className="text-[13px] text-muted">Tick players or picks on your side (up to 3 players and 4 picks) and the best offer from each team shows here.</div>}
+      {!empty && q.isError && <ErrorBox error={q.error} />}
+      {!empty && q.isLoading && <div style={{ minHeight: 120 }}><Spinner /></div>}
+      {!empty && d && (
+        <>
+          <div className="mb-2">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">On the table (worth {d.giveValue} to you)</div>
+            <ul className="grid gap-x-4 sm:grid-cols-2">{d.give.map((a, i) => <AssetLine key={i} a={a} />)}</ul>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="What you want back">
+            <span className="mr-1 text-xs text-muted">You want back</span>
+            {d.wants.map((w) => (
+              <button key={w.key} aria-pressed={want === w.key} onClick={() => setWant(w.key)}
+                className={`rounded-md border px-2 py-0.5 text-[12px] font-semibold ${want === w.key ? 'border-accent bg-accent/25 text-accent' : 'border-line text-muted hover:text-ink'}`}>{w.label}</button>
+            ))}
+          </div>
+          {!d.possible && <div className="text-[13px] font-semibold text-loss" role="status">{d.reason}</div>}
+          {d.possible && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {d.offers.map((o) => (
+                <div key={o.team.id} className="rounded-lg border border-line bg-panel2/40 p-2.5">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <TeamBadge team={o.team} size={18} />
+                    <span className="font-bold">{o.team.fullName}</span>
+                    <StatusChip status={o.direction} />
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted">You get (worth {o.value} to you)</div>
+                  <ul>{o.receive.map((a, j) => <AssetLine key={j} a={a} />)}</ul>
+                  <div className="mt-1 text-[12px] text-muted">You take in {money(o.salaryIn)} and send out {money(o.salaryOut)}.</div>
+                  {o.note && <div className="text-[12px] text-muted">{o.note}</div>}
+                  <button className="btn btn-accent mt-2" disabled={disabled} onClick={() => onLoad(o.team.id, o, [...d.give, ...o.receive].map(assetText))}>Load this offer</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {d.passed.length > 0 && (
+            <details className="mt-3 text-[13px]">
+              <summary className="cursor-pointer text-muted">{d.passed.length} {d.passed.length === 1 ? 'team' : 'teams'} passed</summary>
+              <ul className="mt-1 space-y-1">
+                {d.passed.map((p) => (
+                  <li key={p.team.id} className="flex flex-wrap items-center gap-2"><TeamBadge team={p.team} size={16} /><span className="font-medium">{p.team.abbr}</span><span className="text-muted">{p.reason}</span></li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
       )}
     </section>
   )

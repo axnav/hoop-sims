@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { Check, Lock, Plus, Sparkles, X } from 'lucide-react'
+import { Check, Lock, Plus, Search, Sparkles, X } from 'lucide-react'
 import { api, type AssetRow, type DealMove, type TakePackage, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
 import { useFlow } from '../flow'
 import { TxItem, NewsItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { AdvisorList, NeedsPanel, TakePanel } from '../TradeAssistant'
+import { AdvisorList, FinderPanel, NeedsPanel, TakePanel } from '../TradeAssistant'
 import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TradeRequestTag, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
@@ -115,7 +115,7 @@ function Summary({ r, onClose }: { r: TradeResult; onClose: () => void }) {
 
 export default function Trade() {
   const [sp] = useSearchParams()
-  return <TradeScreen key={`${sp.get('team')}-${sp.get('get')}-${sp.get('want')}`} />
+  return <TradeScreen key={`${sp.get('team')}-${sp.get('get')}-${sp.get('want')}-${sp.get('find')}`} />
 }
 
 function TradeScreen() {
@@ -138,6 +138,12 @@ function TradeScreen() {
   const [take, setTake] = useState<number | null>(() => {
     const w = Number(sp.get('want'))
     return sp.get('want') && Number.isInteger(w) ? w : null
+  })
+  // the trade finder: open, and the player to tick when arriving with ?find=
+  const [finder, setFinder] = useState(() => !!sp.get('find'))
+  const [findPending, setFindPending] = useState<number | null>(() => {
+    const f = Number(sp.get('find'))
+    return sp.get('find') && Number.isInteger(f) ? f : null
   })
   const [tab, setTab] = useState<'players' | 'advisor'>('players')
   const [pending, setPending] = useState<number | null>(() => {
@@ -176,6 +182,15 @@ function TradeScreen() {
     setPending(null)
     setRawMoves((m) => (m.length === 0 ? [{ key: pkey(row.id), label: row.name, from: partners[0], to: me, playerId: row.id }] : m))
   }, [pending, q1.data]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the player to tick when arriving with ?find=
+  useEffect(() => {
+    if (findPending === null) return
+    const row = q0.data?.players.find((p) => p.id === findPending)
+    if (!row) return
+    setFindPending(null)
+    setRawMoves((m) => (m.length === 0 ? [{ key: pkey(row.id), label: row.name, from: me, to: partners[0], playerId: row.id }] : m))
+  }, [findPending, q0.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // arriving from an offer (?offer=id): load its deal, then drop the parameter
   const offerId = sp.get('offer')
@@ -235,15 +250,16 @@ function TradeScreen() {
   const exec = useMutation({
     mutationFn: () => api.dealExecute(wire),
     onSuccess: (r) => {
-      setDone(r); setRawMoves([]); setPreview(null); setTake(null)
+      setDone(r); setRawMoves([]); setPreview(null); setTake(null); setFinder(false)
       qc.setQueryData(['state'], r.state)
       qc.removeQueries({ queryKey: ['what-would-it-take'] })
+      qc.removeQueries({ queryKey: ['trade-find'] })
       qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'state' })
     },
   })
 
   // load a "what would it take" package into the builder
-  const loadPackage = (teamId: number, pk: TakePackage, labels: string[]) => {
+  const loadPackage = (teamId: number, pk: Pick<TakePackage, 'deal'>, labels: string[]) => {
     const sels: Sel[] = pk.deal.moves.map((m, i) => (
       'pick' in m
         ? { key: kkey(m.pick), label: labels[i], from: m.from, to: m.to, pick: m.pick }
@@ -327,6 +343,7 @@ function TradeScreen() {
                   <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`px-2 py-0.5 ${tab === t ? 'bg-accent/25 text-accent' : 'text-muted hover:text-ink'}`}>{t === 'players' ? 'Players' : 'Advisor'}</button>
                 ))}
               </span>
+              {open && <button className="btn px-2 py-0.5 text-[11px]" onClick={() => { setFinder(true); setTimeout(() => document.getElementById('finder-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }}><Search size={12} className="text-accent" />Find offers</button>}
               {tab === 'players' && <span className="text-[11px] text-muted max-[699px]:hidden">Pos · age · OVR · POT · salary · value</span>}
             </span>
           )
@@ -397,6 +414,14 @@ function TradeScreen() {
       )}
       {partners.map((pid) => <NeedsPanel key={`needs-${pid}`} teamId={pid} />)}
       {take !== null && open && <TakePanel key={take} playerId={take} disabled={exec.isPending} onClose={() => setTake(null)} onLoad={loadPackage} />}
+      {finder && open && (
+        <FinderPanel
+          give={{
+            players: rawMoves.filter((m) => m.from === me && m.playerId !== undefined).map((m) => m.playerId!),
+            picks: rawMoves.filter((m) => m.from === me && m.pick).map((m) => m.pick!),
+          }}
+          disabled={exec.isPending} onClose={() => setFinder(false)} onLoad={loadPackage} />
+      )}
       <LayoutGroup>
         <div className={`grid grid-cols-1 gap-4 ${ids.length > 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} ${open ? '' : 'pointer-events-none'}`} style={open ? undefined : { opacity: 0.85 }}>
           {ids.map((_, slot) => column(slot))}
