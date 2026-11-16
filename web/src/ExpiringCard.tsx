@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Expiring } from './api'
 import { useFlow } from './flow'
-import { Card, Delta, ErrorBox, PayrollBar, PlayerLink, StanceChip, TierChip, money } from './ui'
+import { Card, Delta, ErrorBox, PayrollBar, NameCell, PlayerLink, RfaChip, StanceChip, TierChip, money } from './ui'
 
 export function ExpiringCard() {
   const { state } = useFlow()
@@ -27,7 +27,7 @@ export function ExpiringCard() {
       <ul className="px-2 pb-1">
         {d.players.map((p) => (
           <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/50 py-1.5 text-[13px]">
-            <span className="min-w-0 flex-1 basis-40"><PlayerLink id={p.id} name={p.name} /><TierChip tier={p.tier} /><StanceChip stance={p.stance} extended={p.extended} />{p.restricted && <span className="ml-1.5 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent" title="Restricted free agent: if you do not re-sign him now, you can still match any offer he gets in free agency.">RFA</span>}</span>
+            <span className="min-w-0 flex-1 basis-40"><NameCell name={<PlayerLink id={p.id} name={p.name} />} chips={<>{p.restricted && <RfaChip title="Restricted free agent: if you do not re-sign him now, you can still match any offer he gets in free agency." />}<StanceChip stance={p.stance} extended={p.extended} /><TierChip tier={p.tier} /></>} /></span>
             <span className="text-xs text-muted tabular-nums">{p.pos} &middot; {p.age}y &middot; {p.ovr}<Delta value={p.ovrChange} scope={p.changeScope} />/{p.pot}<Delta value={p.potChange} scope={p.changeScope} /></span>
             <span className="text-xs tabular-nums">Asks {money(p.askSalary)} for {p.askYears} {p.askYears === 1 ? 'year' : 'years'}</span>
             {d.open && (

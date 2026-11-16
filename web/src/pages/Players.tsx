@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Filter, Sparkles } from 'lucide-react'
 import { api, type SearchRow } from '../api'
 import { useOpenPlayer } from '../Inline'
 import { useFlow } from '../flow'
-import { Avatar, BadgeCount, Delta, ErrorBox, InjuryTag, MoraleChip, Page, Spinner, TradeRequestTag, groupLabel, groupOrder, money, ovrColor } from '../ui'
+import { Avatar, BadgeCount, Delta, ErrorBox, InjuryTag, MoraleChip, NameCell, Page, Spinner, TradeRequestTag, groupLabel, groupOrder, money, ovrColor } from '../ui'
 
 const PER = 50
 const positions = ['PG', 'SG', 'SF', 'PF', 'C']
@@ -124,9 +124,9 @@ export default function Players() {
   const row = (r: SearchRow) => (
     <tr key={r.id} className="cursor-pointer" onClick={() => open(r.id)}>
       <td>
-        <Avatar id={r.id} name={r.name} photo={r.photo} color={r.team?.primary} size={28} /> <span className="link font-medium">{r.name}</span>
-        <InjuryTag injury={r.injury} /><span className="max-[699px]:hidden"><BadgeCount n={r.badgeCount} /></span>{r.tradeRequest && <TradeRequestTag />}
-        <span className="ml-2 inline-block min-[700px]:hidden" onClick={(e) => e.stopPropagation()}>{ask(r, true)}</span>
+        <NameCell lead={<Avatar id={r.id} name={r.name} photo={r.photo} color={r.team?.primary} size={28} />} name={<span className="link font-medium">{r.name}</span>}
+          chips={<><InjuryTag injury={r.injury} /><span className="max-[699px]:hidden"><BadgeCount n={r.badgeCount} /></span>{r.tradeRequest && <TradeRequestTag />}
+          <span className="inline-block min-[700px]:hidden" onClick={(e) => e.stopPropagation()}>{ask(r, true)}</span></>} />
       </td>
       <td onClick={(e) => e.stopPropagation()}>{r.team ? <Link to={`/team/${r.team.id}`} className="link">{r.team.abbr}</Link> : <span className="text-muted">FA</span>}</td>
       <td>{r.pos}</td>

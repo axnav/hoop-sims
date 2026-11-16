@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Play, SkipForward } from 'lucide-react'
 import { api, type FAPlayer, type FASheet, type FASigning, type FAVia, type FreeAgencyData } from '../api'
 import { useFlow } from '../flow'
-import { Card, Delta, ErrorBox, InjuryTag, Page, PayrollBar, PlayerLink, Q, TierChip, ValuesChips, money, ovrColor } from '../ui'
+import { Card, Delta, ErrorBox, InjuryTag, NameCell, Page, PayrollBar, PlayerLink, Q, RfaChip, TierChip, ValuesChips, money, ovrColor } from '../ui'
 
 const viaText: Record<FAVia, string> = { room: 'cap room', exception: 'mid-level exception', minimum: 'minimum', own: 'your own player' }
 const yrs = (n: number) => `${n} ${n === 1 ? 'yr' : 'yrs'}`
@@ -76,7 +76,7 @@ function Players({ d, onData }: { d: FreeAgencyData; onData: (r: FreeAgencyData)
               const o = openId === p.id
               return [
                 <tr key={p.id} className={p.mine ? 'bg-accent/10' : ''}>
-                  <td><PlayerLink id={p.id} name={p.name} />{p.restricted && <span className="ml-1.5 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent" title={p.mine ? 'Restricted: you can match any offer' : `Restricted: ${p.rightsTeam?.fullName ?? 'his team'} can match any offer`}>RFA</span>}<TierChip tier={p.tier} /><InjuryTag injury={p.injury} /><ValuesChips m={p.motivation} /></td>
+                  <td><NameCell name={<PlayerLink id={p.id} name={p.name} />} chips={<>{p.restricted && <RfaChip title={p.mine ? 'Restricted: you can match any offer' : `Restricted: ${p.rightsTeam?.fullName ?? 'his team'} can match any offer`} />}<TierChip tier={p.tier} /><InjuryTag injury={p.injury} /><ValuesChips m={p.motivation} /></>} /></td>
                   <td>{p.pos}</td>
                   <td>{p.age}</td>
                   <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} scope={p.changeScope} /><span className="text-muted">/{p.pot}</span><Delta value={p.potChange} scope={p.changeScope} /></td>

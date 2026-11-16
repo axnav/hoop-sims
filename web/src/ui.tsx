@@ -214,12 +214,40 @@ export function RangeBar({ lo, hi, color, className = '' }: { lo: number; hi: nu
 
 export const rangeText = (lo: number, hi: number) => `${lo}\u2013${hi}`
 
-// Small label for an asset's tier. Top tiers get a stronger look.
+// One chip for every status label. The tone gives the meaning (see index.css):
+// good = green, warn = amber, bad = red, info = blue, violet = team direction (contender),
+// neutral = grey outline, strong = bolder grey. Orange (accent) is only for actions and the current selection.
+export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'violet' | 'neutral' | 'strong'
+export const toneClass: Record<Tone, string> = {
+  good: 'bg-good/20 text-good ring-good/50',
+  warn: 'bg-warn/20 text-warn ring-warn/50',
+  bad: 'bg-bad/20 text-bad ring-bad/50',
+  info: 'bg-info/15 text-info ring-info/40',
+  violet: 'bg-violet/20 text-violet ring-violet/50',
+  neutral: 'bg-panel2 text-muted ring-line',
+  strong: 'bg-panel2 text-ink ring-muted/70 font-bold',
+}
+export function Chip({ tone = 'neutral', children, title, className = '' }: { tone?: Tone; children: ReactNode; title?: string; className?: string }) {
+  return (
+    <span title={title} className={`chip inline-block shrink-0 whitespace-nowrap rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${toneClass[tone]} ${className}`}>{children}</span>
+  )
+}
+
+// Name on the first line (with an optional avatar in front), chips wrapping on a second line inside the cell.
+// Use it wherever chips sit beside a name so nothing overflows into the next column.
+export function NameCell({ name, lead, chips }: { name: ReactNode; lead?: ReactNode; chips?: ReactNode }) {
+  return (
+    <div className="namecell">
+      <div className="flex items-center gap-1.5">{lead}<span className="min-w-0">{name}</span></div>
+      {chips && <div className="mt-0.5 flex flex-wrap items-center gap-1">{chips}</div>}
+    </div>
+  )
+}
+
+// Small label for an asset's tier. Top tiers get a bolder look.
 export function TierChip({ tier }: { tier: string }) {
   const top = tier === 'Franchise' || tier === 'Lottery pick'
-  return (
-    <span className={`ml-1.5 shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ${top ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : 'bg-panel2 text-muted'}`}>{tier}</span>
-  )
+  return <Chip tone={top ? 'strong' : 'neutral'} className="ml-1.5">{tier}</Chip>
 }
 
 // Small green/red change marker for a progression delta. Nothing when unknown or zero.
@@ -238,10 +266,7 @@ export const injuryText = (i: Injury) => `${i.name}, out ${i.gamesLeft} ${i.game
 // Red "INJ" tag shown next to an injured player's name.
 export function InjuryTag({ injury }: { injury?: Injury }) {
   if (!injury) return null
-  return (
-    <span title={injuryText(injury)} aria-label={`Injured: ${injuryText(injury)}`}
-      className="ml-1.5 shrink-0 rounded bg-loss/20 px-1.5 py-px align-middle text-[10px] font-extrabold tracking-wide text-loss ring-1 ring-loss/50">INJ</span>
-  )
+  return <Chip tone="bad" title={injuryText(injury)} className="ml-1.5 !font-extrabold">INJ</Chip>
 }
 
 // Money values from the API are integers in thousands of dollars.
@@ -252,24 +277,25 @@ export const money = (k: number) => {
   return neg ? `-${t}` : t
 }
 
-// Bar scaled to the hard ceiling, with marks at the cap, tax line and ceiling.
+// Bar scaled to the hard ceiling, with tick marks at the cap, tax line and ceiling.
+// The names and amounts sit in a wrapping line under the bar, so they can never overlap.
 export function PayrollBar({ p, compact = false }: { p: Payroll; compact?: boolean }) {
   const max = Math.max(p.ceiling, p.payroll, 1)
   const at = (v: number) => `${Math.min(100, (100 * v) / max)}%`
-  const fill = p.payroll > p.taxLine ? 'bg-loss' : p.payroll > p.cap ? 'bg-amber-400' : 'bg-win'
+  const fill = p.payroll > p.taxLine ? 'bg-loss' : p.payroll > p.cap ? 'bg-warn' : 'bg-win'
   const marks: [string, number][] = [['Cap', p.cap], ['Tax', p.taxLine], ['Max', p.ceiling]]
   return (
     <div className={compact ? 'px-2 pb-1' : 'px-2 pb-2'}>
-      <div className={`relative ${compact ? 'h-7' : 'h-9'}`}>
-        <div className="absolute inset-x-0 top-0 h-2.5 overflow-hidden rounded-full bg-panel2">
+      <div className="relative h-3.5 pt-0.5">
+        <div className="h-2.5 overflow-hidden rounded-full bg-panel2">
           <div className={`h-full rounded-full ${fill}`} style={{ width: at(p.payroll) }} />
         </div>
         {marks.map(([l, v], i) => (
-          <div key={l} className="absolute top-0" style={{ left: at(v), transform: i === marks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
-            <div className="mx-auto h-3.5 w-px bg-ink/60" style={i === marks.length - 1 ? { marginRight: 0 } : undefined} />
-            <div className="whitespace-nowrap text-[10px] leading-tight text-muted">{l} {money(v)}</div>
-          </div>
+          <div key={l} aria-hidden className="absolute top-0 h-3.5 w-px bg-ink/70" style={{ left: at(v), transform: i === marks.length - 1 ? 'translateX(-1px)' : undefined }} />
         ))}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] leading-tight text-muted">
+        {marks.map(([l, v]) => <span key={l} className="whitespace-nowrap">{l} {money(v)}</span>)}
       </div>
       <div className="mt-1 text-[12px] text-muted">
         <span>Payroll <b className="text-ink tabular-nums">{money(p.payroll)}</b></span>
@@ -281,9 +307,7 @@ export function PayrollBar({ p, compact = false }: { p: Payroll; compact?: boole
   )
 }
 
-export const ExpiringChip = () => (
-  <span className="ml-1.5 shrink-0 rounded bg-amber-400/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-400 ring-1 ring-amber-400/50">Expiring</span>
-)
+export const ExpiringChip = () => <Chip tone="warn" className="ml-1.5">Expiring</Chip>
 
 // Small accessible confirm dialog (replaces window.confirm). Escape or the backdrop cancels.
 export function ConfirmDialog({ message, confirmLabel = 'Continue', onConfirm, onCancel }: { message: string; confirmLabel?: string; onConfirm: () => void; onCancel: () => void }) {
@@ -307,39 +331,22 @@ export function ConfirmDialog({ message, confirmLabel = 'Continue', onConfirm, o
   )
 }
 
-const statusStyle: Record<TeamStatus['key'], string> = {
-  contender: 'bg-accent/25 text-accent ring-accent/60',
-  buyer: 'bg-win/20 text-win ring-win/50',
-  seller: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
-  rebuilding: 'bg-sky-400/15 text-sky-300 ring-sky-400/40',
-}
+const statusTone: Record<TeamStatus['key'], Tone> = { contender: 'violet', buyer: 'good', seller: 'warn', rebuilding: 'info' }
 
 // Small pill for a team's trade status. Nothing when unknown.
 export function StatusChip({ status }: { status?: TeamStatus }) {
   if (!status) return null
-  return (
-    <span title={status.wants} className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${statusStyle[status.key]}`}>{status.label}</span>
-  )
+  return <Chip tone={statusTone[status.key]} title={status.wants}>{status.label}</Chip>
 }
 
-const adviceStyle: Record<Advice, string> = {
-  keep: 'bg-win/20 text-win ring-win/50',
-  shop: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
-  sell: 'bg-loss/20 text-loss ring-loss/50',
-}
+const adviceTone: Record<Advice, Tone> = { keep: 'good', shop: 'warn', sell: 'bad' }
 
 // Small pill for the advisor's Keep / Shop / Sell.
 export function AdviceChip({ advice }: { advice: Advice }) {
-  return (
-    <span className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${adviceStyle[advice]}`}>{advice}</span>
-  )
+  return <Chip tone={adviceTone[advice]}>{advice}</Chip>
 }
 
-const stanceStyle: Record<Stance['key'], string> = {
-  resign: 'bg-win/20 text-win ring-win/50',
-  open: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
-  test: 'bg-loss/20 text-loss ring-loss/50',
-}
+const stanceTone: Record<Stance['key'], Tone> = { resign: 'good', open: 'warn', test: 'bad' }
 const stanceShort: Record<Stance['key'], string> = { resign: 'Re-sign', open: 'Open', test: 'Test FA' }
 
 // Small pill for a player's re-sign stance (short text; full label as tooltip) and an "Ext" badge when extended.
@@ -347,13 +354,19 @@ export function StanceChip({ stance, extended }: { stance?: Stance; extended?: b
   if (!stance && !extended) return null
   return (
     <>
-      {stance && <span title={stance.label} className={`ml-1.5 inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${stanceStyle[stance.key]}`}>{stanceShort[stance.key]}</span>}
-      {extended && <span title="Contract extended: new deal starts next season" className="ml-1.5 inline-block shrink-0 rounded bg-sky-400/15 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-sky-400/40">Ext</span>}
+      {stance && <Chip tone={stanceTone[stance.key]} title={stance.label} className="ml-1.5">{stanceShort[stance.key]}</Chip>}
+      {extended && <Chip tone="info" title="Contract extended: new deal starts next season" className="ml-1.5">Ext</Chip>}
     </>
   )
 }
 
-export const levelClass = (l: Level) => (l === 'High' ? 'bg-accent/25 text-accent ring-1 ring-accent/60' : l === 'Medium' ? 'bg-panel2 text-ink' : 'bg-panel2 text-muted')
+// Levels are neutral: High is bolder, never orange.
+export const levelClass = (l: Level) => (l === 'High' ? toneClass.strong : l === 'Medium' ? 'bg-panel2 text-ink' : 'bg-panel2 text-muted')
+
+// Restricted free agent tag (amber: needs a decision).
+export function RfaChip({ title }: { title?: string }) {
+  return <Chip tone="warn" title={title} className="ml-1.5 !font-bold">RFA</Chip>
+}
 
 export const motivationRows: [keyof Motivation, string][] = [['money', 'Money'], ['winning', 'Winning'], ['role', 'Role'], ['loyalty', 'Loyalty']]
 export const motivationTitle = (m: Motivation) => motivationRows.map(([k, l]) => `${l}: ${m[k]}`).join(', ')
@@ -363,9 +376,8 @@ export function ValuesChips({ m }: { m?: Motivation }) {
   if (!m) return null
   const high = motivationRows.filter(([k]) => m[k] === 'High')
   return (
-    <span title={motivationTitle(m)} className="ml-1.5 inline-flex flex-wrap items-center gap-1 align-middle">
-      {high.length > 0 && <span className="text-[10px] text-muted">Values</span>}
-      {high.map(([k, l]) => <span key={k} className={`rounded px-1.5 py-px text-[10px] font-semibold ${levelClass('High')}`}>{l}</span>)}
+    <span title={`Values: ${motivationTitle(m)}`} className="chip ml-1.5 inline-flex flex-wrap items-center gap-1 align-middle">
+      {high.map(([k, l]) => <span key={k} className={`rounded px-1.5 py-px text-[10px] font-semibold ring-1 ${toneClass.neutral}`}>{l}</span>)}
     </span>
   )
 }
@@ -375,7 +387,7 @@ export const focusLabels: Record<string, string> = { shooting: 'Shooting', insid
 // Small muted training-focus label for roster rows; nothing for balanced or unknown.
 export function FocusLabel({ focus }: { focus?: string }) {
   if (!focus || !focusLabels[focus]) return null
-  return <span title="Training focus" className="ml-1.5 inline-block shrink-0 align-middle text-[10px] text-muted">{focusLabels[focus]}</span>
+  return <span title="Training focus" className="chip ml-1.5 inline-block shrink-0 whitespace-nowrap align-middle text-[10px] text-muted">{focusLabels[focus]}</span>
 }
 
 export const tierLabel: Record<string, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', hof: 'Hall of Fame', legend: 'Legend' }
@@ -406,14 +418,14 @@ export function BadgeChip({ b, active, onClick }: { b: Badge; active?: boolean; 
 
 export function BadgeCount({ n }: { n?: number }) {
   if (!n) return null
-  return <span title={`${n} badges`} className="ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full bg-panel2 px-1.5 py-px align-middle text-[10px] font-semibold tabular-nums text-muted ring-1 ring-line">{n} ⬢</span>
+  return <span title={`${n} badges`} className="chip ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full bg-panel2 px-1.5 py-px align-middle text-[10px] font-semibold tabular-nums text-muted ring-1 ring-line">{n} ⬢</span>
 }
 
 const gradeTone: Record<string, string> = {
-  A: 'bg-win/20 text-win ring-win/50',
-  B: 'bg-teal-400/20 text-teal-300 ring-teal-400/50',
-  C: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
-  D: 'bg-loss/20 text-loss ring-loss/50',
+  A: toneClass.good,
+  B: toneClass.good,
+  C: toneClass.warn,
+  D: toneClass.bad,
 }
 
 // Roster fit grade (A to D) from the coach and system.
@@ -430,7 +442,7 @@ export function FitGrade({ fit, size = 'sm', title }: { fit?: Fit; size?: 'sm' |
 }
 
 export const moraleColor: Record<MoraleLabel, string> = {
-  Furious: '#ef4444', Unhappy: '#fb923c', Content: '#94a3b8', Happy: '#4ade80', Thrilled: '#22ff88',
+  Furious: '#ef4444', Unhappy: '#fbbf24', Content: '#94a3b8', Happy: '#4ade80', Thrilled: '#22ff88',
 }
 
 // Small pill: coloured dot plus the mood word. With dotOnly (narrow screens) the word is hidden.
@@ -444,6 +456,4 @@ export function MoraleChip({ morale, dotOnly = false }: { morale?: MoraleBrief; 
   )
 }
 
-export const TradeRequestTag = () => (
-  <span title="He has asked to be traded" className="ml-1.5 inline-block shrink-0 rounded bg-loss/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-loss ring-1 ring-loss/50">Wants out</span>
-)
+export const TradeRequestTag = () => <Chip tone="bad" title="He has asked to be traded" className="ml-1.5">Wants out</Chip>

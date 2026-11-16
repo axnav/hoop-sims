@@ -15,9 +15,9 @@ const stepOf = (s: GameState) =>
 function Stepper({ s }: { s: GameState }) {
   const cur = stepOf(s)
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       {steps.map((n, i) => (
-        <div key={n} className="w-28">
+        <div key={n} className="w-28 shrink-0">
           <div className={`mb-1 truncate text-[11px] font-bold uppercase tracking-wider ${i === cur ? 'text-accent' : i < cur ? 'text-ink/70' : 'text-muted/60'}`}>{n}</div>
           <div className="h-1 overflow-hidden rounded bg-line">
             <motion.div
@@ -36,7 +36,7 @@ function Stepper({ s }: { s: GameState }) {
 function PhaseLine({ s }: { s: GameState }) {
   const cur = stepOf(s)
   return (
-    <div className="truncate text-[11px] font-semibold text-muted">
+    <div className="whitespace-nowrap text-[11px] font-semibold text-muted">
       <span className="font-bold uppercase tracking-wider text-accent">{steps[cur]}</span>
       {cur === 0 && <span className="tabular-nums"> · Day {s.day}/{s.totalDays}</span>}
     </div>
@@ -103,9 +103,10 @@ export function TopBar() {
     >
       <div className="relative mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 pt-2.5 min-[1000px]:gap-4 min-[1000px]:px-5">
         <div className="flex min-w-0 items-center gap-6">
-          <div className="min-w-0">
-            <div className="whitespace-nowrap text-lg font-black tracking-tight">HOOP<span className="text-accent">SIM</span> <span className="ml-1 text-sm font-semibold text-muted tabular-nums">{s.year}</span></div>
-            <div className="min-[1000px]:hidden"><PhaseLine s={s} /></div>
+          <div className="shrink-0 whitespace-nowrap text-lg font-black tracking-tight min-[1000px]:w-40">
+            <span className="max-[479px]:hidden">HOOP<span className="text-accent">SIM</span></span>
+            <span className="min-[480px]:hidden" aria-label="HoopSim">H<span className="text-accent">S</span></span>
+            <span className="ml-1.5 text-sm font-semibold text-muted tabular-nums">{s.year}</span>
           </div>
           <div className="max-[999px]:hidden"><Stepper s={s} /></div>
         </div>
@@ -122,6 +123,7 @@ export function TopBar() {
           <ContinueMenu />
         </div>
       </div>
+      <div className="mx-auto max-w-[1400px] px-3 pt-1 min-[1000px]:hidden"><PhaseLine s={s} /></div>
       <nav className="mx-auto flex max-w-[1400px] items-center gap-1 overflow-x-auto px-2 py-1.5 whitespace-nowrap min-[1000px]:px-4 [&>a]:shrink-0">
         {link('/', 'Dashboard')}
         {link(`/team/${u.team.id}`, 'Roster', s.injured, true, s.expiring)}

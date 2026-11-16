@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { api, type AssetRow, type Offer } from './api'
 import { useFlow } from './flow'
-import { Card, Delta, ErrorBox, InjuryTag, StatusChip, TeamBadge, TierChip, money } from './ui'
+import { Card, Delta, ErrorBox, InjuryTag, NameCell, StatusChip, TeamBadge, TierChip, money } from './ui'
 
 function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
   return (
@@ -13,10 +13,8 @@ function Assets({ title, rows }: { title: string; rows: AssetRow[] }) {
       <ul>
         {rows.map((r, i) => (
           <li key={i} className="flex flex-wrap items-center gap-x-1 border-b border-line/50 py-1 text-[13px]">
-            <span className="min-w-[7rem] flex-1 truncate font-medium">
-              {r.kind === 'player' ? r.name : r.label}
-              {r.kind === 'player' && <InjuryTag injury={r.injury} />}
-              <TierChip tier={r.tier} />
+            <span className="min-w-[7rem] flex-1 font-medium">
+              <NameCell name={r.kind === 'player' ? r.name : r.label} chips={<>{r.kind === 'player' && <InjuryTag injury={r.injury} />}<TierChip tier={r.tier} /></>} />
             </span>
             {r.kind === 'player' && <span className="text-xs text-muted tabular-nums">{r.pos} · {r.age}y · {r.ovr}<Delta value={r.ovrChange} scope={r.changeScope} />/{r.pot}<Delta value={r.potChange} scope={r.changeScope} /></span>}
             {r.kind === 'player' && <span className="text-xs tabular-nums" title={`${r.years} years left`}>{money(r.salary)}</span>}

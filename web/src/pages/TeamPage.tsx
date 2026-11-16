@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Avatar, Card, FitGrade, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, FocusLabel, BadgeCount, MoraleChip, TradeRequestTag, StanceChip, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
+import { Avatar, Card, FitGrade, DataTable, Delta, ExpiringChip, Page, NameCell, InjuryTag, PayrollBar, PlayerLink, Q, FocusLabel, BadgeCount, MoraleChip, TradeRequestTag, StanceChip, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -11,7 +11,7 @@ export default function TeamPage() {
   const open = useOpenPlayer()
   const cols: Col<RosterRow>[] = [
     { accessorKey: 'starter', header: '', cell: (i) => (i.getValue() ? <Star size={12} className="fill-accent text-accent" /> : null), sortingFn: 'basic' },
-    { accessorKey: 'name', header: 'Player', cell: (i) => <><Avatar id={i.row.original.id} name={i.getValue()} photo={i.row.original.photo} color={q.data?.team.primary} size={28} /> <PlayerLink id={i.row.original.id} name={i.getValue()} /><InjuryTag injury={i.row.original.injury} />{i.row.original.expiring && <ExpiringChip />}<StanceChip stance={i.row.original.stance} extended={i.row.original.extended} /><FocusLabel focus={i.row.original.focus} /><BadgeCount n={i.row.original.badgeCount} />{i.row.original.tradeRequest && <TradeRequestTag />}<span className="ml-1.5 min-[700px]:hidden"><MoraleChip morale={i.row.original.morale} dotOnly /></span></>, sortDescFirst: false },
+    { accessorKey: 'name', header: 'Player', cell: (i) => <NameCell lead={<Avatar id={i.row.original.id} name={i.getValue()} photo={i.row.original.photo} color={q.data?.team.primary} size={28} />} name={<PlayerLink id={i.row.original.id} name={i.getValue()} />} chips={<><InjuryTag injury={i.row.original.injury} />{i.row.original.expiring && <ExpiringChip />}<StanceChip stance={i.row.original.stance} extended={i.row.original.extended} />{i.row.original.tradeRequest && <TradeRequestTag />}<FocusLabel focus={i.row.original.focus} /><BadgeCount n={i.row.original.badgeCount} /><span className="min-[700px]:hidden"><MoraleChip morale={i.row.original.morale} dotOnly /></span></>} />, sortDescFirst: false },
     { id: 'morale', accessorFn: (r) => r.morale?.score ?? 0, header: 'Mood', hideSmall: true, cell: (i) => <MoraleChip morale={i.row.original.morale} /> },
     { accessorKey: 'pos', header: 'Pos', sortDescFirst: false },
     { accessorKey: 'age', header: 'Age', num: true },

@@ -10,12 +10,21 @@
   --color-accent: #ff7a1a;
   --color-win: #3ddc84;
   --color-loss: #ff5a67;
+  /* Status colours (meaning): good green, warn amber, bad red, info blue, violet = contender.
+     Accent orange is only for actions and the current selection. */
+  --color-good: #3ddc84;
+  --color-warn: #fbbf24;
+  --color-bad: #ff5a67;
+  --color-info: #7dd3fc;
+  --color-violet: #c4b5fd;
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 :root { --team: #ff7a1a; --team2: #ffffff; color-scheme: dark; }
 html, body, #root { height: 100%; }
 body { background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: 14px; }
+.namecell { min-width: 9rem; max-width: 17rem; white-space: normal; }
+.namecell .chip { margin-left: 0; }
 .num { font-variant-numeric: tabular-nums; text-align: right; }
 a { color: inherit; }
 .link { text-decoration: none; }
