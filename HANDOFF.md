@@ -1,12 +1,24 @@
 # HoopSim handoff
 
-Last full refresh: 2026-11-14. State block below updated 2026-11-15. Module `hoopsim`, Go (standard library only) with a React + TypeScript front end.
+Last full refresh: 2026-11-14. Sections 0, 3, 4, 7 and 10 updated 2026-11-16. Module `hoopsim`, Go (standard library only) with a React + TypeScript front end.
 
 Legend: **verified** means a person or session ran it or read the code and saw it. **reported** means a helper said so and it was not re-run.
 
-## 0. Where things stand (2026-11-15), read this first
+## 0. Where things stand (2026-11-16), read this first
 
-**Built and merged to `main` since the 2026-11-14 refresh** (details in the update log, newest first):
+**Built and merged to `main` on 2026-11-15 and 2026-11-16** (details in the update log, newest first):
+- Player photos and avatars (real mode), what players want and contract extensions, training focus and learning speeds, automatic lineup starts the best five.
+- Badges in the style of a console basketball game (40 badges, five tiers), coaches with six team systems and roster fit (save version 4), weekly morale and trade requests with a player news list.
+- Release any time with dead money; trades on draft night with trade-up offers; player search (top bar and Players page).
+- Being built now: the trade assistant (section 16 piece B, branch `feat/trade-assistant`).
+- Test changes the owner approved: `TestLongStability` drift 2.5, 90+ limit 20, FT% ceiling 81; `TestTeamBalance` allows one team-season outside 12-70 wins (hard limits 9-73).
+- Effects kept small for now (owner's choice): coach and fit, morale. Raise later in `CoachTuning`/`SystemTuning`/`MoraleTuning`.
+
+**Pushed:** `main` up to `2f8e965` (through coaches) on 2026-11-16. Later commits (morale, release, draft-night trades, search, documents) are local; push needs the owner's go-ahead.
+
+**Next:** finish the trade assistant (section 16), then ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), the two clear buttons in the phone search box.
+
+**Earlier (2026-11-14 to 2026-11-15):**
 - Progression arrows on every player list (last change, this season or last year) and per rating in the player drawer.
 - In-season progression: four steps a season; switch on the Settings page; `go run ./cmd/sim -mode develop -seasons 16` measures the development target.
 - Sim window: live game ("Watch my games", speeds 1x to 64x), trade offers answered in the window, a Development box. "Watch next game" in the sim menu.
@@ -16,13 +28,6 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 - `TestLongStability` reworked to five seeds and a drift check (owner approved).
 - Player photos downloaded to `data/real/photos/` (1,754), NOT shown in the game yet.
 
-**Pushed:** `main` up to `b4f2528`. Later commits (documents only) are local; push needs the owner's go-ahead.
-
-**Next, in order** (owner approved on 2026-11-15; no open question, start building):
-1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
-2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
-3. ~~Plan piece 4: training focus.~~ Done 2026-11-15.
-4. Pieces 5 (badges) and 3 (coaches, systems, fit) DONE 2026-11-16 (section 14); morale and trade requests DONE 2026-11-16 (section 15). Next: the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
 **Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
@@ -67,7 +72,7 @@ How to test safely without touching the owner's game:
 Everything below was built on 2026-11-14 unless noted. "Verified" means the main session ran an end-to-end pass on a throwaway server (port 8097, scratch save, headless Chromium) on that date. File names are the main engine file; `ARCHITECTURE.md` has the rest.
 
 - **Core simulation** (older work). Players with seven ratings, a visible potential and a hidden `Impact`; possession-based games with box scores and play-by-play; 82-game season, two conferences, steppable playoffs, awards; offseason with progression, retirements and a 60-pick two-round draft; career history; save and load. Fictional league by default (30 teams). Verified by the test suite.
-- **Save versioning** (`engine/save.go`). Saves carry a version; an older one is upgraded on load, a newer one is refused. Current version 3. Verified: a COPY of the owner's own save (no version, year 2032) loaded, was upgraded with picks and contracts, and ran a full season cycle.
+- **Save versioning** (`engine/save.go`). Saves carry a version; an older one is upgraded on load, a newer one is refused. Current version 4 (since 2026-11-16: coaches; the owner's own save has not been loaded with version 4 yet). Verified: a COPY of the owner's own save (no version, year 2032) loaded, was upgraded with picks and contracts, and ran a full season cycle.
 - **Draft picks as owned, tradeable objects** (`engine/picks.go`). Four drafts ahead, two rounds, no protections or swaps.
 - **Multi-team deals** (`engine/deal.go`). Up to three teams, players and picks, each computer team judges its own side and all must accept. Verified: pick-for-player, a rejected lowball, a three-team evaluate, a bad request, an executed deal. Not tried: executing a three-team deal by hand in the browser.
 - **Trade negotiation** (`engine/negotiate.go`). Tier labels beside the numbers, a mood (accept, close, far, no) and a concrete ask, offers from computer teams, the sim pauses when an offer arrives and before the deadline (day 50), with "don't stop" switches. Verified: tiers shown, a lowball got an ask and adding it made the team accept, an offer paused an auto sim, Accept executed a trade, the deadline dialog appeared on day 50. Not tried: the Decline and "Change it" buttons by hand.
@@ -81,7 +86,8 @@ Everything below was built on 2026-11-14 unless noted. "Verified" means the main
 - **Scouting** (`engine/scouting.go`). Prospects show ranges that always contain the truth; 12 scouting points per draft narrow them. The Draft page waits for "Start the draft" so there is time to scout. Verified: two scouts narrowed the top prospect from 53-67 / 81-99 to 58-64 / 85-93; the browser never received true prospect values or `Impact`; after the draft all true values were inside the ranges shown.
 - **Blurred ceilings in real data** (`RealTuning.PotentialBlurSD` 4.0 in `engine/realdata.go`). Each real-data league gets its own noise on young players' potentials, so ceilings depend on the seed.
 - **Real-data mode** (older work, private). Builds the real 2010-11 league from `data/real/`. Verified: a full cycle ran cleanly on 2026-11-14.
-- **Screens** (React in `web/`). Dashboard, roster, lineup, trade, free agency, draft, offseason, injuries, settings, standings, playoff bracket, game viewer (2D and a lazy-loaded 3D court), history.
+- **Screens** (React in `web/`). Dashboard, roster, lineup, trade, free agency, draft, offseason, injuries, settings, standings, playoff bracket, game viewer (2D and a lazy-loaded 3D court), history, Coach page, Players page (search).
+- **Added 2026-11-15 and 2026-11-16** (each verified in a browser pass on port 8097; details and what was not tried are in the update log): photos and avatars (`cmd/web/photos.go`); motivations, stances and extensions (`engine/motivation.go`); training focus (`engine/training.go`); best-five automatic lineup (`Team.Rotation`, `StarterSlots`); badges (`engine/badges.go`); coaches, systems, fit (`engine/coach.go`, `engine/system.go`); morale, trade requests, league events (`engine/morale.go`); release with dead money (`League.Release`, `Team.DeadMoney`); draft-night trades (`engine/drafttrade.go`); player search (`cmd/web/players.go`).
 
 ## 4. Decisions made and why
 
@@ -89,7 +95,8 @@ Owner decisions and standing preferences:
 - Simulation only. The default game is fictional. Real-data mode is for private local testing and must never ship (the data's licence is unclear; lookalike names were rejected because being identifiable, not spelling, is the legal risk).
 - Trade screen keeps its numbers and also shows plain tier labels. Teams negotiate (a mood and a concrete ask) instead of flatly refusing.
 - Soft cap with a luxury tax and a hard ceiling, no long list of exceptions. Free agency by offers over several days. Scouting by fuzzy ranges narrowed with points. Lineups by starters plus minutes sliders. Injuries mostly missed games with rare serious ones, switchable off. A commissioner mode.
-- Later, not built: player morale and trade requests, owner goals and job security, a news feed, coaches.
+- Later, not built: owner goals and job security, a full news feed. (Morale, trade requests and coaches were built on 2026-11-16.)
+- 2026-11-16: badges in the 2K style (about 40, five tiers, effects measured against the league average, earned by ratings plus position); release any time with dead money; trades on draft night; a built-in trade advisor (rules, offline), not an AI chat.
 - The interface is React (the owner knows it) with an animated flow that never dead-ends; a 3D court viewer was asked for.
 - Checks run once per finished piece of work. Every feature gets one end-to-end pass on port 8097. The owner gave standing permission to commit and merge to `main` locally when the code is correct, and on 2026-11-14 asked for `main` to be pushed.
 
@@ -141,7 +148,7 @@ B. Tuning:
    4. Real-mode trade frequency (problem 6): find why computer-to-computer trades are rare under the salary rules, using a copy of a real league.
    5. Retirement of stars (problem 5), roster balance at league creation (problem 4), the scoring distribution (problem 15).
    6. Tests: restore the stricter free agency assertion if possible and widen seeds on the long-stability test.
-C. Later features the owner listed: player morale and trade requests; owner goals and job security (this would also give the luxury tax a consequence through team finances); a news feed; coaches.
+C. Later features the owner listed: owner goals and job security (this would also give the luxury tax a consequence through team finances); a news feed. (Morale, trade requests and coaches: done 2026-11-16.)
 D. Product basics: multiple save slots; typed API responses (generate TypeScript types from Go or add schemas); a packaged build that leaves out `data/real/`; front-end tests; untrack `cmd/web/web` once the owner agrees.
 
 ## 8. How the owner likes to work
@@ -172,9 +179,9 @@ They replace any earlier conversation.
 Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
 and tell me the result.
 Then restate in two or three sentences what you understand the state to be (HANDOFF.md
-section 0) and start plan piece 6 from HANDOFF.md section 13 (show photos and avatars);
-its plan and choices are already approved, so do not ask again. After it is merged,
-continue with piece 2, then piece 4. Keep token use low: cheaper named models for
+section 0). If the trade assistant (section 16 piece B, branch feat/trade-assistant)
+is not merged yet, finish and verify it first; then ask me what to build next
+(section 0 lists the open choices). Keep token use low: cheaper named models for
 helpers, scripts for long jobs, short answers.
 The owner is learning Go and may dictate by voice: use plain words, write the code for them.
 Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
