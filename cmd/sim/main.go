@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, develop or resign")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, develop or resign")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -63,6 +63,10 @@ func main() {
 	}
 	if *mode == "badges" {
 		runBadges(*seed)
+		return
+	}
+	if *mode == "coaches" {
+		runCoaches(*seed, *seasons, *games)
 		return
 	}
 
@@ -339,4 +343,210 @@ func runBadges(seed uint64) {
 	for _, l := range legends {
 		fmt.Println("  " + l)
 	}
+}
+
+// runCoaches reports on coaches, systems and fit: the spread of coach ratings
+// and team fit, the systems computer teams run, each system forced on every
+// team (league numbers and pace), then seasons of wins against team fit and the
+// coaches replaced in each offseason.
+func runCoaches(seed uint64, seasons, games int) {
+	lg := engine.GenerateLeague(seed)
+	spread := func(label string, v []float64) {
+		sort.Float64s(v)
+		fmt.Printf("%-22s min %.1f  median %.1f  max %.1f\n", label, v[0], v[len(v)/2], v[len(v)-1])
+	}
+	var off, def, dev, comb []float64
+	for _, t := range lg.Teams {
+		c := t.Coach
+		off, def, dev, comb = append(off, float64(c.Offense)), append(def, float64(c.Defense)), append(dev, float64(c.Development)), append(comb, c.Overall())
+	}
+	fmt.Println("Coach rating spread (30 coaches):")
+	spread("Offense", off)
+	spread("Defense", def)
+	spread("Development", dev)
+	spread("Average of the three", comb)
+	counts := func() string {
+		n := map[string]int{}
+		for _, t := range lg.Teams {
+			n[t.SystemKey()]++
+		}
+		out := ""
+		for _, sy := range engine.Systems {
+			out += fmt.Sprintf(" %s %d", sy.Key, n[sy.Key])
+		}
+		return out
+	}
+	fits := func() []float64 {
+		var v []float64
+		for _, t := range lg.Teams {
+			v = append(v, lg.TeamFit(t))
+		}
+		return v
+	}
+	fmt.Println("\nSystems run by computer teams at league creation:" + counts())
+	spread("Team fit (score)", fits())
+	var grades = map[string]int{}
+	var scores []float64
+	for _, t := range lg.Teams {
+		for _, pm := range t.EffectiveMinutes() {
+			if pm.Min >= 20 {
+				f := lg.PlayerFit(t, pm.Player)
+				grades[f.Grade()]++
+				scores = append(scores, f.Score)
+			}
+		}
+	}
+	spread("Starter fit (20+ min)", scores)
+	fmt.Printf("Starter grades: A %d, B %d, C %d, D %d\n", grades["A"], grades["B"], grades["C"], grades["D"])
+
+	fmt.Printf("\nEvery team forced onto one system (%d games each, same random pairs):\n", games)
+	fmt.Printf("%-14s %6s %6s %6s %6s %6s %6s %8s\n", "system", "PTS", "FG%", "3P%", "3PA", "poss", "teamFit", "fitSpread")
+	saved := make([]string, len(lg.Teams))
+	for i, t := range lg.Teams {
+		saved[i] = t.System
+	}
+	for _, sy := range append([]engine.System{{Key: ""}}, engine.Systems...) {
+		for i, t := range lg.Teams {
+			t.System = saved[i]
+			if sy.Key != "" {
+				lg.SetSystem(t.ID, sy.Key)
+			}
+		}
+		r := engine.NewRNG(seed + 99)
+		var pts, fgm, fga, tpm, tpa, tov, fta, oreb int
+		_ = oreb
+		for i := 0; i < games; i++ {
+			a := r.IntN(len(lg.Teams))
+			b := r.IntN(len(lg.Teams) - 1)
+			if b >= a {
+				b++
+			}
+			res := lg.SimGame(r, lg.Teams[a], lg.Teams[b])
+			for _, tb := range []*engine.TeamBox{res.Home, res.Away} {
+				pts += tb.Score
+				for _, l := range tb.Lines {
+					fgm, fga, tpm, tpa, tov, fta = fgm+l.FGM, fga+l.FGA, tpm+l.TPM, tpa+l.TPA, tov+l.Tov, fta+l.FTA
+				}
+			}
+		}
+		n := float64(games * 2)
+		fv := fits()
+		sort.Float64s(fv)
+		label := sy.Key
+		if label == "" {
+			label = "(as chosen)"
+		}
+		// possessions per team, approximately: shots + turnovers + 0.44 x free-throw attempts
+		poss := (float64(fga+tov) + 0.44*float64(fta)) / n
+		fmt.Printf("%-14s %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4.0f-%.0f\n", label, float64(pts)/n, 100*float64(fgm)/float64(fga),
+			100*float64(tpm)/float64(tpa), float64(tpa)/n, poss, mean(fv), fv[0], fv[len(fv)-1])
+	}
+	for i, t := range lg.Teams {
+		t.System = saved[i]
+	}
+
+	// Strength: one team runs the system, the other is Balanced, same random
+	// pairs; margin per game of the system team (home advantage cancels against
+	// the Balanced-vs-Balanced row; coaches and fit included).
+	fmt.Printf("\nOne team on the system against a Balanced opponent (%d games each, margin of the system team):\n", games)
+	for _, t := range lg.Teams {
+		lg.SetSystem(t.ID, "balanced")
+	}
+	var base float64
+	for _, sy := range engine.Systems {
+		r := engine.NewRNG(seed + 7)
+		tot := 0.0
+		for i := 0; i < games; i++ {
+			a := r.IntN(len(lg.Teams))
+			b := r.IntN(len(lg.Teams) - 1)
+			if b >= a {
+				b++
+			}
+			lg.SetSystem(a, sy.Key)
+			res := lg.SimGame(r, lg.Teams[a], lg.Teams[b])
+			tot += float64(res.Home.Score - res.Away.Score)
+			lg.SetSystem(a, "balanced")
+		}
+		m := tot / float64(games)
+		if sy.Key == "balanced" {
+			base = m
+		}
+		fmt.Printf("%-14s %+5.2f\n", sy.Key, m-base)
+	}
+	for i, t := range lg.Teams {
+		t.System = saved[i]
+	}
+
+	fmt.Printf("\n%d seasons (wins against team fit at the start of the season):\n", seasons)
+	var xs, ys, os []float64
+	for i := 0; i < seasons; i++ {
+		s := lg.StartSeason()
+		fv := fits()
+		lg.SimRegularSeason()
+		for _, t := range lg.Teams {
+			tw, tm := 0.0, 0.0
+			for _, pm := range t.EffectiveMinutes() {
+				tw += float64(pm.Min * pm.Player.Overall())
+				tm += float64(pm.Min)
+			}
+			os = append(os, tw/tm)
+			xs = append(xs, fv[t.ID])
+			ys = append(ys, float64(s.Wins[t.ID]))
+		}
+		lg.SimPlayoffs()
+		before := map[int]*engine.Coach{}
+		for _, t := range lg.Teams {
+			before[t.ID] = t.Coach
+		}
+		lg.Offseason()
+		changed, offFav := 0, 0
+		for _, t := range lg.Teams {
+			if t.Coach != before[t.ID] {
+				changed++
+			}
+			if !t.OnFavourite() {
+				offFav++
+			}
+		}
+		fmt.Printf("%d: coaches replaced %d, teams off their coach's favourite %d, systems:%s\n", s.Year, changed, offFav, counts())
+	}
+	fmt.Printf("Correlation of wins with team fit over %d team-seasons: %.2f\n", len(xs), corr(xs, ys))
+	// Roster quality drives both wins and fit: take it out of both first.
+	rx, ry := resid(xs, os), resid(ys, os)
+	fmt.Printf("Same, after taking out the roster's average overall: %.2f\n", corr(rx, ry))
+}
+
+// resid is y minus its straight-line fit on x.
+func resid(y, x []float64) []float64 {
+	mx, my := mean(x), mean(y)
+	var sxy, sxx float64
+	for i := range x {
+		sxy += (x[i] - mx) * (y[i] - my)
+		sxx += (x[i] - mx) * (x[i] - mx)
+	}
+	b := sxy / sxx
+	out := make([]float64, len(y))
+	for i := range y {
+		out[i] = y[i] - my - b*(x[i]-mx)
+	}
+	return out
+}
+
+func mean(v []float64) float64 {
+	s := 0.0
+	for _, x := range v {
+		s += x
+	}
+	return s / float64(len(v))
+}
+
+func corr(x, y []float64) float64 {
+	mx, my := mean(x), mean(y)
+	var sxy, sxx, syy float64
+	for i := range x {
+		sxy += (x[i] - mx) * (y[i] - my)
+		sxx += (x[i] - mx) * (x[i] - mx)
+		syy += (y[i] - my) * (y[i] - my)
+	}
+	return sxy / math.Sqrt(sxx*syy)
 }

@@ -89,7 +89,7 @@ export type TeamRow = {
   team: Team; w: number; l: number; confRank: number; payroll: number; capRoom: number; rosterSize: number; top8: number
   star?: { id: number; name: string; pos: string; ovr: number }; status: TeamStatus; offers: number; isUser: boolean
 }
-export type TeamPage = { status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll }
+export type TeamPage = { status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll; coach?: { name: string; system: string; systemName: string }; teamFit?: Fit }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
@@ -193,14 +193,30 @@ export type HistoryRow = {
   finals: { winner: Team; loser: Team; winnerWins: number; loserWins: number } | null
 }
 
+export type Fit = { score: number; grade: string }
+export type FitFull = Fit & { reasons: string[] }
+export type CoachInfo = { name: string; age: number; offense: number; defense: number; development: number; system: string; systemName: string }
+export type CoachSystem = {
+  key: string; name: string; description: string; pace: string; threes: string; starUsage: string; defense: string
+  wants: string[]; teamFit: Fit
+}
+export type CoachData = {
+  coach: CoachInfo; system: string; systemName: string; favourite: boolean; teamFit: Fit
+  canChangeSystem: boolean; canHire: boolean; editable: boolean
+  systems: CoachSystem[]
+  players: { id: number; name: string; pos: string; minutes: number; fit: FitFull }[]
+}
+export type CoachPool = { open: boolean; candidates: (CoachInfo & { id: number })[] }
+
 export type LineupPlayer = {
+  fit?: Fit;
   id: number; name: string; pos: string; age: number; ovr: number; pot: number; tier: string
   minutes: number; autoMinutes: number; nextMinutes: number; starterSlot: number
   gp: number; mpg: number; injury?: Injury
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
 }
 export type LineupData = {
-  custom: boolean; total: number; maxMinutes: number; minPlayers: number; slots: string[]
+  teamFit?: Fit; custom: boolean; total: number; maxMinutes: number; minPlayers: number; slots: string[]
   starters: number[]
   dev: { maxAge: number; fullMinutes: number; noneMinutes: number }
   players: LineupPlayer[]
@@ -290,6 +306,10 @@ export const api = {
   faOffer: (b: { playerId: number; salary: number; years: number }) => post<FreeAgencyData>('/api/freeagents/offer', b),
   faSheet: (playerId: number, match: boolean) => post<{ signings: FASigning[]; freeAgency: FreeAgencyData; state: GameState; voided?: boolean }>('/api/freeagents/sheet', { playerId, match }),
   faWithdraw: (offerId: number) => post<FreeAgencyData>('/api/freeagents/withdraw', { offerId }),
+  coach: (teamId: number) => get<CoachData>(`/api/coach/${teamId}`),
+  coachSystem: (system: string) => post<CoachData>('/api/coach/system', { system }),
+  coachPool: () => get<CoachPool>('/api/coach/pool'),
+  coachHire: (id: number) => post<CoachData>('/api/coach/hire', { id }),
   lineup: () => get<LineupData>('/api/lineup'),
   setLineup: (b: { starters: number[]; minutes: Record<string, number> }) => post<LineupData>('/api/lineup', b),
   autoLineup: () => post<LineupData>('/api/lineup/auto'),

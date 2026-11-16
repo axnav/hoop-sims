@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { api, type Change } from '../api'
 import { useFlow } from '../flow'
@@ -37,11 +38,23 @@ function ChangeTable({ rows }: { rows: Change[] }) {
   )
 }
 
+function CoachMarket() {
+  const q = useQuery({ queryKey: ['coach-pool'], queryFn: api.coachPool })
+  if (!q.data?.open) return null
+  return (
+    <div className="card mb-4 flex flex-wrap items-center justify-between gap-2 p-4">
+      <span>Coaching market is open: <b>{q.data.candidates.length}</b> candidates</span>
+      <Link className="btn" to="/coach">Open the Coach page</Link>
+    </div>
+  )
+}
+
 export default function Offseason() {
   const { state } = useFlow()
   const q = useQuery({ queryKey: ['offseason'], queryFn: api.offseason })
   return (
     <Page title="Offseason report" right={state?.phase === 'offseason' ? <InlineContinue /> : null}>
+      <CoachMarket />
       <ExpiringCard />
       <Q q={q} minH={400}>
         {(r) => {

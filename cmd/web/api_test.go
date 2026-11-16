@@ -2187,3 +2187,177 @@ done:
 		}
 	}
 }
+
+func TestCoachAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 5, "team": 3}, 200)
+	c.call("POST", "/api/options", M{"noInjuries": true}, 200)
+
+	g := c.call("GET", "/api/coach/3", nil, 200)
+	co := g["coach"].(map[string]any)
+	for _, k := range []string{"name", "age", "offense", "defense", "development", "system", "systemName"} {
+		if _, ok := co[k]; !ok {
+			t.Fatalf("coach lacks %q: %v", k, co)
+		}
+	}
+	if g["editable"] != true || g["canChangeSystem"] != true || g["canHire"] != false || g["favourite"] != true {
+		t.Fatalf("user team flags: %v", g)
+	}
+	if g["system"] != co["system"] || g["systemName"] != co["systemName"] {
+		t.Errorf("fresh team should run the favourite: %v vs %v", g["system"], co["system"])
+	}
+	systems := g["systems"].([]any)
+	if len(systems) != 6 {
+		t.Fatalf("%d systems", len(systems))
+	}
+	keys := map[string]bool{}
+	for _, x := range systems {
+		sy := x.(map[string]any)
+		for _, k := range []string{"key", "name", "description", "pace", "threes", "starUsage", "defense", "wants", "teamFit"} {
+			if _, ok := sy[k]; !ok {
+				t.Fatalf("system lacks %q: %v", k, sy)
+			}
+		}
+		tf := sy["teamFit"].(map[string]any)
+		if _, ok := tf["score"].(float64); !ok || tf["grade"] == "" {
+			t.Errorf("system teamFit %v", tf)
+		}
+		keys[sy["key"].(string)] = true
+	}
+	for _, k := range []string{"balanced", "pace_space", "run_gun", "inside_out", "star_led", "defense_first"} {
+		if !keys[k] {
+			t.Errorf("missing system %s", k)
+		}
+	}
+	players := g["players"].([]any)
+	team := c.call("GET", "/api/team/3", nil, 200)
+	if len(players) != len(team["roster"].([]any)) {
+		t.Fatalf("players %d, roster %d", len(players), len(team["roster"].([]any)))
+	}
+	last := 1000
+	for _, x := range players {
+		p := x.(map[string]any)
+		m := num(p["minutes"])
+		if m > last {
+			t.Errorf("players not sorted by minutes: %v after %d", m, last)
+		}
+		last = m
+		f := p["fit"].(map[string]any)
+		if _, ok := f["score"].(float64); !ok || f["grade"] == "" || len(f["reasons"].([]any)) > 3 {
+			t.Errorf("player fit %v", f)
+		}
+	}
+	// The team page and the lineup carry the fit.
+	if tc := team["coach"].(map[string]any); tc["name"] != co["name"] || tc["system"] != g["system"] || tc["systemName"] == "" {
+		t.Errorf("team page coach %v", tc)
+	}
+	if tf := team["teamFit"].(map[string]any); tf["score"] != g["teamFit"].(map[string]any)["score"] {
+		t.Errorf("team page fit %v vs %v", tf, g["teamFit"])
+	}
+	lu := c.call("GET", "/api/lineup", nil, 200)
+	if lu["teamFit"].(map[string]any)["grade"] == "" {
+		t.Errorf("lineup teamFit %v", lu["teamFit"])
+	}
+	for _, x := range lu["players"].([]any) {
+		if f, ok := x.(map[string]any)["fit"].(map[string]any); !ok || f["grade"] == "" {
+			t.Fatalf("lineup row without fit: %v", x)
+		}
+	}
+	// Another team is readable but not editable.
+	o := c.call("GET", "/api/coach/5", nil, 200)
+	if o["editable"] != false || o["canChangeSystem"] != false || o["canHire"] != false {
+		t.Errorf("computer team flags: %v", o)
+	}
+	c.call("GET", "/api/coach/99", nil, 404)
+
+	// Change the system (any time, also in the season).
+	other := "defense_first"
+	if co["system"] == other {
+		other = "pace_space"
+	}
+	post := c.call("POST", "/api/coach/system", M{"system": other}, 200)
+	if post["system"] != other || post["favourite"] != false {
+		t.Errorf("after change: %v %v", post["system"], post["favourite"])
+	}
+	again := c.call("GET", "/api/coach/3", nil, 200)
+	if again["system"] != other || again["teamFit"] == nil {
+		t.Errorf("GET after change: %v", again["system"])
+	}
+	c.call("POST", "/api/coach/system", M{"system": "nonsense"}, 400)
+	c.call("POST", "/api/coach/system", M{}, 400)
+	// Going back to the favourite clears the flag.
+	back := c.call("POST", "/api/coach/system", M{"system": co["system"]}, 200)
+	if back["favourite"] != true {
+		t.Errorf("favourite after returning: %v", back["favourite"])
+	}
+
+	// No hiring in the season.
+	pool := c.call("GET", "/api/coach/pool", nil, 200)
+	if pool["open"] != false || len(pool["candidates"].([]any)) != 0 {
+		t.Errorf("pool in the season: %v", pool)
+	}
+	c.call("POST", "/api/coach/hire", M{"id": 0}, 409)
+	// The game still plays with the saved coach and system.
+	c.call("POST", "/api/sim", M{"action": "sim_day"}, 200)
+}
+
+func TestCoachHiringInOffseason(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 6, "team": 2}, 200)
+	c.call("POST", "/api/options", M{"noInjuries": true}, 200)
+	c.call("POST", "/api/options", M{"noDeadlineStop": true, "noOfferStop": true}, 200)
+	c.call("POST", "/api/coach/hire", M{"id": 0}, 409)
+	c.call("POST", "/api/sim", M{"toEnd": true}, 200)
+	c.call("POST", "/api/playoffs/start", nil, 200)
+	c.call("POST", "/api/playoffs/all", nil, 200)
+	c.call("POST", "/api/coach/hire", M{"id": 0}, 409)
+	c.call("POST", "/api/offseason/begin", nil, 200)
+
+	pool := c.call("GET", "/api/coach/pool", nil, 200)
+	cands := pool["candidates"].([]any)
+	if pool["open"] != true || len(cands) != engine.CoachTuning.PoolSize {
+		t.Fatalf("pool %v", pool)
+	}
+	for _, x := range cands {
+		cd := x.(map[string]any)
+		for _, k := range []string{"id", "name", "age", "offense", "defense", "development", "system", "systemName"} {
+			if _, ok := cd[k]; !ok {
+				t.Fatalf("candidate lacks %q: %v", k, cd)
+			}
+		}
+	}
+	g := c.call("GET", "/api/coach/2", nil, 200)
+	if g["canHire"] != true {
+		t.Errorf("canHire in the offseason: %v", g["canHire"])
+	}
+	pick := cands[4].(map[string]any)
+	c.call("POST", "/api/coach/hire", M{"id": 999}, 409)
+	c.call("POST", "/api/coach/hire", M{}, 400)
+	hired := c.call("POST", "/api/coach/hire", M{"id": pick["id"]}, 200)
+	hc := hired["coach"].(map[string]any)
+	if hc["name"] != pick["name"] || hc["offense"] != pick["offense"] || hired["favourite"] != true || hired["system"] != pick["system"] {
+		t.Errorf("hired %v, picked %v", hired, pick)
+	}
+	after := c.call("GET", "/api/coach/pool", nil, 200)
+	if len(after["candidates"].([]any)) != engine.CoachTuning.PoolSize-1 {
+		t.Errorf("pool after hiring: %d", len(after["candidates"].([]any)))
+	}
+	for _, x := range after["candidates"].([]any) {
+		if x.(map[string]any)["id"] == pick["id"] {
+			t.Error("hired candidate still in the pool")
+		}
+	}
+	// The offseason finishes, the next season starts, the pool is gone.
+	c.call("POST", "/api/offseason/to-draft", nil, 200)
+	c.call("POST", "/api/draft/auto", nil, 200)
+	c.call("POST", "/api/offseason/finish", nil, 200)
+	pool = c.call("GET", "/api/coach/pool", nil, 200)
+	if pool["open"] != false || len(pool["candidates"].([]any)) != 0 {
+		t.Errorf("pool after the offseason: %v", pool)
+	}
+	c.call("POST", "/api/coach/hire", M{"id": pick["id"]}, 409)
+	g = c.call("GET", "/api/coach/2", nil, 200)
+	if g["coach"].(map[string]any)["name"] != pick["name"] {
+		t.Error("the hired coach must stay")
+	}
+}

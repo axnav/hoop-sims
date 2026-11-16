@@ -22,7 +22,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
 2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
 3. ~~Plan piece 4: training focus.~~ Done 2026-11-15.
-4. Next (owner approved 2026-11-15): piece 5 (badges) DONE 2026-11-16; next piece 3 (coaches, systems, fit). Build plan in section 14. Then the older open items: section 5 problems 1 and 2, and section 7.
+4. Pieces 5 (badges) and 3 (coaches, systems, fit) DONE 2026-11-16 (section 14, update log). Next: the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
 **Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
@@ -282,6 +282,13 @@ Owner choices (2026-11-16): 2K-size (about 40 badges, 6 groups, 5 tiers Bronze/S
 - Measure: scoring, home-win rate and the spread of wins before and after; `TestLongStability`.
 
 ## Update log (newest first)
+
+### 2026-11-16, coaches, systems and roster fit (plan piece 3)
+- Built by two Sonnet helpers (engine + API, then screens). `engine/coach.go` (`Coach` with Offense/Defense/Development and a favourite system, `CoachTuning`, offseason pool, `HireCoach`, `SetSystem`, computer teams replace weak coaches in `FinishOffseason` after the user's pick), `engine/system.go` (six systems: balanced, pace_space, run_gun, inside_out, star_led, defense_first; shifts to pace, three share, star shooting, defense; fit score/grade A-D with reasons from ratings and badges; per-system `Bias` so Balanced does not win everywhere; -8 off the coach's favourite). Saved `Team.Coach`, `Team.System` ("" = favourite), `League.CoachPool`; **SaveVersion 3 -> 4** with an upgrade giving every team a coach (test loads a v3 save). Offset 110000 (next free 120000). Coach Offense/Defense and team fit act against the league mean like badges; Development +-8% growth centred (decision 1). Routes `GET /api/coach/{id}`, `POST /api/coach/system` (any time), `GET /api/coach/pool`, `POST /api/coach/hire` (offseason only); `fit`/`teamFit` on lineup rows, `coach`/`teamFit` on the team page. Screens: Coach page (coach card, six system cards with fit grade each, player fit table, coaching market with confirm), fit column on Lineup, coach line on Team page, market card on Offseason, nav link. `go run ./cmd/sim -mode coaches`.
+- **Owner decision 2026-11-16: keep the effects small for now.** To pass `TestTeamBalance` the helper used both allowed cuts: best vs worst realistic fit is about 0.65 points of FG% (owner's target was 1.5), coach Offense about 0.5, Defense about 0.7. Raise later in `CoachTuning`/`SystemTuning` after play-testing. No test limit changed.
+- Helper measurement: sanity 20000 games before/after points 110.2/110.4, FG% 47.3/47.3, 3P% 36.8/36.9, home wins 57.1/56.2. All teams on one system: defense_first 103.8 to run_gun 115.1 points; the computer mix stays within 0.1 of balanced. Coaches replaced per offseason 0-2. Wins vs team fit correlation 0.16 after roster strength. TestTeamBalance most wins up to 65, fewest 13 (limits 70/12): thin margins; the helper saw 75-win and 12-win seasons in longer runs even with every new effect off, so this test is sensitive to any change in the random sequence.
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 83 s), web build. Port 8097 fictional seed 1: Coach page system changed by clicking at 1400 (Defense First) and 390 (Run and Gun), grade updated, hire in season 409, pool closed in season, unknown system 400, other team not editable, no impact key, no console errors, no horizontal scroll on Coach and Lineup. Helper's browser pass covered the offseason hire flow at both widths (coach changed, pool count dropped).
+- Not tried: loading the owner's real v3 save (only the unit test), real-data league, fit grades on court tokens.
 
 ### 2026-11-16, badges built in the 2K style (plan piece 5)
 - Owner redirected mid-build: "like NBA 2K, about 40 badges, stars with many". A first twelve-badge version with plain bonuses failed `TestTeamBalance` (73-9 team); replaced. Choices recorded in section 14 (2K-size, effects against the league average, ratings plus position, a web search on how 2K26 badges work was allowed).

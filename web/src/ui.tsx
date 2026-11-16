@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
+import type { Fit, Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -394,4 +394,24 @@ export function BadgeChip({ b, active, onClick }: { b: Badge; active?: boolean; 
 export function BadgeCount({ n }: { n?: number }) {
   if (!n) return null
   return <span title={`${n} badges`} className="ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full bg-panel2 px-1.5 py-px align-middle text-[10px] font-semibold tabular-nums text-muted ring-1 ring-line">{n} ⬢</span>
+}
+
+const gradeTone: Record<string, string> = {
+  A: 'bg-win/20 text-win ring-win/50',
+  B: 'bg-teal-400/20 text-teal-300 ring-teal-400/50',
+  C: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
+  D: 'bg-loss/20 text-loss ring-loss/50',
+}
+
+// Roster fit grade (A to D) from the coach and system.
+export function FitGrade({ fit, size = 'sm', title }: { fit?: Fit; size?: 'sm' | 'lg'; title?: string }) {
+  if (!fit) return null
+  const g = fit.grade.charAt(0).toUpperCase()
+  const tone = gradeTone[g] ?? 'bg-panel2 text-muted ring-line'
+  const cls = size === 'lg' ? 'min-w-14 px-4 py-2 text-4xl' : 'min-w-6 px-1.5 py-px text-[11px]'
+  return (
+    <span className={`inline-block rounded text-center font-extrabold tabular-nums ring-1 ${tone} ${cls}`} title={title ?? `Fit ${fit.score}`} aria-label={`Fit grade ${fit.grade}`}>
+      {fit.grade}
+    </span>
+  )
 }

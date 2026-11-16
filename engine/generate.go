@@ -91,6 +91,12 @@ type Team struct {
 	// Lineup is a custom starting five and minutes plan (lineup.go); nil
 	// means the automatic rotation.
 	Lineup *Lineup `json:",omitempty"`
+	// Coach is the head coach (coach.go); nil (an old save before the upgrade,
+	// or a hand-built team) means no coach effects.
+	Coach *Coach `json:",omitempty"`
+	// System is the key of the system the team runs (system.go); "" = the
+	// coach's favourite.
+	System string `json:",omitempty"`
 }
 
 func (t *Team) FullName() string { return t.City + " " + t.Name }
@@ -216,6 +222,12 @@ type League struct {
 	newDev []DevLine
 	// bmeans caches the league badge means for one day of games (badges.go; not saved).
 	bmeans *badgeMeans
+	// cmeans caches the league coach and fit means beside bmeans (coach.go; not saved).
+	cmeans *coachMeans
+
+	// CoachPool holds the coach candidates while the offseason is in progress;
+	// empty the rest of the year (coach.go).
+	CoachPool []*Coach `json:",omitempty"`
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced
@@ -242,6 +254,7 @@ func GenerateLeague(seed uint64) *League {
 	lg.dealEvenly()
 	lg.initPicks()
 	lg.assignInitialContracts()
+	lg.initCoaches()
 	return lg
 }
 

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api, type RosterRow } from '../api'
 import { useOpenPlayer } from '../Inline'
-import { Avatar, Card, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, FocusLabel, BadgeCount, StanceChip, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
+import { Avatar, Card, FitGrade, DataTable, Delta, ExpiringChip, Page, InjuryTag, PayrollBar, PlayerLink, Q, FocusLabel, BadgeCount, StanceChip, StatusChip, TeamBadge, f1, money, ovrColor, type Col } from '../ui'
 
 export default function TeamPage() {
   const id = Number(useParams().id)
@@ -32,6 +32,12 @@ export default function TeamPage() {
           right={<div className="flex items-center gap-4 text-muted"><span className="font-bold tabular-nums text-ink">{d.w}-{d.l}</span><span>#{d.confRank} {d.team.confName}</span><Link className="link" to={`/schedule/${d.team.id}`}>Schedule</Link></div>}
         >
           {d.status && <p className="-mt-2 mb-4 text-sm text-muted">{d.status.wants}</p>}
+          {d.coach && (
+            <p className="-mt-2 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+              Coach <b className="text-ink">{d.coach.name}</b> · {d.coach.systemName} system · Fit <FitGrade fit={d.teamFit} />
+              <Link className="link" to={d.isUser ? '/coach' : `/coach/${d.team.id}`}>Coach page</Link>
+            </p>
+          )}
           <Card title="Payroll" className="mb-4"><PayrollBar p={d.payroll} /></Card>
           <Card title="Roster" right={<span className="flex items-center gap-3 text-xs text-muted">{d.isUser && <Link className="btn !px-2.5 !py-1 text-xs" to="/lineup">Set lineup</Link>}<span>Click a column to sort · starters marked</span></span>}>
             <DataTable data={d.roster} columns={cols} initialSort={[{ id: 'ovr', desc: true }]} onRow={(r) => open(r.id)} />

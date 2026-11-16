@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type LineupData, type LineupPlayer } from '../api'
 import { useOpenPlayer } from '../Inline'
 import CourtLineup from '../CourtLineup'
-import { Card, Delta, InjuryTag, Page, Q, TierChip, ovrColor } from '../ui'
+import { Link } from 'react-router-dom'
+import { Card, Delta, FitGrade, InjuryTag, Page, Q, TierChip, ovrColor } from '../ui'
 
 type Edit = { starters: number[]; minutes: Record<number, number> }
 
@@ -105,6 +106,12 @@ function LineupView({ d }: { d: LineupData }) {
       {(err && dirty) && <p className="mb-3 text-sm text-amber-400" role="status">{err}</p>}
       {serverErr && <p className="mb-3 text-sm text-loss" role="alert">{serverErr instanceof Error ? serverErr.message : String(serverErr)}</p>}
 
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted">Team fit</span><FitGrade fit={d.teamFit} size="lg" />
+        <span className="text-muted">How well these players suit the coach and system.</span>
+        <Link className="link" to="/coach">Coach page</Link>
+      </div>
+
       <Card title="Minutes" className="mb-4">
         <div className="px-2 pb-2">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -145,7 +152,7 @@ function LineupView({ d }: { d: LineupData }) {
         <div className="overflow-x-auto">
           <table className="tbl">
             <thead>
-              <tr><th>Player</th><th>Pos</th><th className="r">Age</th><th className="r">OVR/POT</th><th className="r">GP · MPG</th><th className="r">Auto</th><th>Target minutes</th></tr>
+              <tr><th>Player</th><th>Pos</th><th>Fit</th><th className="r">Age</th><th className="r">OVR/POT</th><th className="r">GP · MPG</th><th className="r">Auto</th><th>Target minutes</th></tr>
             </thead>
             <tbody>
               {rows.map((p) => {
@@ -163,6 +170,7 @@ function LineupView({ d }: { d: LineupData }) {
                       {isStarter && v < 1 && <span className="ml-1.5 text-xs text-amber-400">needs minutes</span>}
                     </td>
                     <td>{p.pos}</td>
+                    <td><FitGrade fit={p.fit} /></td>
                     <td className="r">{p.age}</td>
                     <td className="r"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} scope={p.changeScope} /> / {p.pot}<Delta value={p.potChange} scope={p.changeScope} /></td>
                     <td className="r">{p.gp} · {p.mpg.toFixed(1)}</td>
