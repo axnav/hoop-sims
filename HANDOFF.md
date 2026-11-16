@@ -18,15 +18,15 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Documents (2026-11-16):** `ARCHITECTURE.md` was checked against the code and brought up to date, and keeping it current is now `RULES.md` hard limit 7 (owner's request). Folder structure reviewed: Go tests stay beside the code; no restructuring. Merged locally, not pushed.
 
-**Work in progress (2026-11-17): trade finder, branch `feat/trade-finder`.** Owner asked for a console-style trade finder: tick your own players and picks, see the best offer from each team. Owner's choices: players and picks may be combined (3 players, 4 picks); best offer per team with a filter (anything, players, picks, young players, cap relief); trades only, nothing for free agency; a panel on the Trade page plus a "See offers for him" button in the drawer. Contract: `engine/finder.go` `FindOffers(give, want)`, `POST /api/trade/find` `{players, picks, want}` returning `{possible, reason, want, wants, give, giveValue, offers:[{team, direction, receive, value, salaryIn, salaryOut, note, deal}], passed:[{team, reason}]}`, `FinderPanel` in `TradeAssistant.tsx`, URL `/trade?offer=<playerId>`. Read-only: no saved field, no random stream. Done: helper finished; its files are UNCOMMITTED in the working tree of `feat/trade-finder` (`engine/finder.go` and test, `cmd/web/finder.go` and test, one route line, `api.ts`, `TradeAssistant.tsx`, `Trade.tsx`, `PlayerDrawer.tsx`, `ARCHITECTURE.md`). Helper reported vet, tests and web build passing and 19 to 29 of 29 teams offering in its measurements; the drawer URL is `/trade?find=<playerId>` (`offer` was already taken by incoming proposals). Main session read `finder.go` and `cmd/web/finder.go` (looks right) and started its own check run; the browser pass on port 8097 was interrupted by the owner before any result, so NOTHING is verified by the main session yet and a test server may still be running on 8097. Left: confirm the check run, browser pass, commit, handoff, merge. Waiting for the owner to say whether to finish this first.
+**Built and merged locally 2026-11-17 (not pushed):**
+- Trade finder: tick up to 3 of your players and 4 picks, "Find offers" shows the best package from each team, with a filter (anything, players, picks, young players, cap relief); "Load this offer" fills the trade builder; "See offers for him" in the drawer (`/trade?find=<playerId>`). `engine/finder.go`, `POST /api/trade/find`. Read-only, no saved field, no stream.
+- Interface: chips wrap under the name (`NameCell`), payroll amounts under the bar, top bar no longer collides (short step labels; "HS" mark on phones), and a colour rule: orange for actions only, status chips by tone (`Chip`). See `ARCHITECTURE.md` section 12.
 
-**Work in progress (2026-11-17): interface overlaps and colours, branch `feat/ui-overlaps` (a helper's own worktree).** Owner: chips and colours overlap, mostly on the free agent market and trade screens. Main session confirmed from screenshots of `main` (seed 2, team 3, 1400 and 390 px): Values chips drawn over the POS column on Free Agency; the year colliding with the season-step label in the top bar and the logo cut on the phone; Cap/Tax/Max labels of `PayrollBar` printed over each other when narrow; orange used for every chip. Brief: a shared name-plus-chips cell, top bar fix, payroll labels, and a colour system with meaning (orange = actions only; green good, amber warn, red bad, blue info, grey neutral) through one `Chip` with a tone. Screens only; it may not touch `Trade.tsx`, `TradeAssistant.tsx`, `PlayerDrawer.tsx`, `api.ts` (the finder helper has those). Helper finished: commit `10f5d20` on `feat/ui-overlaps`, worktree `.claude/worktrees/agent-ab491522197918abc` (never commit that folder). Reported: `Chip` with tones, `NameCell`, `RfaChip`, payroll labels moved under the bar, top bar reworked ("HS" mark below 480 px), Contender chip now violet; web build passes; nothing checked by eye. Left: main session review, screenshots at 1400 and 390 px, merge after the finder (expect small conflicts only in files neither helper shared).
+**Queued, owner approved 2026-11-17: assistant GM (plan in section 17).** Not started. Its trade suggestions use `FindOffers`.
 
-**Owner, 2026-11-17: wants HoopSim on a CV and a detailed walk-through of the code.** Main session's advice: describe it truthfully (designed and directed, built with AI assistants) and learn it well enough to explain and change it. Proposed six short sessions (big picture; Go basics through `player.go` and `rng.go`; one game in `game.go`; release with dead money end to end; tests and tuning; trades and the assistant), each ending with a few lines the owner writes. Waiting for the owner's answer on order and style.
+**Owner, 2026-11-17: wants HoopSim on a CV and a detailed walk-through of the code; said "finish and merge both first, then start the walk-through".** So the walk-through is NEXT, before the assistant GM unless the owner says otherwise. Advice given: describe it truthfully (designed and directed, built with AI assistants) and learn it well enough to explain and change it. Six short sessions, each ending with a few lines the owner writes (use the Learning output style's "Learn by Doing" requests): 1 big picture and request flow; 2 Go basics through `player.go` and `rng.go`; 3 one game in `game.go` and determinism; 4 release with dead money end to end; 5 tests and tuning; 6 trades and the assistant. Then CV bullets and a README in the owner's words. Style (sessions with typing, or a written guide first) not yet answered. Sessions done so far: none.
 
-**Queued, owner approved 2026-11-17: assistant GM (plan in section 17).** Build after the trade finder is merged, because its trade suggestions use `FindOffers`.
-
-**Next:** after these three, ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small polish (two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams, tunable in `AdvisorTuning`).
+**Next:** walk-through session 1, then the assistant GM (section 17). Other open choices: owner goals and finances, news feed and awards, save slots, tuning batch. Remaining polish: orange still used for the Lineup "Custom"/"Starter" labels, Draft scouting dots and POT bar; the finder's best offer can be several low-rated players (raise `FinderTuning.PieceCost`); two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams.
 
 **Earlier (2026-11-14 to 2026-11-15):**
 - Progression arrows on every player list (last change, this season or last year) and per rating in the player drawer.
@@ -98,6 +98,7 @@ Everything below was built on 2026-11-14 unless noted. "Verified" means the main
 - **Real-data mode** (older work, private). Builds the real 2010-11 league from `data/real/`. Verified: a full cycle ran cleanly on 2026-11-14.
 - **Screens** (React in `web/`). Dashboard, roster, lineup, trade, free agency, draft, offseason, injuries, settings, standings, playoff bracket, game viewer (2D and a lazy-loaded 3D court), history, Coach page, Players page (search).
 - **Added 2026-11-15 and 2026-11-16** (each verified in a browser pass on port 8097; details and what was not tried are in the update log): photos and avatars (`cmd/web/photos.go`); motivations, stances and extensions (`engine/motivation.go`); training focus (`engine/training.go`); best-five automatic lineup (`Team.Rotation`, `StarterSlots`); badges (`engine/badges.go`); coaches, systems, fit (`engine/coach.go`, `engine/system.go`); morale, trade requests, league events (`engine/morale.go`); release with dead money (`League.Release`, `Team.DeadMoney`); draft-night trades (`engine/drafttrade.go`); player search (`cmd/web/players.go`); trade assistant (`engine/assistant.go`).
+- **Added 2026-11-17** (verified in a browser pass on port 8097): trade finder (`engine/finder.go`); chip tones, `NameCell` and the payroll legend (`web/src/ui.tsx`).
 
 ## 4. Decisions made and why
 
@@ -160,6 +161,7 @@ B. Tuning:
    4. Real-mode trade frequency (problem 6): find why computer-to-computer trades are rare under the salary rules, using a copy of a real league.
    5. Retirement of stars (problem 5), roster balance at league creation (problem 4), the scoring distribution (problem 15).
    6. Tests: restore the stricter free agency assertion if possible and widen seeds on the long-stability test.
+C0. Owner's order (2026-11-17): code walk-through sessions for the owner (section 0), then the assistant GM (section 17).
 C. Later features the owner listed: owner goals and job security (this would also give the luxury tax a consequence through team finances); a news feed. (Morale, trade requests and coaches: done 2026-11-16.)
 D. Product basics: multiple save slots; typed API responses (generate TypeScript types from Go or add schemas); a packaged build that leaves out `data/real/`; front-end tests; untrack `cmd/web/web` once the owner agrees.
 
@@ -207,7 +209,10 @@ What exists (all merged and pushed): photos/avatars (real mode), motivations, st
 extensions, training focus, best-five automatic lineup, 40 badges in five tiers, coaches
 with six systems and roster fit (save version 4), weekly morale and trade requests,
 release any time with dead money, draft-night trades with trade-up offers, player search,
-and a trade assistant (team needs, "What would it take?", Keep/Shop/Sell advisor).
+a trade assistant (team needs, "What would it take?", Keep/Shop/Sell advisor), and a trade
+finder (your players and picks in, each team's best offer out). The trade finder and the
+interface colour/overlap fixes of 2026-11-17 are merged locally but NOT pushed. Next per the
+owner: a code walk-through for the owner (HANDOFF section 0), then the assistant GM (section 17).
 
 How we work (RULES.md sections 9 to 11):
 - The owner is learning Go and dictates by voice (expect misheard words, e.g. "hamdog.md"
@@ -375,6 +380,16 @@ Owner's words: improve the manager's assistant so it gives suggestions, can run 
 - Suggested split: piece 1 engine + API for suggestions and apply (no auto), piece 2 auto mode and the log, piece 3 screens; or one helper for engine/API and one for screens with the JSON contract written first.
 
 ## Update log (newest first)
+
+### 2026-11-17, trade finder and interface fixes merged
+- Trade finder, built by one Sonnet helper. `FindOffers(give, want)`: per team, packages from its 14 best players and 8 best picks by value to the user (up to 3 players and 2 picks), ranked by value to the user minus 0.5 per piece (relief: by salary saved), the first that passes `salaryProblem` and `evaluateDealBase` wins, so a shown offer is always accepted; packages worth under 60% of what the user gives are skipped except for relief; pass reasons in plain words. Tunables `FinderTuning`. The URL is `/trade?find=<id>` because `offer` already opens an incoming proposal.
+- Helper reported: 19 to 29 of 29 teams offering across seeds 1 to 3; 31 ms for a 3-player + 2-pick call, relief 347 ms.
+- Verified by the main session: read `engine/finder.go` and `cmd/web/finder.go`; `go vet`, `go test ./... -count=1` pass (engine 296 s, `cmd/web` 56 s, machine under load); web build. Port 8097, seed 2, team 3, day 10, two players offered: any 28 offers, players 28, picks 0 (nobody can absorb $28.5M for picks alone), young 14, relief 10; bad filter, empty and foreign player all 400; no impact key; the drawer button opens `/trade?find=57` with 28 offers at 1400 and 390 px, the Picks filter gives 7 for one player, "Load this offer" works, one offer executed through `/api/deal/execute` (200); no console errors, no horizontal scroll.
+- Not tried: the finder on draft night in the browser (engine test only), real-data mode, picks ticked in the browser.
+- Interface, built by a second Sonnet helper in its own worktree (screens only): `Chip` with tones, `NameCell`, `RfaChip`, payroll legend under the bar, top bar rework. Main session then fixed the top bar itself (step labels still touched and ran under the team badge: shorter labels, steps may shrink, year hidden below 480 px).
+- Verified by the main session by eye from 24 new screenshots (same script as before, 1400 and 390 px, season and free agency): chips stay inside the name cell on Free Agency, Team, Players and the offer card; payroll amounts no longer overlap; top bar labels separate; no console errors, no page-level horizontal scroll. No Go code changed in this part, so the Go checks were not re-run after it.
+- Colour changes worth knowing: Contender chip is now violet, Buyer green, Seller amber, Rebuilding blue; stance "Open" amber; the word "Values" is now only a tooltip.
+- `.gitignore` now excludes `/.claude/worktrees/`.
 
 ### 2026-11-17, owner asked for a trade finder, interface fixes and an assistant GM
 - Trade finder: owner's four choices recorded in section 0; one Sonnet helper running on `feat/trade-finder`.

@@ -9,15 +9,17 @@ import { TeamBadge } from './ui'
 import { PlayerSearch } from './PlayerSearch'
 
 const steps = ['Regular season', 'Playoffs', 'Draft', 'Free agency', 'New season']
+// Shorter labels for the desktop stepper, so neighbours never touch.
+const stepShort = ['Season', 'Playoffs', 'Draft', 'Free agency', 'New season']
 const stepOf = (s: GameState) =>
   ({ regular: 0, regular_done: 0, playoffs: 1, playoffs_done: 1, offseason: 2, draft: 2, draft_done: 2, free_agency: 3 })[s.phase]
 
 function Stepper({ s }: { s: GameState }) {
   const cur = stepOf(s)
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      {steps.map((n, i) => (
-        <div key={n} className="w-28 shrink-0">
+    <div className="flex min-w-0 items-center gap-3">
+      {stepShort.map((n, i) => (
+        <div key={n} className="w-24 min-w-0 shrink">
           <div className={`mb-1 truncate text-[11px] font-bold uppercase tracking-wider ${i === cur ? 'text-accent' : i < cur ? 'text-ink/70' : 'text-muted/60'}`}>{n}</div>
           <div className="h-1 overflow-hidden rounded bg-line">
             <motion.div
@@ -106,9 +108,9 @@ export function TopBar() {
           <div className="shrink-0 whitespace-nowrap text-lg font-black tracking-tight min-[1000px]:w-40">
             <span className="max-[479px]:hidden">HOOP<span className="text-accent">SIM</span></span>
             <span className="min-[480px]:hidden" aria-label="HoopSim">H<span className="text-accent">S</span></span>
-            <span className="ml-1.5 text-sm font-semibold text-muted tabular-nums">{s.year}</span>
+            <span className="ml-1.5 text-sm font-semibold text-muted tabular-nums max-[479px]:hidden">{s.year}</span>
           </div>
-          <div className="max-[999px]:hidden"><Stepper s={s} /></div>
+          <div className="min-w-0 overflow-hidden max-[999px]:hidden"><Stepper s={s} /></div>
         </div>
         <div className="flex shrink-0 items-center gap-2 min-[1000px]:gap-3">
           <div className="flex items-center gap-2 max-[699px]:hidden">
