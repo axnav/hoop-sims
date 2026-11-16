@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -258,7 +259,19 @@ func checkAverages(t *testing.T, s *Season) {
 	check("home win%", 100*hw/float64(len(s.Games)), 54, 60)
 }
 
+// TestTeamBalance checks that no team is far too strong or too weak. The
+// normal band is 12 to 70 wins. With the owner's approval (2026-11-16) one
+// team-season in the whole run may land outside it, but never below 9 or
+// above 73 wins: four features in a row (badges, coaches, morale, release)
+// tipped a single team one or two wins past the band, and the band was
+// already borderline with every new effect switched off.
 func TestTeamBalance(t *testing.T) {
+	const (
+		lo, hi         = 12, 70 // normal band
+		hardLo, hardHi = 9, 73  // never outside these
+		outliersOK     = 1
+	)
+	var outliers []string
 	for _, seed := range []uint64{7, 2} {
 		lg := GenerateLeague(seed)
 		for y := 0; y < 5; y++ {
@@ -269,11 +282,21 @@ func TestTeamBalance(t *testing.T) {
 			}
 			t.Logf("seed %d year %d: most wins %d, fewest %d", seed, s.Year, mx, mn)
 			for id, w := range s.Wins {
-				if w > 70 || w < 12 {
-					t.Errorf("seed %d year %d: team %d went %d-%d", seed, s.Year, id, w, s.Losses[id])
+				msg := fmt.Sprintf("seed %d year %d: team %d went %d-%d", seed, s.Year, id, w, s.Losses[id])
+				switch {
+				case w > hardHi || w < hardLo:
+					t.Errorf("%s (outside the hard limits %d-%d)", msg, hardLo, hardHi)
+				case w > hi || w < lo:
+					outliers = append(outliers, msg)
 				}
 			}
 		}
+	}
+	for _, o := range outliers {
+		t.Logf("outlier: %s", o)
+	}
+	if len(outliers) > outliersOK {
+		t.Errorf("%d team-seasons outside %d-%d wins, at most %d allowed: %v", len(outliers), lo, hi, outliersOK, outliers)
 	}
 }
 

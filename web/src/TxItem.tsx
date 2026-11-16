@@ -20,7 +20,7 @@ export function TxItem({ t }: { t: Transaction }) {
   return (
     <li className="border-b border-line/50 px-2 py-2 text-[13px]">
       <div className="mb-1 text-[11px] uppercase tracking-wider text-muted">{txWhen(t)}</div>
-      <div className={`flex gap-4 ${teams.length > 2 ? 'flex-col sm:flex-row' : ''}`}>{teams.map((tm) => <div key={tm.id} className="contents">{col(tm)}</div>)}</div>
+      {(t.moved.length > 0 || (t.picks ?? []).length > 0) && <div className={`flex gap-4 ${teams.length > 2 ? 'flex-col sm:flex-row' : ''}`}>{teams.map((tm) => <div key={tm.id} className="contents">{col(tm)}</div>)}</div>}
       {extra.length > 0 && <div className="mt-1 text-xs text-muted">{extra.join(' · ')}</div>}
     </li>
   )

@@ -118,7 +118,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 	}
 	st := lg.Season
 	return M{"team": s.team(id), "w": st.Wins[id], "l": st.Losses[id], "pd": st.PointDiff[id], "confRank": s.rank(id),
-		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": s.payrollObj(id), "status": s.statusObj(id),
+		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": s.payrollObj(id), "deadMoney": s.deadMoneyList(id), "status": s.statusObj(id),
 		"coach": s.coachTeamObj(t), "teamFit": fitObj(lg.TeamFit(t)), "teamMorale": s.teamMoraleObj(t)}, nil
 }
 

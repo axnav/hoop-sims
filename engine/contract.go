@@ -163,9 +163,13 @@ func RookieContract(pick, round int) Contract {
 	return Contract{Salary: int(math.Round(s/100)) * 100, Years: c.RookieYearsRound1}
 }
 
-// Payroll is the total of a team's contracts that are still running.
+// Payroll is the total of a team's contracts that are still running, plus its
+// dead money (released players who are still being paid).
 func (lg *League) Payroll(teamID int) int {
 	n := 0
+	for _, d := range lg.Teams[teamID].DeadMoney {
+		n += d.Salary
+	}
 	for _, p := range lg.Teams[teamID].Roster {
 		n += p.Contract.counted()
 	}
@@ -430,33 +434,140 @@ func (lg *League) inOffseason() bool {
 	return lg.Draft != nil || s == nil || s.Year < lg.Year
 }
 
-// Release sends a player to free agency and ends his contract. Simplification:
-// there is no dead money, the whole contract just disappears. Only allowed in
-// the offseason.
-func (lg *League) Release(teamID, playerID int) error {
-	if teamID < 0 || teamID >= len(lg.Teams) {
-		return fmt.Errorf("That is not a valid team.")
+// DeadContract is salary still owed to a released player. Years counts like
+// Contract.Years (seasons left, including the current one, or the coming one in
+// the offseason); the entry is removed when it reaches 0. Simplification: there
+// is no set-off if he signs with another team.
+type DeadContract struct {
+	PlayerID int
+	Name     string
+	Salary   int
+	Years    int
+}
+
+// ReleaseInfo says what releasing a player would do (see ReleasePreview).
+type ReleaseInfo struct {
+	Allowed    bool
+	Reason     string
+	DeadSalary int    // per season, 0 if his contract is over
+	DeadYears  int    // seasons it is still paid
+	Refill     bool   // a free agent will be signed to keep the roster at RosterSize
+	RefillName string // who, when Refill
+	Short      bool   // in season the roster will fall below RosterSize because no free agent is left
+}
+
+// bestFreeAgent is the free agent signed to fill a roster spot: the highest
+// overall, ties to the lower ID, never the player with ID skip. Nil if none.
+func (lg *League) bestFreeAgent(skip int) *Player {
+	var best *Player
+	for _, p := range lg.FreeAgents {
+		if p.ID == skip {
+			continue
+		}
+		if best == nil || p.Overall() > best.Overall() || (p.Overall() == best.Overall() && p.ID < best.ID) {
+			best = p
+		}
 	}
-	if !lg.inOffseason() {
-		return fmt.Errorf("Players can only be released in the offseason.")
+	return best
+}
+
+// ReleasePreview says whether the team may release the player now and what it
+// costs. In season a team left below RosterSize signs the best free agent to a
+// one-year minimum deal; that is refused if it would pass the hard ceiling.
+// In the offseason nobody is signed.
+func (lg *League) ReleasePreview(teamID, playerID int) ReleaseInfo {
+	if teamID < 0 || teamID >= len(lg.Teams) {
+		return ReleaseInfo{Reason: "That is not a valid team."}
+	}
+	p := lg.findRosterPlayer(teamID, playerID)
+	if p == nil {
+		return ReleaseInfo{Reason: "That player is not on the team."}
+	}
+	info := ReleaseInfo{Allowed: true}
+	if p.Contract.Years >= 1 {
+		info.DeadSalary, info.DeadYears = p.Contract.Salary, p.Contract.Years
+	}
+	if !lg.inOffseason() && len(lg.Teams[teamID].Roster) <= RosterSize {
+		if fa := lg.bestFreeAgent(playerID); fa != nil {
+			// payroll does not change by the release itself: dead money takes the salary's place
+			if after := lg.Payroll(teamID) + Cap.MinSalary; after > Cap.HardCeiling {
+				info.Allowed = false
+				info.Reason = fmt.Sprintf("Releasing him means signing a replacement at the minimum, which would put the payroll at %s, over the hard ceiling of %s.", fmtM(after), fmtM(Cap.HardCeiling))
+				return info
+			}
+			info.Refill, info.RefillName = true, fa.Name
+		} else {
+			info.Short = true
+		}
+	}
+	return info
+}
+
+// Release sends a player to free agency at any time. He is still paid: the
+// rest of his current contract stays on the payroll as dead money (an agreed
+// extension is cancelled). In season the roster is refilled to RosterSize from
+// the free agents; in the offseason it is not.
+func (lg *League) Release(teamID, playerID int) error {
+	info := lg.ReleasePreview(teamID, playerID)
+	if !info.Allowed {
+		return fmt.Errorf("%s", info.Reason)
 	}
 	t := lg.Teams[teamID]
+	res := TradeResult{Year: lg.Year, Day: lg.currentDay(), TeamA: teamID, TeamB: -1}
 	for i, p := range t.Roster {
 		if p.ID == playerID {
 			t.Roster = append(t.Roster[:i], t.Roster[i+1:]...)
 			lg.releaseToFA(p)
-			return nil
+			res.Released = append(res.Released, TxPlayer{p.ID, p.Name, teamID, -1})
+			break
 		}
 	}
-	return fmt.Errorf("That player is not on the team.")
+	if !lg.inOffseason() {
+		lg.fillRoster(teamID, playerID, &res)
+	}
+	lg.Transactions = append(lg.Transactions, res)
+	return nil
 }
 
-// releaseToFA moves a player (already off his roster) to free agency, contract ended.
+// fillRoster signs the best free agent to one-year minimum deals until the
+// team has RosterSize players, never the player just released (even past the hard ceiling, so a roster can
+// always be filled), recording each in res.
+func (lg *League) fillRoster(tid, skip int, res *TradeResult) {
+	for len(lg.Teams[tid].Roster) < RosterSize {
+		p := lg.bestFreeAgent(skip)
+		if p == nil {
+			return
+		}
+		lg.forceSign(tid, p, Cap.MinSalary, 1)
+		res.Signed = append(res.Signed, TxPlayer{p.ID, p.Name, -1, tid})
+	}
+}
+
+// releaseToFA moves a player (already off his roster) to free agency. If he
+// still has contract years left, the rest of his current contract stays on his
+// old team's payroll as dead money.
 func (lg *League) releaseToFA(p *Player) {
+	if tid := p.TeamID; tid >= 0 && tid < len(lg.Teams) && p.Contract.Years >= 1 {
+		t := lg.Teams[tid]
+		t.DeadMoney = append(t.DeadMoney, DeadContract{p.ID, p.Name, p.Contract.Salary, p.Contract.Years})
+	}
 	lg.moraleNewTeam(p, -1, false)
 	p.TeamID = -1
 	p.Contract = Contract{}
 	lg.FreeAgents = append(lg.FreeAgents, p)
+}
+
+// ageDeadMoney counts one season off every dead contract and drops the ones that are done.
+func (lg *League) ageDeadMoney() {
+	for _, t := range lg.Teams {
+		var keep []DeadContract
+		for _, d := range t.DeadMoney {
+			if d.Years--; d.Years > 0 {
+				keep = append(keep, d)
+			}
+		}
+		t.DeadMoney = keep
+	}
 }
 
 // salaryProblem checks the trade salary rules for one team that sends out and

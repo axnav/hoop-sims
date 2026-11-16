@@ -115,6 +115,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 		t.Roster = keep(t.Roster)
 	}
 	lg.FreeAgents = keep(lg.FreeAgents)
+	lg.ageDeadMoney()
 	// Contracts: one season used up. Players now at 0 years are expiring; they
 	// stay on the roster until FinishOffseason.
 	for _, t := range lg.Teams {

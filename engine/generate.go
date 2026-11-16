@@ -83,6 +83,8 @@ type Team struct {
 	City   string
 	Name   string
 	Roster []*Player
+	// DeadMoney is salary still owed to released players (contract.go); zero = none.
+	DeadMoney []DeadContract `json:",omitempty"`
 	// TaxPaid is the luxury tax the team paid, by season year (contract.go).
 	TaxPaid map[int]int `json:",omitempty"`
 	// ExceptionYear is the league year of the offseason in which the team used

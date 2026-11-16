@@ -42,7 +42,15 @@ export default function TeamPage() {
           {d.teamMorale && (
             <p className="-mt-2 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">Team morale <MoraleChip morale={d.teamMorale} /><span className="tabular-nums">{d.teamMorale.score}/100</span></p>
           )}
-          <Card title="Payroll" className="mb-4"><PayrollBar p={d.payroll} /></Card>
+          <Card title="Payroll" className="mb-4">
+            <PayrollBar p={d.payroll} />
+            {d.deadMoney && d.deadMoney.length > 0 && (
+              <div className="px-2 pb-2 text-[12px]">
+                <div className="mb-0.5 font-bold uppercase tracking-wide text-muted">Dead money (released, still paid)</div>
+                <ul>{d.deadMoney.map((x, i) => <li key={i} className="flex justify-between gap-3 border-b border-line/40 py-0.5"><span className="min-w-0 truncate">{x.name}</span><span className="shrink-0 tabular-nums text-muted">{money(x.salary)} · {x.years} {x.years === 1 ? 'year' : 'years'} left</span></li>)}</ul>
+              </div>
+            )}
+          </Card>
           <Card title="Roster" right={<span className="flex items-center gap-3 text-xs text-muted">{d.isUser && <Link className="btn !px-2.5 !py-1 text-xs" to="/lineup">Set lineup</Link>}<span>Click a column to sort · starters marked</span></span>}>
             <DataTable data={d.roster} columns={cols} initialSort={[{ id: 'ovr', desc: true }]} onRow={(r) => open(r.id)} />
           </Card>

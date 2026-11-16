@@ -10,7 +10,12 @@ import (
 // payrollObj is the money summary of one team (thousands of dollars).
 func (s *server) payrollObj(id int) M {
 	lg := s.lg
-	return M{"payroll": lg.Payroll(id), "cap": engine.Cap.SalaryCap, "taxLine": engine.Cap.TaxLine,
+	dead := 0
+	for _, d := range lg.Teams[id].DeadMoney {
+		dead += d.Salary
+	}
+	// "payroll" includes the dead money; "dead" is that part alone.
+	return M{"payroll": lg.Payroll(id), "dead": dead, "cap": engine.Cap.SalaryCap, "taxLine": engine.Cap.TaxLine,
 		"ceiling": engine.Cap.HardCeiling, "room": lg.CapRoom(id), "taxBill": lg.TaxBill(id),
 		"minSalary": engine.Cap.MinSalary}
 }
@@ -76,4 +81,24 @@ func (s *server) contractAction(fn func(team, id int) error) func(r *http.Reques
 		}
 		return M{"expiring": s.expiringView(), "state": s.state()}, nil
 	}
+}
+
+// deadMoneyList is a team's released-but-still-paid contracts (empty when none).
+func (s *server) deadMoneyList(id int) []M {
+	out := []M{}
+	for _, d := range s.lg.Teams[id].DeadMoney {
+		out = append(out, M{"name": d.Name, "salary": d.Salary, "years": d.Years})
+	}
+	return out
+}
+
+// releasePreview says what releasing the user's player would cost.
+func (s *server) releasePreview(r *http.Request) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	in := s.lg.ReleasePreview(s.lg.UserTeamID, id)
+	return M{"allowed": in.Allowed, "reason": in.Reason, "deadSalary": in.DeadSalary, "deadYears": in.DeadYears,
+		"refill": in.Refill, "refillName": in.RefillName, "short": in.Short}, nil
 }

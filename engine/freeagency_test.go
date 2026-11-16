@@ -49,6 +49,7 @@ func makeRoom(lg *League, n int) {
 	for _, p := range t.Roster {
 		p.Contract = Contract{Salary: Cap.MinSalary, Years: 2}
 	}
+	t.DeadMoney = nil // fixture: the cuts above should leave plenty of cap room
 }
 
 func TestFreeAgencyFlowAndOffers(t *testing.T) {

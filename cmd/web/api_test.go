@@ -689,8 +689,64 @@ func TestContractsInSeason(t *testing.T) {
 	if len(ex["players"].([]any)) != 0 || ex["open"] != false || ex["payroll"] == nil {
 		t.Fatalf("expiring in season: %v", ex)
 	}
-	c.call("POST", "/api/contracts/release", M{"playerId": pid}, 409)
+	c.call("POST", "/api/contracts/release", M{"playerId": 99999999}, 409) // not on the team
 	c.call("POST", "/api/contracts/resign", M{"playerId": pid}, 409)
+}
+
+func TestReleaseInSeason(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	// a new league has no free agents; put one in the pool
+	lg := c.s.lg
+	fa := lg.Teams[4].Roster[12]
+	lg.Teams[4].Roster = lg.Teams[4].Roster[:12]
+	fa.TeamID, fa.Contract = -1, engine.Contract{}
+	lg.FreeAgents = append(lg.FreeAgents, fa)
+	team := c.call("GET", "/api/team/3", nil, 200)
+	before := num(team["payroll"].(M)["payroll"])
+	if d, ok := team["deadMoney"].([]any); !ok || len(d) != 0 {
+		t.Fatalf("deadMoney should be an empty list: %v", team["deadMoney"])
+	}
+	pl := team["roster"].([]any)[0].(M)
+	pid, sal, yrs := num(pl["id"]), num(pl["salary"]), num(pl["years"])
+	pv := c.call("GET", "/api/contracts/release/"+itoa(pid), nil, 200)
+	for _, k := range []string{"allowed", "reason", "deadSalary", "deadYears", "refill", "refillName"} {
+		if _, ok := pv[k]; !ok {
+			t.Fatalf("preview lacks %q: %v", k, pv)
+		}
+	}
+	if pv["allowed"] != true || num(pv["deadSalary"]) != sal || num(pv["deadYears"]) != yrs || pv["refill"] != true || pv["refillName"] == "" {
+		t.Fatalf("preview: %v (salary %d years %d)", pv, sal, yrs)
+	}
+	c.checkNoImpact("preview", pv)
+	if bad := c.call("GET", "/api/contracts/release/99999999", nil, 200); bad["allowed"] != false || bad["reason"] == "" {
+		t.Fatalf("preview of a stranger: %v", bad)
+	}
+	out := c.call("POST", "/api/contracts/release", M{"playerId": pid}, 200)
+	c.checkNoImpact("release", out)
+	team = c.call("GET", "/api/team/3", nil, 200)
+	onRoster := false
+	for _, r := range team["roster"].([]any) {
+		onRoster = onRoster || num(r.(M)["id"]) == pid
+	}
+	if onRoster || len(team["roster"].([]any)) != 13 {
+		t.Fatalf("roster after release: %d players", len(team["roster"].([]any)))
+	}
+	dm := team["deadMoney"].([]any)
+	if len(dm) != 1 || num(dm[0].(M)["salary"]) != sal || num(dm[0].(M)["years"]) != yrs || dm[0].(M)["name"] == "" {
+		t.Fatalf("deadMoney: %v", dm)
+	}
+	pay := team["payroll"].(M)
+	if num(pay["payroll"]) != before-sal+1200+sal || num(pay["dead"]) != sal {
+		t.Fatalf("payroll %v, before %d", pay, before)
+	}
+	c.checkNoImpact("team", team)
+	c.call("POST", "/api/contracts/release", M{"playerId": pid}, 409)
+	tx := c.call("GET", "/api/transactions", nil, 200)["transactions"].([]any)
+	last := tx[0].(M)
+	if len(last["released"].([]any)) != 1 || len(last["signed"].([]any)) != 1 {
+		t.Fatalf("transaction: %v", last)
+	}
 }
 
 func TestDealSalaryRules(t *testing.T) {

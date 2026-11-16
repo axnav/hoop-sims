@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { api, type ExtensionAsk, type PlayerPage, type Training, type StatLine, type Badge } from './api'
+import { api, type ExtensionAsk, type PlayerPage, type ReleasePreview, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
 import { BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
@@ -325,6 +325,45 @@ function TrainingPanel({ id, ratings, t }: { id: number; ratings: PlayerPage['ra
   )
 }
 
+function ReleaseBox({ p, close }: { p: PlayerPage; close: () => void }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const pv = useQuery({ queryKey: ['release-preview', p.id], queryFn: () => api.releasePreview(p.id), enabled: open, gcTime: 0 })
+  const go = useMutation({
+    mutationFn: () => api.contractRelease(p.id),
+    onSuccess: (r) => {
+      qc.setQueryData(['state'], r.state)
+      for (const k of ['team', 'teams', 'player', 'state', 'lineup', 'transactions', 'trade-block', 'contracts', 'injuries', 'freeagents', 'leaders']) qc.invalidateQueries({ queryKey: [k] })
+      close()
+    },
+  })
+  if (!open) return <button className="btn mt-3 ml-2" onClick={() => setOpen(true)}>Release</button>
+  const v: ReleasePreview | undefined = pv.data
+  const years = (n: number) => `${n} more ${n === 1 ? 'year' : 'years'}`
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-panel2/50 p-3 text-[13px]">
+      {pv.isLoading && <div className="text-muted">Checking...</div>}
+      {pv.isError && <ErrorBox error={pv.error} />}
+      {v && !v.allowed && <div className="text-loss">{v.reason}</div>}
+      {v && v.allowed && (
+        <div>
+          <div className="font-semibold">Release {p.name}?</div>
+          <div className="mt-1">
+            {v.deadYears > 0 ? <>You still pay {money(v.deadSalary)} a year for {years(v.deadYears)} (dead money).</> : <>His contract is over, so you owe nothing more.</>}
+            {v.refill && <> The best free agent willing to take the minimum ({v.refillName}) will be signed to keep 13 players.</>}
+            {v.short && <> No free agent is available, so the roster will drop below 13.</>}
+          </div>
+        </div>
+      )}
+      {go.isError && <ErrorBox error={go.error} />}
+      <div className="mt-2 flex gap-2">
+        {v && v.allowed && <button className="btn btn-accent" disabled={go.isPending} onClick={() => go.mutate()}>Confirm</button>}
+        <button className="btn" disabled={go.isPending} onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
@@ -380,6 +419,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
+          {!p.prospect && p.team && p.team.id === state?.user.team.id && <ReleaseBox p={p} close={close} />}
           <MoodBlock p={p} />
           <Wants p={p} />
           {p.prospect && p.scout && <ScoutPanel id={p.id} level={p.scout.level} maxLevel={3} />}
