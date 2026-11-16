@@ -576,3 +576,209 @@ func TestOwnerDoesNotChangeTheGame(t *testing.T) {
 		}
 	}
 }
+
+// handsOffSeasons plays the stepped hands-off flow (nothing re-signed, no
+// offers) and returns the season (1-based) after which the user was fired, or
+// 0, with the trust path.
+func handsOffSeasons(lg *League, n int) (int, []int) {
+	var path []int
+	for y := 1; y <= n; y++ {
+		lg.SimRegularSeason()
+		lg.SimPlayoffs()
+		lg.BeginOffseason()
+		path = append(path, lg.Owner.Trust)
+		if lg.OwnerFired() {
+			return y, path
+		}
+		lg.DraftAutoUntilUser()
+		lg.DraftAutoAll()
+		lg.BeginFreeAgency()
+		lg.FinishOffseason()
+		lg.StartSeason()
+	}
+	return 0, path
+}
+
+func TestOwnerNeglectedTeamIsFired(t *testing.T) {
+	lg := ownerLeague(2, 3)
+	y, path := handsOffSeasons(lg, 9)
+	t.Logf("trust path %v, fired after season %d", path, y)
+	if y == 0 || y > 5 || y < 2 {
+		t.Fatalf("a neglected team should be let go in seasons 2 to 5, got %d (trust %v)", y, path)
+	}
+}
+
+// judgeSeason sets a finished season by hand and judges it.
+func judgeSeason(lg *League, wins int) {
+	lg.Season.Day = SeasonDays
+	lg.Season.Champion = 0
+	lg.Season.Wins[lg.UserTeamID] = wins
+	lg.Season.Losses[lg.UserTeamID] = SeasonGames - wins
+	lg.ownerSeasonEnd()
+}
+
+func TestOwnerLosingPatienceAndRebuildGrace(t *testing.T) {
+	run := func(dir string, buildMet bool, wins int) (int, *OwnerState) {
+		lg := GenerateLeague(11)
+		lg.UserTeamID = teamWith(lg, OwnerWinNow)
+		lg.StartSeason()
+		o := lg.Owner
+		o.StartDir = dir
+		o.Budget = 1 << 30
+		o.Goals = []OwnerGoal{{Key: "budget", Kind: "money", Title: "B", Weight: 2},
+			{Key: "keep_star", Kind: "building", Title: "K", Weight: 2, Target: lg.ownerBestPlayer().ID}}
+		if !buildMet {
+			o.Goals[1].Target = -5
+		}
+		before := o.Trust
+		judgeSeason(lg, wins)
+		return o.Trust - before, o
+	}
+	// Never rises in a losing season even with every goal met.
+	if d, _ := run("contender", true, OwnerTuning.LosingWins-1); d > 0 {
+		t.Fatalf("trust rose by %d in a losing season", d)
+	}
+	plain, o1 := run("contender", true, 20)
+	grace, o2 := run("rebuilding", true, 20)
+	noBuild, _ := run("rebuilding", false, 20)
+	if grace <= plain || o2.LosingStreak != 0 || o2.GraceUsed != 1 || o1.LosingStreak != 1 {
+		t.Fatalf("grace: plain %d (streak %d) grace %d (streak %d used %d)", plain, o1.LosingStreak, grace, o2.LosingStreak, o2.GraceUsed)
+	}
+	if noBuild >= grace {
+		t.Fatalf("no grace when the building goal is missed: %d vs %d", noBuild, grace)
+	}
+	// The penalty rises with the streak.
+	lg := ownerLeague(11, teamWith(GenerateLeague(11), OwnerWinNow))
+	lg.Owner.Goals = nil
+	var drops []int
+	for i := 0; i < 3; i++ {
+		lg.Owner.Trust = 100
+		judgeSeason(lg, 25)
+		drops = append(drops, 100-lg.Owner.Trust)
+	}
+	if !(drops[0] < drops[1] && drops[1] < drops[2]) {
+		t.Fatalf("losing penalty should rise: %v", drops)
+	}
+	// A patient owner forgives two rebuild seasons.
+	lg2 := GenerateLeague(11)
+	lg2.UserTeamID = teamWith(lg2, OwnerPatient)
+	lg2.StartSeason()
+	for i := 0; i < 2; i++ {
+		lg2.Owner.StartDir = "rebuilding"
+		lg2.Owner.Goals = []OwnerGoal{{Key: "keep_star", Kind: "building", Title: "K", Weight: 1, Target: lg2.ownerBestPlayer().ID}}
+		judgeSeason(lg2, 20)
+	}
+	if lg2.Owner.GraceUsed != 2 || lg2.Owner.LosingStreak != 0 {
+		t.Fatalf("patient owner grace: used %d streak %d", lg2.Owner.GraceUsed, lg2.Owner.LosingStreak)
+	}
+}
+
+func TestOwnerWinsGoalFloorAndProgress(t *testing.T) {
+	lg := ownerLeague(2, 3)
+	o := lg.Owner
+	o.PrevWins, o.PrevLosing = 20, true
+	g := lg.ownerPickGoals(lg.OwnerOf(3), o.Budget)[0]
+	if g.Key == "wins" && g.Target < 20+OwnerTuning.ProgressWins {
+		t.Fatalf("after a losing season the target %d should be at least %d", g.Target, 20+OwnerTuning.ProgressWins)
+	}
+	o.PrevLosing = false
+	if g := lg.ownerPickGoals(lg.OwnerOf(3), o.Budget)[0]; g.Key == "wins" && g.Target < OwnerTuning.MinWinsGoal {
+		t.Fatalf("wins goal %d under the floor", g.Target)
+	}
+}
+
+func TestOwnerSpendFloorGoal(t *testing.T) {
+	lg := GenerateLeague(2)
+	lg.UserTeamID = 3
+	for _, p := range lg.Teams[3].Roster {
+		p.Contract = Contract{Salary: Cap.MinSalary, Years: 2}
+	}
+	lg.StartSeason()
+	m := lg.Owner.Goals[1]
+	if m.Key != "spend" || m.Target < Cap.SalaryCap*7/10 || !containsStr(m.Title, "payroll of at least") {
+		t.Fatalf("stripped payroll should get the spend goal: %+v", m)
+	}
+	lg.Season.Day = SeasonDays
+	lg.Season.Champion = 0
+	if met, _, _, _ := lg.ownerGoalState(&lg.Owner.Goals[1]); met {
+		t.Fatal("a stripped payroll must not meet the spend goal")
+	}
+	for _, p := range lg.Teams[3].Roster {
+		p.Contract = Contract{Salary: 12000, Years: 2}
+	}
+	if met, _, _, _ := lg.ownerGoalState(&lg.Owner.Goals[1]); !met {
+		t.Fatalf("payroll %d should meet a floor of %d", lg.Payroll(3), m.Target)
+	}
+	// A healthy payroll gets an ordinary money goal; a taxed one must get under the tax.
+	lg2 := GenerateLeague(2)
+	lg2.UserTeamID = 3
+	for _, p := range lg2.Teams[3].Roster {
+		p.Contract = Contract{Salary: 15000, Years: 2}
+	}
+	lg2.StartSeason()
+	if k := lg2.Owner.Goals[1].Key; k != "tax" || lg2.Owner.Goals[1].Title != "Get under the luxury tax" {
+		t.Fatalf("taxed team goal: %+v", lg2.Owner.Goals[1])
+	}
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+func TestOwnerRebuildGoalNeedsRealProspects(t *testing.T) {
+	lg := ownerLeague(2, 3)
+	tm := lg.Teams[3]
+	g := &OwnerGoal{Key: "rebuild", Kind: "building"}
+	for _, p := range tm.Roster {
+		p.Age, p.Potential = 29, 50
+		p.Ratings = Ratings{Inside: 55, Mid: 55, Three: 55, Playmaking: 55, Rebounding: 55, Defense: 55, Athleticism: 55}
+	}
+	lg.Season.Day = SeasonDays
+	if met, _, _, _ := lg.ownerGoalState(g); met {
+		t.Fatal("a roster of veterans must not meet the rebuild goal")
+	}
+	// Two young players who are not prospects (low overall, low potential).
+	for _, p := range tm.Roster[:2] {
+		p.Age, p.Potential = 21, 55
+	}
+	if met, _, _, text := lg.ownerGoalState(g); met || !containsStr(text, "62") {
+		t.Fatalf("young scrubs are not prospects (text %q)", text)
+	}
+	tm.Roster[0].Potential = 80
+	tm.Roster[1].Ratings = Ratings{Inside: 70, Mid: 70, Three: 70, Playmaking: 70, Rebounding: 70, Defense: 70, Athleticism: 70}
+	if !lg.ownerOwnsFirst() {
+		t.Skip("setup: no first-round pick owned")
+	}
+	if met, _, _, text := lg.ownerGoalState(g); !met {
+		t.Fatalf("two real prospects and the pick should meet it: %s", text)
+	}
+}
+
+func TestOwnerGoalStatusHonest(t *testing.T) {
+	lg := ownerLeague(2, 3)
+	lg.SimDays(10)
+	for i := range lg.Owner.Goals {
+		if _, st := lg.OwnerGoalStatus(i); st != "on_track" && st != "at_risk" {
+			t.Fatalf("goal %d is %q on day 10; met and missed only come at season end", i, st)
+		}
+	}
+	lg.SimRegularSeason()
+	lg.SimPlayoffs()
+	for i := range lg.Owner.Goals {
+		if _, st := lg.OwnerGoalStatus(i); st == "met" || st == "missed" {
+			t.Fatalf("goal %d is %q before it was judged", i, st)
+		}
+	}
+	lg.BeginOffseason()
+	for i := range lg.Owner.Goals {
+		_, st := lg.OwnerGoalStatus(i)
+		if st != map[bool]string{true: "met", false: "missed"}[lg.Owner.Goals[i].Met] {
+			t.Fatalf("goal %d: %q after judging", i, st)
+		}
+	}
+}

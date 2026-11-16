@@ -42,7 +42,7 @@ func TestOwnerAPI(t *testing.T) {
 		if w := g["weight"]; w != "Low" && w != "Medium" && w != "High" {
 			t.Fatalf("weight %v", w)
 		}
-		if st := g["status"]; st != "on_track" && st != "at_risk" && st != "met" && st != "missed" {
+		if st := g["status"]; st != "on_track" && st != "at_risk" { // met and missed only after the season-end judging
 			t.Fatalf("status %v", st)
 		}
 	}

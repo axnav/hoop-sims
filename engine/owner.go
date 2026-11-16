@@ -90,8 +90,20 @@ var OwnerTuning = struct {
 	PaceDay         int // games played before the pace warning
 	PaceSlack       int // wins below the line the pace may project before the warning
 	PacePenalty     int
-	BadSeasons      int // results goals missed in a row...
-	BadSeasonsTrust int // ...with trust below this: fired
+	LosingWins      int    // a season with fewer wins than this is a losing season
+	LosingStep      int    // trust lost per losing season in a row, times the streak and the speed (8, 16, 24...)
+	LosingStreakMax int    // the streak stops counting here
+	MaxSeasonDrop   int    // most trust one season can cost, from its start to its end
+	RebuildGrace    [3]int // losing seasons forgiven when a real rebuild met its building goal: win_now, patient, cheap
+	ProgressWins    int    // after a losing season the wins goal is at least last season's wins plus this
+	MaxWinsGoal     int
+	SpendFloor      float64 // payroll (share of the cap) below which the money goal asks for a real team
+	SpendFloorCheap float64 // the same for a cheap owner
+	ProspectOvr     int     // a "real prospect" is this overall or better...
+	ProspectPot     int     // ...or has this potential or more
+	ProspectTop     int     // and is among the user's this many best players
+	BadSeasons      int     // results goals missed in a row...
+	BadSeasonsTrust int     // ...with trust below this: fired
 
 	LedgerKeep  int
 	MessageKeep int
@@ -112,14 +124,16 @@ var OwnerTuning = struct {
 	WinNowTaxRoom:       12000,
 	AssistantOverBudget: 0,
 
-	ExpWinsTop: 56, ExpWinsStep: 1.05, WinsSlack: 3, MinWinsGoal: 20,
+	ExpWinsTop: 56, ExpWinsStep: 1.05, WinsSlack: 3, MinWinsGoal: 29,
 	ConfFinalsRank: 3, RoundRank: 8, PlayoffsRank: 14,
 	ImproveGain: 2, YoungAge: 24, RebuildAge: 23,
 	PaceWins: [3]int{36, 44, 50},
 
-	GoalGain: 3, GoalLoss: 5, PlayoffBonus: 3, WinsPivot: 38, WinsTrustUp: 0.5, WinsTrustDown: 0.8,
+	GoalGain: 3, GoalLoss: 4, PlayoffBonus: 3, WinsPivot: 38, WinsTrustUp: 0.5, WinsTrustDown: 0.6,
 	SpeedWinNow: 1.4, SpeedPatient: 0.8, SpeedCheap: 1.1,
 	OverWeekPenalty: 1, PaceDay: 30, PaceSlack: 5, PacePenalty: 2,
+	LosingWins: 32, LosingStep: 6, LosingStreakMax: 5, MaxSeasonDrop: 30, RebuildGrace: [3]int{1, 2, 1}, ProgressWins: 4, MaxWinsGoal: 48,
+	SpendFloor: 0.88, SpendFloorCheap: 0.72, ProspectOvr: 62, ProspectPot: 74, ProspectTop: 10,
 	BadSeasons: 3, BadSeasonsTrust: 25,
 
 	LedgerKeep: 30, MessageKeep: 60, JobCount: 3,
@@ -185,6 +199,11 @@ type OwnerState struct {
 	PaceWarned       bool        `json:",omitempty"`
 	OverNoted        bool        `json:",omitempty"`
 	StartOvr         map[int]int `json:",omitempty"` // overall of each player 24 or under at the season start
+	StartDir         string      `json:",omitempty"` // the team's direction at the season start (TeamStatus key)
+	LosingStreak     int         `json:",omitempty"` // losing seasons in a row (a better season takes one off)
+	GraceUsed        int         `json:",omitempty"` // losing seasons forgiven for a real rebuild
+	PrevWins         int         `json:",omitempty"` // wins of the season before (0 = none)
+	PrevLosing       bool        `json:",omitempty"`
 }
 
 // OwnerInfo is the derived (never saved) description of a team's owner.
@@ -532,31 +551,47 @@ func (lg *League) ownerPickGoals(info OwnerInfo, budget int) []OwnerGoal {
 		res.Key, res.Title, res.Target = "playoffs", "Make the playoffs", t.PaceWins[0]
 	default:
 		n := max(t.MinWinsGoal, expect-t.WinsSlack)
+		if o := lg.Owner; o != nil && o.PrevLosing && o.PrevWins > 0 {
+			n = max(n, min(t.MaxWinsGoal, o.PrevWins+t.ProgressWins)) // owners expect progress
+		}
 		res.Key, res.Title, res.Target = "wins", fmt.Sprintf("Win at least %d games", n), n
 	}
 	res.Detail = fmt.Sprintf("Your top eight players rank %s of %d in the league, so this is a fair ask.", ordinal(rank), len(lg.Teams))
 	goals = append(goals, res)
 
-	// Money.
+	// Money: a stripped payroll must not be a free pass, a taxed one must come down.
 	mon := OwnerGoal{Kind: "money", Weight: w[1]}
 	pick := "budget"
-	switch info.Personality {
-	case OwnerCheap:
-		if info.Market != MarketSmall {
-			pick = "profit"
-		}
-	case OwnerWinNow:
-		if budget <= Cap.TaxLine {
-			pick = "tax"
-		}
-	default:
+	pay := lg.Payroll(user)
+	floorShare := t.SpendFloor
+	if info.Personality == OwnerCheap {
+		floorShare = t.SpendFloorCheap
+	}
+	floor := int(floorShare*float64(Cap.SalaryCap)) / 100 * 100
+	switch {
+	case pay < floor:
+		pick = "spend"
+	case pay > Cap.TaxLine:
+		pick = "tax"
+	case pay > budget:
 		pick = "budget"
+	case info.Personality == OwnerCheap && info.Market != MarketSmall:
+		pick = "profit"
+	case info.Personality == OwnerWinNow && budget <= Cap.TaxLine:
+		pick = "tax"
 	}
 	switch pick {
+	case "spend":
+		mon.Key, mon.Target = "spend", floor
+		mon.Title = fmt.Sprintf("Put a real team on the floor: payroll of at least %s by the end of the season", fmtM(floor))
+		mon.Detail = fmt.Sprintf("Your payroll is %s. I am not paying for a roster this empty; the budget is %s.", fmtM(pay), fmtM(budget))
 	case "profit":
 		mon.Key, mon.Title, mon.Detail = "profit", "Do not lose money this season", "Revenue has to cover salaries, dead money and any luxury tax."
 	case "tax":
 		mon.Key, mon.Title, mon.Detail = "tax", "Stay under the luxury tax", fmt.Sprintf("Keep the payroll at or under the tax line of %s.", fmtM(Cap.TaxLine))
+		if pay > Cap.TaxLine {
+			mon.Title = "Get under the luxury tax"
+		}
 	default:
 		mon.Key, mon.Title, mon.Detail = "budget", fmt.Sprintf("Finish at or under the budget of %s", fmtM(budget)), "Payroll includes dead money. Each week over budget costs trust."
 	}
@@ -574,7 +609,7 @@ func (lg *League) ownerPickGoals(info OwnerInfo, budget int) []OwnerGoal {
 	switch {
 	case status == "seller" || status == "rebuilding":
 		bld.Key, bld.Title = "rebuild", "Build for the future"
-		bld.Detail = fmt.Sprintf("Own a first-round pick in the next draft and finish with at least two players aged %d or under in your top eight.", t.RebuildAge)
+		bld.Detail = lg.rebuildDetail()
 	case star != nil && (young == 0 || lg.Options.NoInSeasonDev || (lg.Year+user)%2 == 0):
 		bld.Key, bld.Title, bld.Target = "keep_star", "Keep "+star.Name, star.ID
 		bld.Detail = "He is your best player. He has to be on your roster when the season ends."
@@ -583,10 +618,32 @@ func (lg *League) ownerPickGoals(info OwnerInfo, budget int) []OwnerGoal {
 		bld.Detail = fmt.Sprintf("A player aged %d or under must gain at least %d overall during the season.", t.YoungAge, t.ImproveGain)
 	default:
 		bld.Key, bld.Title = "rebuild", "Build for the future"
-		bld.Detail = fmt.Sprintf("Own a first-round pick in the next draft and finish with at least two players aged %d or under in your top eight.", t.RebuildAge)
+		bld.Detail = lg.rebuildDetail()
 	}
 	goals = append(goals, bld)
 	return goals
+}
+
+// isProspect says whether a young player is a real prospect by visible numbers.
+func isProspect(p *Player) bool {
+	return p.Age <= OwnerTuning.RebuildAge && (p.Overall() >= OwnerTuning.ProspectOvr || p.Potential >= OwnerTuning.ProspectPot)
+}
+
+// prospectsTop counts the user's real prospects among his best ProspectTop players.
+func (lg *League) prospectsTop() int {
+	n := 0
+	for _, p := range rotationOf(lg.Teams[lg.UserTeamID], OwnerTuning.ProspectTop) {
+		if isProspect(p) {
+			n++
+		}
+	}
+	return n
+}
+
+func (lg *League) rebuildDetail() string {
+	t := &OwnerTuning
+	return fmt.Sprintf("Own your first-round pick in the coming draft and have at least two players aged %d or under among your %d best who are real prospects: overall %d or better, or potential %d or better.",
+		t.RebuildAge, t.ProspectTop, t.ProspectOvr, t.ProspectPot)
 }
 
 // ownerBestPlayer is the user's best player by overall (lowest ID on a tie).
@@ -618,6 +675,7 @@ func (lg *League) ownerStartSeason(prevRev int) {
 	o.SeasonStartTrust = o.Trust
 	o.LastChange = 0
 	o.StartOvr = lg.userYoungIDs(OwnerTuning.YoungAge)
+	o.StartDir = lg.TeamStatusOf(user).Key
 
 	titles := ""
 	for i, g := range o.Goals {
@@ -810,11 +868,16 @@ func (lg *League) ownerGoalState(g *OwnerGoal) (met, lost, risk bool, text strin
 			lost = true
 		}
 	case "rebuild":
-		pick, young := lg.ownerOwnsFirst(), lg.youngTop8(t.RebuildAge)
+		pick, young := lg.ownerOwnsFirst(), lg.prospectsTop()
 		met = pick && young >= 2
 		risk = !met && regularDone
-		text = fmt.Sprintf("You %s a first-round pick in this draft and have %d players aged %d or under in your top eight.",
-			map[bool]string{true: "own", false: "do not own"}[pick], young, t.RebuildAge)
+		text = fmt.Sprintf("You %s your first-round pick in this draft and have %d real prospects (aged %d or under, overall %d+ or potential %d+) among your %d best; you need 2.",
+			map[bool]string{true: "own", false: "do not own"}[pick], young, t.RebuildAge, t.ProspectOvr, t.ProspectPot, t.ProspectTop)
+	case "spend":
+		pay := lg.Payroll(user)
+		met = pay >= g.Target
+		risk = !met
+		text = fmt.Sprintf("Payroll is %s; the owner wants at least %s.", fmtM(pay), fmtM(g.Target))
 	}
 	return
 }
@@ -840,15 +903,13 @@ func (lg *League) OwnerGoalStatus(i int) (progress, status string) {
 	o := lg.Owner
 	g := &o.Goals[i]
 	met, lost, risk, text := lg.ownerGoalState(g)
-	if g.Done {
-		met, lost, risk = g.Met, !g.Met, false
-	}
-	switch {
-	case met:
-		return text, "met"
-	case lost:
+	if g.Done { // "met" and "missed" only once the goal was judged at season end
+		if g.Met {
+			return text, "met"
+		}
 		return text, "missed"
-	case risk:
+	}
+	if lost || (risk && !met) {
 		return text, "at_risk"
 	}
 	return text, "on_track"
@@ -911,6 +972,37 @@ func (lg *League) ownerSeasonEnd() {
 		wd *= t.WinsTrustDown
 	}
 	delta += int(math.Round((float64(bonus) + wd) * speed))
+	// Losing patience, whatever the goals said.
+	losing := s.Wins[user] < t.LosingWins
+	buildMet := false
+	for _, g := range o.Goals {
+		if g.Kind == "building" && g.Met {
+			buildMet = true
+		}
+	}
+	forgiven := false
+	if losing {
+		grace := t.RebuildGrace[map[string]int{OwnerWinNow: 0, OwnerPatient: 1, OwnerCheap: 2}[info.Personality]]
+		if buildMet && (o.StartDir == "seller" || o.StartDir == "rebuilding") && o.GraceUsed < grace {
+			o.GraceUsed++
+			forgiven = true
+		} else {
+			o.LosingStreak = min(t.LosingStreakMax, o.LosingStreak+1)
+			delta -= int(math.Round(float64(t.LosingStep*o.LosingStreak) * speed))
+		}
+		if delta > 0 {
+			delta = 0 // a losing season never raises trust
+		}
+	} else {
+		o.LosingStreak = max(0, o.LosingStreak-1)
+		o.GraceUsed = 0
+	}
+	o.PrevWins, o.PrevLosing = s.Wins[user], losing
+	// One season can cost at most MaxSeasonDrop in all (weekly moves included),
+	// so the owner is warned for a season before he lets anyone go.
+	if floor := startTrust - t.MaxSeasonDrop; o.Trust+delta < floor {
+		delta = min(0, floor-o.Trust)
+	}
 	lg.ownerMove(delta)
 	o.LastChange = o.Trust - startTrust
 	if resultsMissed {
@@ -928,6 +1020,12 @@ func (lg *League) ownerSeasonEnd() {
 		o.Ledger = append([]OwnerSeason(nil), o.Ledger[k-t.LedgerKeep:]...)
 	}
 
+	switch {
+	case losing && forgiven:
+		lg.ownerSay("warn", fmt.Sprintf("%d wins is not good, but I can see you are building something. I will wait a little.", s.Wins[user]))
+	case losing:
+		lg.ownerSay("bad", fmt.Sprintf("%d wins is a losing season, and I have seen too many of them.", s.Wins[user]))
+	}
 	switch {
 	case metCount == n:
 		lg.ownerSay("good", fmt.Sprintf("You met all %d goals. I am very pleased.", n))
@@ -1000,6 +1098,7 @@ func (lg *League) TakeJob(teamID int) (string, error) {
 	lg.gmCounts = nil
 	o.Fired, o.FiredText = false, ""
 	o.Trust, o.BadSeasons, o.LastChange = OwnerTuning.StartTrust, 0, 0
+	o.LosingStreak, o.GraceUsed, o.PrevWins, o.PrevLosing = 0, 0, 0, false
 	o.SeasonStartTrust = o.Trust
 	o.Goals, o.OverWeeks = nil, 0
 	t := lg.Teams[teamID]
