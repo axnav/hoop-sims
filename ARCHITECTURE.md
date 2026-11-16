@@ -68,9 +68,10 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 | Multi-season run | `go run ./cmd/sim -mode seasons -seasons 10` |
 | Rating and rookie tables | `go run ./cmd/sim -mode ratings` |
 | Assistant GM measurement (seeds 1 to 3, six seasons, hands-off vs computer autopilot vs GM balanced vs GM rebuild; about 70 s; env `GM_TEAM`, `GM_SEED0`, `GM_SEEDS`, `GM_ONLY`, `GM_VERBOSE=1` for per-season detail) | `go run ./cmd/sim -mode gm` |
+| Owner goals and trust measurement (seeds 1 to 5, team 0, eight seasons, three users: hands-off, assistant GM on auto, "bad GM" who re-signs everyone and bids up to the tax line; firing on, the fired user takes the first job; about 80 s; env `OWNER_TEAM`, `OWNER_SEED0`, `OWNER_SEEDS`, `OWNER_SEASONS`, `OWNER_QUIET=1` for totals only) | `go run ./cmd/sim -mode owner` |
 | Real-data comparison | `go run ./cmd/realcheck -runs 30` |
 
-`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `badges`, `coaches`, `morale`, `develop`, `resign` or `gm`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`.
+`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `badges`, `coaches`, `morale`, `develop`, `resign`, `gm` or `owner`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`.
 
 The Go server serves `web/dist` for any path that is not `/api/...` and falls back to `index.html`, so the browser router can use real URLs. If `web/dist/index.html` is missing it answers 503 with the build command. The Vite dev server (`web/vite.config.ts`) proxies `/api` to `http://localhost:8095`, which is why the dev instance of the Go server must use port 8095.
 
@@ -174,6 +175,14 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | `contract.go` | Contracts, cap rules, payroll, re-signing, release | `Cap`, `Contract`, `MarketSalary`, `RookieContract`, `Payroll`, `CapRoom`, `TaxBill`, `CanSign`, `Sign`, `SignKind`, `AskingContract`, `ReSign`, `Release`, `Expiring` | `Cap` |
 | `motivation.go` | Motivations (Money, Winning, Role, Loyalty; Low/Medium/High), stance on re-signing, extensions | `Motivation`, `Level`, `MotivationOf`, `Stance`, `StanceOf`, `ExtensionAsk`, `ExtensionLimit`, `Extend` | `MotivationTuning`, `Cap.ExtensionMaxRaise`, `Cap.ExtensionOpenMult`, `motivationOffset` |
 | `freeagency.go` | The free-agency period | `FreeAgency`, `FAOffer`, `FASigning`, `BeginFreeAgency`, `AdvanceFreeAgency`, `MakeOffer`, `WithdrawOffer`, `OffersBy`, `FreeAgentAsk` | `FATuning`, `freeAgencyOffset` |
+
+### Owner
+
+| File | Owns | Main exports | Tunable |
+|---|---|---|---|
+| `owner.go` | Owner goals and team finances for the user's team only. The owner only observes: no game random number, never reads `Impact`, `TrueOverall` or `TrueCeiling`, computer teams and game results are untouched (`TestOwnerDoesNotChangeTheGame`). Derived, not saved: `OwnerOf(team)` (fictional name, personality `win_now`/`patient`/`cheap`, market `small`/`medium`/`large` spread 10/12/8 by ranking a hash). Money: `OwnerFinances()` (revenue = market base + per home win + per playoff home game, projected to 41 home games while the season runs; costs = salaries + dead money + luxury tax). Budget set at `StartSeason` from last season's revenue and the personality. Three goals set at `StartSeason` from the top-eight rank and `TeamStatusOf` (results, money, building; nobody gets a title goal, only a top-three roster the conference finals). Trust 0 to 100: judged in `BeginOffseason` (first thing, before the roster changes) from each goal's weight and the personality's speed, plus wins against a pivot and a playoff bonus; weekly (beside the morale week) over-budget and one pace warning. Ledger (30 seasons) and messages (60). Firing at season end (trust 0, or three missed results goals in a row with low trust, unless `Options.NoFiring`): `Fired` blocks the offseason guards (`CanGoToDraft`, `CanDraft`, `CanUserPick`, `CanFinishOffseason`, `CanAdvanceFreeAgency`) with `ErrOwnerFired`; `OwnerJobs()` are the three worst records without the old team; `TakeJob` moves `UserTeamID`, clears the old team's lineup and system and all proposals, resets trust. The assistant GM holds re-sign, extension and free-agency payroll to the budget (`ownerCapFor`) | `OwnerOf`, `OwnerFinances`, `OwnerBudget`, `OwnerAlert`, `OwnerGoalStatus`, `OwnerJobs`, `TakeJob`, `OwnerFired`, `OwnerState`, `OwnerGoal`, `OwnerTuning` | `OwnerTuning` |
+
+Hooks outside `owner.go`: `GenerateLeague` creates `League.Owner`; `StartSeason` (budget and goals; creates the state for an old save); `SimDay` (weekly step); `BeginOffseason` (judging, and no auto-extension while fired); the guards in `phase.go`; `gm.go` (`gmResignLimitOwner`, free-agency limit).
 
 ### Draft
 
@@ -289,11 +298,15 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### Options
 
-`Options{NoDeadlineStop, NoOfferStop, NoInjuries, NoInSeasonDev, Commissioner}`. Each flag is named so that `false` (the zero value) is the old default behaviour. `Commissioner` allows `EditPlayer` (never for prospects, and never touches `Impact`).
+`Options{NoDeadlineStop, NoOfferStop, NoInjuries, NoInSeasonDev, Commissioner, NoFiring}`. Each flag is named so that `false` (the zero value) is the old default behaviour. `Commissioner` allows `EditPlayer` (never for prospects, and never touches `Impact`).
 
 ### GM
 
 `League.GM *GMState` (pointer, omitempty; nil = the assistant never used or everything off, so such a league saves exactly the old bytes and `SaveVersion` stays 4). `GMState{Plan, Auto GMAuto{Lineup, Training, Contracts, FreeAgency, Draft, TradeAlerts}, Log []GMLogEntry{Year, Day, Area, Text, Auto}, Seen}`; `Seen` holds trade ideas already alerted this season. An all-zero state is dropped again by `SetGMPlan` and `SetGMAuto`. Unsaved: `gmAlert` (the title of the idea found after the last `SimDay`) and `gmCounts` (the cached counts).
+
+### Owner state
+
+`League.Owner *OwnerState` (pointer, omitempty; nil = not started, so an old save loads unchanged, **no `SaveVersion` bump**: it is created by `GenerateLeague` for a new league and lazily at the next `StartSeason` for an old save, with trust at `OwnerTuning.StartTrust`). `OwnerState{Trust, LastChange (trust moved since the season began), Goals []OwnerGoal{Key, Kind, Title, Detail, Weight 1..3, Target, Met, Done}, Budget, Ledger []OwnerSeason (30 kept), Messages []OwnerMessage{Year, Day, Text, Tone} (60 kept, newest last), Fired, FiredText, BadSeasons, OverWeeks, SeasonStartTrust, PaceWarned, OverNoted, StartOvr}`. Owner name, personality and market size are derived from the seed (stream 140000) and never saved. `Options.NoFiring` (false = firing on).
 
 ### What the browser never receives
 
@@ -322,6 +335,8 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 ## 8. Money in one page
 
 All numbers are in the `Cap` block in `engine/contract.go`, in thousands of dollars per season.
+
+**Owner budget and finances (`owner.go`, the user's team only).** The luxury tax and dead money now cost profit and trust. Each season the user's profit is revenue (`OwnerTuning.MarketBase` by market size, plus `PerHomeWin` per home win, plus `PerPlayoffHomeGame` per playoff home game) minus costs (salaries, dead money and `TaxBill`); a medium market at the cap with 41 wins roughly breaks even. The owner sets a payroll budget at each `StartSeason` from last season's revenue and his personality (cheap and patient never above the tax line; win-now may go `WinNowTaxRoom` above it for a contender or buyer). Each week over budget costs a little trust, a money goal is judged at season end, and the assistant GM plans re-signs, extensions and free-agency offers inside the budget. Computer teams have no budget and no profit.
 
 | `Cap` field | Value | Meaning |
 |---|---|---|
@@ -384,8 +399,9 @@ Streams in the code today:
 | 110000 | Coaches: hashed per team at league creation and in the 3-to-4 upgrade (seed, 110000, 0, team ID: name, age, three ratings, favourite system); `dayRNG(year, 110001 + n)` for offseason candidate n; `dayRNG(year, 110050)` for the computer teams' replacement chances | `initCoaches`, `openCoachPool`, `finishCoaches` |
 | 120000 | Morale: `(seed, 120000, player ID, year*100+week)` hashed for a trade request starting; `(seed, 120000, 1, year*100+week)` for the weekly swap with a requester; `(seed, 120000, 2, year)` for the offseason swaps | `requestStep`, `moveRequesters`, `moveRequestersOffseason` |
 | 130000 | Draft night: `(seed, year, 130000, slot)` hashed once per user pick on the clock: the chance of a trade-up offer, then the order teams are tried | `EnsureDraftOffer` |
+| 140000 | Owners: `(seed, 140000, team ID, k)` hashed, no draw order: k = 1 the market-size ranking, 2 the personality, 3 and 4 the name. Nothing saved | `OwnerOf` |
 
-Next free offset: 140000.
+Next free offset: 150000.
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 
@@ -423,14 +439,14 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/new` | Start a game: body `{mode, seed, team}`; `mode` is `fictional` or `real` | `newGame` (main.go) |
 | POST | `/api/load` | Load the save file | `load` (main.go) |
 | POST | `/api/save` | Write the save file | `save` (main.go) |
-| GET | `/api/state` | Phase, day, record, next game, last result, payroll summary, `nextAction` and `actions` | `state` (state.go) |
+| GET | `/api/state` | Phase, day, record, next game, last result, payroll summary, `nextAction` and `actions`, `owner:{trust,label,fired,alert}` (alert = the newest warn or bad owner message of the current week, else null) | `state` (state.go) |
 | POST | `/api/sim` | Sim days: `{days, toEnd, auto}`; returns day results, standings strip, new state, optional `pause` `{reason, text}` (reasons `deadline`, `offer`, and `assistant` when the GM trade-alert switch is on and a new trade idea appears; text is the idea's title). `state` also has `gm: {count}` | `sim` (state.go) |
 | GET | `/api/standings` | Conference standings | `standings` (league.go) |
 | GET | `/api/leaders` | Top 10 in points, rebounds, assists; optional `?badge=<key>` keeps only players with that badge (unknown key: 400) | `leaders` (league.go) |
 | GET | `/api/badges` | Badge catalogue `{badges:[{key,name,group,kind,rule,effect}]}` | `badgeCatalogue` (badges.go) |
 | GET | `/api/players` | Player search over every team and free agency (not prospects): `q`, `team` (id or `fa`), `pos`, `minOvr`/`maxOvr`, `minAge`/`maxAge`, `maxSalary`, `yearsLeft`, `badge`, `tradeRequest=1`, `morale`, `sort`/`dir`, `limit`/`offset` → `{total, players:[rows]}` | `players` (players.go) |
 | GET | `/api/teams` | All 30 teams: record, rank, payroll, cap room, top-8 average, best player, status, pending offers | `teamsList` (teams.go) |
-| GET | `/api/team/{id}` | A team's roster, record, payroll, `coach` (name, system in use) and `teamFit` | `teamPage` (league.go) |
+| GET | `/api/team/{id}` | A team's roster, record, payroll (for the user's team the `payroll` object also has `budget`, the owner's payroll budget; omitted before the owner state exists), `coach` (name, system in use) and `teamFit` | `teamPage` (league.go) |
 | GET | `/api/player/{id}` | A player's page (prospects get ranges only; others get `badges`) | `player` (league.go) |
 | GET | `/api/schedule` | A team's games; `?team=` (default user) | `schedule` (league.go) |
 | GET | `/api/box/{id}` | A box score (`last` or a playoff game id) | `box` (league.go) |
@@ -449,6 +465,8 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/draft/auto` | Auto-draft all remaining picks | `draftAuto` (flow.go) |
 | GET | `/api/trade/status` | Is the window open, deadline day, limits | `tradeStatus` (trade.go) |
 | GET | `/api/trade/block/{id}` | A team's players and picks with values and tiers | `tradeBlock` (trade.go) |
+| GET | `/api/owner` | Owner goals and finances: `{active, owner:{name, personality:{key,label,blurb}}, trust:{score,label,trend,lastChange}, goals:[{key,kind,title,detail,weight,progress,status}], money:{budget,payroll,overBudget,marketSize:{key,label},revenue:{market,wins,playoffs,total},costs:{salaries,deadMoney,tax,total},profit,projected}, ledger:[{year,wins,losses,playoffs,revenue,costs,profit,trustStart,trustEnd,goals:[{title,met}]}] (newest first), messages:[{year,day,text,tone}] (newest first, at most 30, day 1-based), fired, firedText, jobs:[{team,owner,marketSize,record,payroll,direction:{key,label}}] (only while fired), firing}`. `active` is false only for an old save before its next season start (the other keys are then empty) | `ownerGet` (owner.go) |
+| POST | `/api/owner/job` | Body `{teamId}`; after being fired, moves the user to one of the three teams in `jobs`. Answers `{message, owner, state}`; 409 when not fired, 400 when the team is not one of the jobs | `ownerJob` (owner.go) |
 | GET | `/api/gm` | Assistant GM: `{plan, plans:[{key,label,blurb}], auto:{lineup,training,contracts,freeAgency,draft,tradeAlerts}, areas:[{key,label,blurb,canAuto,autoKey,autoLabel}], suggestions:[{id,area,title,reasons,action,playerId|null,link|null}], counts:{total,lineup,training,contracts,free_agency,draft,trades}, log:[{year,day,area,text,auto}]}` (log newest first, at most 100, day 1-based) | `gmGet` (gm.go) |
 | POST | `/api/gm/settings` | Body `{plan?, auto?:{any of the six keys}}`; answers the same body as GET; 400 for an unknown plan or auto key | `gmSettings` (gm.go) |
 | POST | `/api/gm/apply` | Body `{id}`; carries out one suggestion (a trade too: the click is the approval). Answers `{message, gm, state}`; 409 when it no longer applies, 400 for a malformed id | `gmApply` (gm.go) |
@@ -465,7 +483,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/offers` | Pending proposals from computer teams | `offersList` (offers.go) |
 | POST | `/api/offers/{id}/accept` | Accept a proposal | `offerAccept` (offers.go) |
 | POST | `/api/offers/{id}/reject` | Reject a proposal | `offerReject` (offers.go) |
-| GET | `/api/options` | The four option switches | `optionsGet` (offers.go) |
+| GET | `/api/options` | The option switches (`noDeadlineStop`, `noOfferStop`, `noInjuries`, `noInSeasonDev`, `commissioner`, `noFiring`) | `optionsGet` (offers.go) |
 | POST | `/api/options` | Change any of them (only keys sent are changed) | `optionsSet` (offers.go) |
 | GET | `/api/lineup` | The user's lineup and minutes | `lineupGet` (lineup.go) |
 | POST | `/api/lineup` | Set starters and minutes | `lineupSet` (lineup.go) |
@@ -582,6 +600,8 @@ Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have
 | `engine/finder_test.go` | Trade finder: every offer accepted and executable, one per team, each filter, combinations, refusals, draft night, determinism, league untouched, speed |
 | `engine/gm_test.go` | Assistant GM: zero value changes nothing (identical season and save bytes), old save loads, plan validation, each area's suggestions apply and log, draft choice equals the `ScoutView` recomputation, auto lineup/contracts/free agency/draft/training over full offseason cycles with no stall and a full roster, trades never made by auto mode, trade alerts, log cap, determinism, counts cache; auto free agency offers and signs in the seed 2 / team 3 case, offer-and-release on a full roster, no upgrade trade for rebuild or a seller/rebuilding team, upgrade package limits, a player is never both sold and extended |
 | `engine/teamstatus_test.go` | Team direction labels |
+| `engine/owner_test.go` | Owners and market spread deterministic, finances arithmetic (taxed team with dead money loses, big market earns more), goals fit the roster over 90 rosters, trust by personality, over-budget weeks, pace warning, an old save gets its owner at the next season start, save round trip and ledger, firing and job list, guards refuse while fired, `TakeJob` and a full cycle after it, `NoFiring`, a winning user is not fired, assistant respects the budget, the game is identical with and without the owner |
+| `cmd/web/owner_test.go` | `TestOwnerAPI`: shape and types of `GET /api/owner`, state key, options round trip, budget on the user's team page only, the fired flow (409 on the offseason steps, three jobs, 400 for a wrong team, 409 when not fired), `checkNoImpact` on everything |
 | `cmd/web/assistant_test.go` | The trade assistant routes |
 | `cmd/web/finder_test.go` | The trade finder route: shape, filters, a returned deal executes, bad input |
 | `cmd/web/gm_test.go` | The GM routes: shape, settings round trip, apply once then 409, 400s, state count, the `assistant` pause, draft suggestion shows scouting ranges, auto draft does not stop on the user |

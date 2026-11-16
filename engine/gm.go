@@ -549,11 +549,23 @@ func (lg *League) gmIsStar(p *Player) bool {
 // gmResignLimit is the payroll limit for re-signing or extending p: the plan's
 // limit, lifted by StarTaxRoom for a star (never past the hard ceiling).
 func (lg *League) gmResignLimit(plan string, p *Player) int {
-	limit := gmPayLimit(plan)
-	if plan != GMPlanRebuild && lg.gmIsStar(p) {
+	limit, _ := lg.gmResignLimitOwner(plan, p)
+	return limit
+}
+
+// gmResignLimitOwner is gmResignLimit also held to the owner's budget (owner.go;
+// a star may pass it only for a win-now owner). bound says the budget is what
+// sets the limit.
+func (lg *League) gmResignLimitOwner(plan string, p *Player) (limit int, bound bool) {
+	limit = gmPayLimit(plan)
+	star := plan != GMPlanRebuild && lg.gmIsStar(p)
+	if star {
 		limit = max(limit, min(Cap.HardCeiling, Cap.TaxLine+GMTuning.StarTaxRoom))
 	}
-	return limit
+	if c, ok := lg.ownerCapFor(star); ok && c < limit {
+		return c, true
+	}
+	return limit, false
 }
 
 // gmNeedMult is the multiple of the usual minimum value a player must reach
@@ -643,6 +655,9 @@ func (lg *League) gmContracts() []gmCand {
 			if pay+salary > gmPayLimit(plan) {
 				reasons = append(reasons, "He is one of your best players, so a little luxury tax is worth it.")
 			}
+			if _, bound := lg.gmResignLimitOwner(plan, p); bound {
+				reasons = append(reasons, "It keeps you inside the owner's budget.")
+			}
 			add(gmCand{
 				s: GMSuggestion{ID: fmt.Sprintf("resign:%d", p.ID), Area: GMAreaContracts,
 					Title:   fmt.Sprintf("Re-sign %s for %s over %s.", p.Name, fmtM(salary), yearsText(years)),
@@ -700,6 +715,9 @@ func (lg *League) gmContracts() []gmCand {
 		}
 		if next > gmPayLimit(plan) {
 			reasons = append(reasons, "He is one of your best players, so a little luxury tax is worth it.")
+		}
+		if _, bound := lg.gmResignLimitOwner(plan, p); bound {
+			reasons = append(reasons, "It keeps you inside the owner's budget.")
 		}
 		if years < min(askYears, maxYears) {
 			reasons = append(reasons, fmt.Sprintf("At %d the deal is kept to %s.", p.Age, yearsText(years)))
@@ -823,6 +841,7 @@ type gmFAT struct {
 	kind          SignKind
 	score         float64
 	fills         []string
+	ownerBound    bool // the owner's budget set the pay limit
 }
 
 // gmFATargets lists the free agents worth an offer, best first, each with
@@ -835,6 +854,10 @@ func (lg *League) gmFATargets(plan string, cf []float64) []gmFAT {
 	user := lg.UserTeamID
 	t := lg.Teams[user]
 	limit := gmPayLimit(plan)
+	ownerBound := false
+	if c, ok := lg.ownerCapFor(false); ok && c < limit {
+		limit, ownerBound = c, true // the owner's budget (owner.go)
+	}
 	lacks := gmParseLacks(lg.NeedsOf(user).Lacks)
 	mine := map[int]bool{}
 	for _, o := range lg.OffersBy(user) {
@@ -885,7 +908,7 @@ func (lg *League) gmFATargets(plan string, cf []float64) []gmFAT {
 		default:
 			score = v + bonus
 		}
-		out = append(out, gmFAT{p, salary, years, kind, score, fills})
+		out = append(out, gmFAT{p, salary, years, kind, score, fills, ownerBound})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].score != out[j].score {
@@ -963,6 +986,9 @@ func (lg *League) gmFreeAgency() []gmCand {
 		}
 		if cut == nil {
 			reasons = append(reasons, fmt.Sprintf("He is %d years old, rated %d with %d potential.", p.Age, p.Overall(), p.Potential))
+		}
+		if tg.ownerBound {
+			reasons = append(reasons, "It keeps you inside the owner's budget.")
 		}
 		switch tg.kind {
 		case SignException:

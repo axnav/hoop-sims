@@ -131,7 +131,7 @@ func (s *server) offerReject(r *http.Request) (any, error) {
 func (s *server) optionsGet(r *http.Request) (any, error) {
 	o := s.lg.Options
 	return M{"noDeadlineStop": o.NoDeadlineStop, "noOfferStop": o.NoOfferStop,
-		"noInjuries": o.NoInjuries, "noInSeasonDev": o.NoInSeasonDev, "commissioner": o.Commissioner}, nil
+		"noInjuries": o.NoInjuries, "noInSeasonDev": o.NoInSeasonDev, "commissioner": o.Commissioner, "noFiring": o.NoFiring}, nil
 }
 
 func (s *server) optionsSet(r *http.Request) (any, error) {
@@ -141,6 +141,7 @@ func (s *server) optionsSet(r *http.Request) (any, error) {
 		NoInjuries     *bool `json:"noInjuries"`
 		NoInSeasonDev  *bool `json:"noInSeasonDev"`
 		Commissioner   *bool `json:"commissioner"`
+		NoFiring       *bool `json:"noFiring"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -159,6 +160,9 @@ func (s *server) optionsSet(r *http.Request) (any, error) {
 	}
 	if in.Commissioner != nil {
 		s.lg.Options.Commissioner = *in.Commissioner
+	}
+	if in.NoFiring != nil {
+		s.lg.Options.NoFiring = *in.NoFiring
 	}
 	return s.optionsGet(r)
 }

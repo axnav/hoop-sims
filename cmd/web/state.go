@@ -62,6 +62,7 @@ func (s *server) state() M {
 	out["next"] = next
 	gmTotal, _ := lg.GMCounts()
 	out["gm"] = M{"count": gmTotal}
+	out["owner"] = s.ownerStateObj()
 	// last result
 	if b := lg.LastBox; b != nil {
 		me, opp := 0, 1

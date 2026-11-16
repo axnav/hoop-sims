@@ -244,6 +244,10 @@ type League struct {
 	gmAlert string
 	// gmCounts caches the suggestion counts for the state object (not saved).
 	gmCounts *gmCache
+
+	// Owner is the user's owner: goals, trust and the season budget (owner.go).
+	// nil = not started (an old save before its next season start).
+	Owner *OwnerState `json:",omitempty"`
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced
@@ -271,6 +275,9 @@ func GenerateLeague(seed uint64) *League {
 	lg.initPicks()
 	lg.assignInitialContracts()
 	lg.initCoaches()
+	if !ownerOff {
+		lg.Owner = newOwnerState() // owner.go
+	}
 	return lg
 }
 

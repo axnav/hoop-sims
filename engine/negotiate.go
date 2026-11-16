@@ -84,6 +84,7 @@ type Options struct {
 	NoInjuries     bool // true: nobody gets hurt (existing injuries still heal)
 	NoInSeasonDev  bool // true: ratings change only in the offseason (inseason.go)
 	Commissioner   bool // true: EditPlayer is allowed (commissioner.go)
+	NoFiring       bool // true: the owner never fires the user (owner.go); false = firing is on
 }
 
 // Proposal is a trade offer from a computer team to the user.

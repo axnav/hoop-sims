@@ -88,6 +88,7 @@ const (
 
 // StartSeason builds the schedule for the league's current year.
 func (lg *League) StartSeason() *Season {
+	prevRev := lg.ownerPrevRevenue() // owner.go: last season's revenue, before the season is replaced
 	s := &Season{
 		Year: lg.Year, Champion: -1,
 		Wins: make([]int, NumTeams), Losses: make([]int, NumTeams), PointDiff: make([]int, NumTeams),
@@ -141,6 +142,7 @@ func (lg *League) StartSeason() *Season {
 		}
 	}
 	lg.Season = s
+	lg.ownerStartSeason(prevRev) // owner.go: budget and goals
 	return s
 }
 
@@ -211,6 +213,7 @@ func (lg *League) SimDay() bool {
 	}
 	if s.Day%7 == 0 {
 		lg.moraleWeek()
+		lg.ownerWeek() // owner.go
 	}
 	if s.Done() {
 		s.computeAwards()

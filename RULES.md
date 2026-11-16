@@ -85,7 +85,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
 
    | 130000 | Draft night trade-up offers (`engine/drafttrade.go`: `(seed, year, 130000, slot)` hashed once per user pick for the chance and the team order; the offer itself is saved as a proposal) |
 
-   Take the next free ten-thousand (140000) for a new feature and add it here and to
+   | 140000 | Owners (`engine/owner.go`: `(seed, 140000, team ID, k)` hashed for the market-size ranking, personality and name; nothing saved) |
+
+   Take the next free ten-thousand (150000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

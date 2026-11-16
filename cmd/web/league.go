@@ -117,8 +117,12 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 		roster = append(roster, row)
 	}
 	st := lg.Season
+	payroll := s.payrollObj(id)
+	if id == lg.UserTeamID && lg.Owner != nil {
+		payroll["budget"] = lg.OwnerBudget() // the owner's payroll budget (the user's team only)
+	}
 	return M{"team": s.team(id), "w": st.Wins[id], "l": st.Losses[id], "pd": st.PointDiff[id], "confRank": s.rank(id),
-		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": s.payrollObj(id), "deadMoney": s.deadMoneyList(id), "status": s.statusObj(id),
+		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": payroll, "deadMoney": s.deadMoneyList(id), "status": s.statusObj(id),
 		"coach": s.coachTeamObj(t), "teamFit": fitObj(lg.TeamFit(t)), "teamMorale": s.teamMoraleObj(t)}, nil
 }
 

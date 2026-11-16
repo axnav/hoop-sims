@@ -86,7 +86,10 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	c := &Progression
 	s := lg.Season
 	rep := &OffseasonReport{Year: lg.Year}
-	lg.gmAutoExtend() // assistant GM: auto extensions before contracts tick down (gm.go)
+	lg.ownerSeasonEnd() // owner.go: judge the season before anything changes
+	if !lg.OwnerFired() {
+		lg.gmAutoExtend() // assistant GM: auto extensions before contracts tick down (gm.go)
+	}
 	r := lg.dayRNG(lg.Year, offseasonOffset)
 	lg.recordSeason()
 	lg.recordTax()

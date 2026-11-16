@@ -141,6 +141,9 @@ func (lg *League) CanBeginOffseason(reportSeen bool) error {
 
 // CanGoToDraft is allowed whenever an offseason (draft set up) is in progress.
 func (lg *League) CanGoToDraft() error {
+	if err := lg.ownerFiredBlock(); err != nil {
+		return err
+	}
 	if lg.Draft == nil {
 		return errors.New("no offseason in progress")
 	}
@@ -148,6 +151,9 @@ func (lg *League) CanGoToDraft() error {
 }
 
 func (lg *League) CanFinishOffseason(reportSeen bool) error {
+	if err := lg.ownerFiredBlock(); err != nil {
+		return err
+	}
 	switch lg.Phase(reportSeen) {
 	case PhaseFreeAgency:
 		return lg.sheetBlock()
@@ -159,6 +165,9 @@ func (lg *League) CanFinishOffseason(reportSeen bool) error {
 
 // CanAdvanceFreeAgency is allowed while free-agency days remain.
 func (lg *League) CanAdvanceFreeAgency() error {
+	if err := lg.ownerFiredBlock(); err != nil {
+		return err
+	}
 	if lg.FA == nil {
 		return errors.New("free agency is not open")
 	}
@@ -173,6 +182,9 @@ func (lg *League) CanAdvanceFreeAgency() error {
 
 // CanDraft is allowed once the offseason report has been seen and a draft exists.
 func (lg *League) CanDraft(reportSeen bool) error {
+	if err := lg.ownerFiredBlock(); err != nil {
+		return err
+	}
 	if lg.Draft == nil || !reportSeen {
 		return errors.New("no draft in progress")
 	}
@@ -181,6 +193,9 @@ func (lg *League) CanDraft(reportSeen bool) error {
 
 // CanUserPick is allowed when the draft is running and the user is on the clock.
 func (lg *League) CanUserPick() error {
+	if err := lg.ownerFiredBlock(); err != nil {
+		return err
+	}
 	if lg.DraftDone() || lg.DraftOnClock() != lg.UserTeamID {
 		return errors.New("you are not on the clock")
 	}
