@@ -3,10 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { Check, Lock, Plus, Sparkles, X } from 'lucide-react'
-import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
+import { api, type AssetRow, type DealMove, type TakePackage, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
 import { useFlow } from '../flow'
 import { TxItem, NewsItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
+import { AdvisorList, NeedsPanel, TakePanel } from '../TradeAssistant'
 import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TradeRequestTag, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
@@ -16,7 +17,7 @@ const pkey = (id: number) => `p${id}`
 const kkey = (p: { year: number; round: number; original: number }) => `k${p.year}-${p.round}-${p.original}`
 const toMove = (m: Sel): DealMove => (m.pick ? { from: m.from, to: m.to, pick: m.pick } : { from: m.from, to: m.to, playerId: m.playerId! })
 
-function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number; disabled: boolean; onPick: () => void; hl?: boolean }) {
+function Row({ p, maxV, disabled, onPick, onTake, hl }: { p: TradeAssetRow; maxV: number; disabled: boolean; onPick: () => void; onTake?: () => void; hl?: boolean }) {
   return (
     <motion.li
       layout layoutId={`p-${p.id}`} transition={{ type: 'spring', stiffness: 420, damping: 36 }}
@@ -34,9 +35,15 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
       <span className="w-10 text-right tabular-nums"><b style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b><Delta value={p.ovrChange} scope={p.changeScope} /></span>
       <span className="w-10 text-right text-muted tabular-nums">{p.pot}<Delta value={p.potChange} scope={p.changeScope} /></span>
       <span className="w-14 text-right text-xs tabular-nums" title={`${p.years} years left`}>{money(p.salary)}</span>
-      <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2" title={`Trade value ${p.value}`}>
+      <span className="h-1.5 w-14 overflow-hidden rounded bg-panel2 max-[699px]:hidden" title={`Trade value ${p.value}`}>
         <span className="block h-full rounded bg-accent" style={{ width: `${Math.max(4, (100 * p.value) / maxV)}%` }} />
       </span>
+      {onTake && (
+        <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded border border-line bg-panel2 px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:border-accent"
+          aria-label={`What would it take to get ${p.name}?`} title="What would it take?" onClick={(e) => { e.stopPropagation(); onTake() }}>
+          <Sparkles size={12} /><span className="max-[699px]:hidden">What would it take?</span>
+        </button>
+      )}
     </motion.li>
   )
 }
@@ -108,7 +115,7 @@ function Summary({ r, onClose }: { r: TradeResult; onClose: () => void }) {
 
 export default function Trade() {
   const [sp] = useSearchParams()
-  return <TradeScreen key={`${sp.get('team')}-${sp.get('get')}`} />
+  return <TradeScreen key={`${sp.get('team')}-${sp.get('get')}-${sp.get('want')}`} />
 }
 
 function TradeScreen() {
@@ -128,6 +135,11 @@ function TradeScreen() {
   const [preview, setPreview] = useState<{ moves: Sel[]; verdict: TradeVerdict; added: Set<string> } | null>(null)
   const [done, setDone] = useState<TradeResult | null>(null)
   const [notice, setNotice] = useState('')
+  const [take, setTake] = useState<number | null>(() => {
+    const w = Number(sp.get('want'))
+    return sp.get('want') && Number.isInteger(w) ? w : null
+  })
+  const [tab, setTab] = useState<'players' | 'advisor'>('players')
   const [pending, setPending] = useState<number | null>(() => {
     const g = Number(sp.get('get'))
     return sp.get('get') && Number.isInteger(g) ? g : null
@@ -223,12 +235,23 @@ function TradeScreen() {
   const exec = useMutation({
     mutationFn: () => api.dealExecute(wire),
     onSuccess: (r) => {
-      setDone(r); setRawMoves([]); setPreview(null)
+      setDone(r); setRawMoves([]); setPreview(null); setTake(null)
       qc.setQueryData(['state'], r.state)
+      qc.removeQueries({ queryKey: ['what-would-it-take'] })
       qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'state' })
     },
   })
 
+  // load a "what would it take" package into the builder
+  const loadPackage = (teamId: number, pk: TakePackage, labels: string[]) => {
+    const sels: Sel[] = pk.deal.moves.map((m, i) => (
+      'pick' in m
+        ? { key: kkey(m.pick), label: labels[i], from: m.from, to: m.to, pick: m.pick }
+        : { key: pkey(m.playerId), label: labels[i], from: m.from, to: m.to, playerId: m.playerId }
+    ))
+    setPartners([teamId]); setRawMoves(sels); setPreview(null); setNotice(''); setDone(null); exec.reset()
+    setTimeout(() => document.getElementById('deal-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
   const reset = () => { setPreview(null); setNotice(''); setDone(null); exec.reset() }
   const outCount = (team: number, pick: boolean) => rawMoves.filter((m) => m.from === team && !!m.pick === pick).length
   const defaultTo = (from: number) => (from === me ? partners[0] : me)
@@ -268,6 +291,7 @@ function TradeScreen() {
   const pickPartner = (slot: number, id: number) => {
     if (partners[slot] === id) return
     const old = partners[slot]
+    setTake(null)
     setPartners((p) => p.map((x, i) => (i === slot ? id : x)))
     setRawMoves((ms) => ms.filter((m) => m.from !== old && m.to !== old))
     reset()
@@ -295,15 +319,30 @@ function TradeScreen() {
     const team = slot === 0 ? undefined : teamOf(id)
     return (
       <Card key={id} title={slot === 0 ? 'Your roster' : team ? team.fullName : 'Partner'}
-        right={slot === 0 ? <span className="text-[11px] text-muted">Pos · age · OVR · POT · salary · value</span> : <span className="flex items-center gap-1 text-[11px] text-muted"><Lock size={11} />core players cost a lot</span>}>
+        right={slot === 0
+          ? (
+            <span className="flex items-center gap-2">
+              <span role="tablist" className="flex overflow-hidden rounded-md border border-line text-[11px] font-semibold">
+                {(['players', 'advisor'] as const).map((t) => (
+                  <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`px-2 py-0.5 ${tab === t ? 'bg-accent/25 text-accent' : 'text-muted hover:text-ink'}`}>{t === 'players' ? 'Players' : 'Advisor'}</button>
+                ))}
+              </span>
+              {tab === 'players' && <span className="text-[11px] text-muted max-[699px]:hidden">Pos · age · OVR · POT · salary · value</span>}
+            </span>
+          )
+          : <span className="flex items-center gap-1 text-[11px] text-muted"><Lock size={11} />core players cost a lot</span>}>
+        {slot === 0 && tab === 'advisor' ? (
+          <AdvisorList onPick={(pid) => { const row = q.data?.players.find((p) => p.id === pid); if (row && lock && !selKeys.has(pkey(pid))) togglePlayer(id, row) }} />
+        ) : (
         <Q q={q}>{() => (
           <>
             <PayrollBar p={q.data!.payroll} compact />
-            <ul>{q.data!.players.filter((p) => !selKeys.has(pkey(p.id))).map((p) => <Row key={p.id} p={p} maxV={maxV} disabled={!lock} onPick={() => togglePlayer(id, p)} />)}</ul>
+            <ul>{q.data!.players.filter((p) => !selKeys.has(pkey(p.id))).map((p) => <Row key={p.id} p={p} maxV={maxV} disabled={!lock} onPick={() => togglePlayer(id, p)} onTake={slot > 0 && open ? () => { setTake(p.id); setTimeout(() => document.getElementById('take-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) } : undefined} />)}</ul>
             {q.data!.picks.length > 0 && <div className="h2 px-2 pt-3">Draft picks</div>}
             <ul>{q.data!.picks.filter((k) => !selKeys.has(kkey({ year: k.year, round: k.round, original: k.original.id }))).map((k) => <PickRow key={kkey({ year: k.year, round: k.round, original: k.original.id })} k={k} maxV={maxV} disabled={!lock} onPick={() => togglePick(id, k)} />)}</ul>
           </>
         )}</Q>
+        )}
       </Card>
     )
   }
@@ -356,11 +395,13 @@ function TradeScreen() {
       {partners.length < Math.min(2, maxTeams - 1) && open && (
         <button className="btn mb-3" onClick={addThird}><Plus size={14} />Add a third team</button>
       )}
+      {partners.map((pid) => <NeedsPanel key={`needs-${pid}`} teamId={pid} />)}
+      {take !== null && open && <TakePanel key={take} playerId={take} disabled={exec.isPending} onClose={() => setTake(null)} onLoad={loadPackage} />}
       <LayoutGroup>
         <div className={`grid grid-cols-1 gap-4 ${ids.length > 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} ${open ? '' : 'pointer-events-none'}`} style={open ? undefined : { opacity: 0.85 }}>
           {ids.map((_, slot) => column(slot))}
         </div>
-        <div className="card my-4 p-3">
+        <div id="deal-card" className="card my-4 scroll-mt-28 p-3">
           <div className="min-h-[132px] rounded-lg border border-dashed border-line p-2">
             <div className="h2 mb-1 flex justify-between">
               <span>The deal</span>

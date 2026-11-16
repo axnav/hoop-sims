@@ -181,6 +181,15 @@ export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjurie
 export type AdminEdit = { age?: number; potential?: number; ratings?: Record<string, number>; heal?: boolean }
 export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
 export type TradeOfferIn = { team: number; give: number[]; get: number[] }
+export type TeamNeeds = { team: Team; direction: TeamStatus; values: string[]; lacks: string[]; summary: string }
+export type TakeAsset =
+  | { kind: 'player'; id: number; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; salary: number; years: number; value: number }
+  | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number }
+export type TakePackage = { label: string; give: TakeAsset[]; receive: TakeAsset[]; note: string; cost: number; cheapest: boolean; deal: { moves: DealMove[] } }
+export type WhatWouldItTake = { player: TradeAssetRow; team: Team; possible: boolean; reason: string; packages: TakePackage[] }
+export type Advice = 'keep' | 'shop' | 'sell'
+export type AdvisorRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; salary: number; years: number; advice: Advice; reasons: string[] }
+export type Advisor = { team: Team; direction: TeamStatus; players: AdvisorRow[]; summary: string }
 export type TradeVerdict = {
   valid: boolean; problem: string; accept: boolean; reason: string
   theyGive: number; theyGet: number; youGive: number; youGet: number; needed: number
@@ -294,6 +303,9 @@ export const api = {
   draftStep: (max = 1) => post<{ picks: Pick[]; state: GameState }>('/api/draft/step', { max }),
   tradeStatus: () => get<TradeStatus>('/api/trade/status'),
   tradeBlock: (id: number) => get<TradeBlockData>(`/api/trade/block/${id}`),
+  tradeNeeds: (id: number) => get<TeamNeeds>(`/api/trade/needs/${id}`),
+  whatWouldItTake: (id: number) => get<WhatWouldItTake>(`/api/trade/whatwouldittake/${id}`),
+  tradeAdvisor: () => get<Advisor>('/api/trade/advisor'),
   tradeEvaluate: (o: TradeOfferIn) => post<TradeVerdict>('/api/trade/evaluate', o),
   tradeCounter: (o: TradeOfferIn) =>
     post<{ found: false } | { found: true; give: number[]; get: number[]; verdict: TradeVerdict }>('/api/trade/counter', o),

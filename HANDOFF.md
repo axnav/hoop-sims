@@ -10,13 +10,13 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 - Player photos and avatars (real mode), what players want and contract extensions, training focus and learning speeds, automatic lineup starts the best five.
 - Badges in the style of a console basketball game (40 badges, five tiers), coaches with six team systems and roster fit (save version 4), weekly morale and trade requests with a player news list.
 - Release any time with dead money; trades on draft night with trade-up offers; player search (top bar and Players page).
-- **Work in progress when the session moved to a new window (2026-11-16): the trade assistant** (section 16 piece B) on branch `feat/trade-assistant`. A Sonnet helper in the old window was writing it and had NOT reported back; its files are uncommitted in the working tree (`engine/assistant.go`, `cmd/web/assistant.go`, `cmd/web/assistant_test.go`, edits to `cmd/web/main.go`, `ARCHITECTURE.md`, `web/src/api.ts`, `ui.tsx`, `PlayerDrawer.tsx`, `pages/Trade.tsx`, `pages/Players.tsx`). The branch's only commit so far is this handoff refresh. Next window: check `git status`; if the old helper may still be writing, wait or ask the owner; then review the code against the contract in section 16, finish what is missing, run `go vet ./... && go test ./... -count=1` and `cd web && npm run build`, do the browser pass on 8097 (needs panel, "What would it take?" package loaded and accepted, advisor chips, the Players/drawer entry point, 1400 and 390 px), merge locally, update this file.
+- Trade assistant (section 16 piece B) DONE and merged 2026-11-16: needs panel, "What would it take?" packages, Keep/Shop/Sell advisor.
 - Test changes the owner approved: `TestLongStability` drift 2.5, 90+ limit 20, FT% ceiling 81; `TestTeamBalance` allows one team-season outside 12-70 wins (hard limits 9-73).
 - Effects kept small for now (owner's choice): coach and fit, morale. Raise later in `CoachTuning`/`SystemTuning`/`MoraleTuning`.
 
-**Pushed:** `main` up to `2f8e965` (through coaches) on 2026-11-16. Later commits (morale, release, draft-night trades, search, documents) are local; push needs the owner's go-ahead.
+**Pushed:** `main` up to `2f8e965` (through coaches) on 2026-11-16. Later commits (morale, release, draft-night trades, search, trade assistant, documents) are local; push needs the owner's go-ahead.
 
-**Next:** finish the trade assistant (section 16), then ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), the two clear buttons in the phone search box.
+**Next:** ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small polish (two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams, tunable in `AdvisorTuning`).
 
 **Earlier (2026-11-14 to 2026-11-15):**
 - Progression arrows on every player list (last change, this season or last year) and per rating in the player drawer.
@@ -87,7 +87,7 @@ Everything below was built on 2026-11-14 unless noted. "Verified" means the main
 - **Blurred ceilings in real data** (`RealTuning.PotentialBlurSD` 4.0 in `engine/realdata.go`). Each real-data league gets its own noise on young players' potentials, so ceilings depend on the seed.
 - **Real-data mode** (older work, private). Builds the real 2010-11 league from `data/real/`. Verified: a full cycle ran cleanly on 2026-11-14.
 - **Screens** (React in `web/`). Dashboard, roster, lineup, trade, free agency, draft, offseason, injuries, settings, standings, playoff bracket, game viewer (2D and a lazy-loaded 3D court), history, Coach page, Players page (search).
-- **Added 2026-11-15 and 2026-11-16** (each verified in a browser pass on port 8097; details and what was not tried are in the update log): photos and avatars (`cmd/web/photos.go`); motivations, stances and extensions (`engine/motivation.go`); training focus (`engine/training.go`); best-five automatic lineup (`Team.Rotation`, `StarterSlots`); badges (`engine/badges.go`); coaches, systems, fit (`engine/coach.go`, `engine/system.go`); morale, trade requests, league events (`engine/morale.go`); release with dead money (`League.Release`, `Team.DeadMoney`); draft-night trades (`engine/drafttrade.go`); player search (`cmd/web/players.go`).
+- **Added 2026-11-15 and 2026-11-16** (each verified in a browser pass on port 8097; details and what was not tried are in the update log): photos and avatars (`cmd/web/photos.go`); motivations, stances and extensions (`engine/motivation.go`); training focus (`engine/training.go`); best-five automatic lineup (`Team.Rotation`, `StarterSlots`); badges (`engine/badges.go`); coaches, systems, fit (`engine/coach.go`, `engine/system.go`); morale, trade requests, league events (`engine/morale.go`); release with dead money (`League.Release`, `Team.DeadMoney`); draft-night trades (`engine/drafttrade.go`); player search (`cmd/web/players.go`); trade assistant (`engine/assistant.go`).
 
 ## 4. Decisions made and why
 
@@ -179,9 +179,7 @@ They replace any earlier conversation.
 Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
 and tell me the result.
 Then restate in two or three sentences what you understand the state to be (HANDOFF.md
-section 0). If the trade assistant (section 16 piece B, branch feat/trade-assistant)
-is not merged yet, finish and verify it first; then ask me what to build next
-(section 0 lists the open choices). Keep token use low: cheaper named models for
+section 0), then ask me what to build next (section 0 lists the open choices). Keep token use low: cheaper named models for
 helpers, scripts for long jobs, short answers.
 The owner is learning Go and may dictate by voice: use plain words, write the code for them.
 Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
@@ -307,6 +305,12 @@ Owner choices: (1) trades open during the draft, including this year's unused pi
 Pieces, in order (shared files): A. draft-night trades (`feat/draft-trades`); C. player search (owner asked 2026-11-16: no search existed; a search box in the top bar plus a Players page filtering every player in the league and free agency by name, team, position, age, overall, contract, badge, morale/trade request, sortable; `GET /api/players` with query parameters; prospects excluded, as their true values are secret); B. trade assistant (`feat/trade-assistant`), whose "What would it take?" can then start from a search result.
 
 ## Update log (newest first)
+
+### 2026-11-16, trade assistant (section 16 piece B)
+- Built by one Sonnet helper (engine, API, screens). `engine/assistant.go`: `NeedsOf` (direction, values: win-now veterans / young players / picks / cap relief over $160M; lacks: thin or weak positions and six skills ranked on top-3 rotation ratings and badges, at most 4), "What would it take?" (enumerates up to 3 user players plus 2 picks by cost to the user, the user's top two by value left out unless nothing else works, every package confirmed with the same evaluation `EvaluateDeal`/`ExecuteDeal` use; styles cheapest, players only, with picks, young, veterans; reasons when impossible), `AdvisorOf` (Keep/Shop/Sell from role, age vs direction, contract value, expiring and stance, morale/request, fit, minutes; young top-two cornerstone always Keep). Tunables `AssistTuning`, `AdvisorTuning`. Routes `GET /api/trade/needs/{teamId}`, `GET /api/trade/whatwouldittake/{playerId}` (each package carries a `deal` body for `/api/deal/evaluate|execute`), `GET /api/trade/advisor`. Screens: "What they want" panel and "What would it take?" on the Trade page with "Load this offer", Advisor tab, the action in the drawer and on Players rows (`/trade?team=&want=`), advice chip in the drawer.
+- Helper measurement: 305 of 312 players across 3 seeds had a package, all accepted; about 7 ms per player.
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 263 s), web build. Port 8097 seed 2 team 3: needs for team 9 (Buyer: win-now veterans; lacks power forward depth, playmaking), advisor 6 keep / 4 shop / 3 sell, a package executed through `/api/deal/execute` (200), `/trade?team=9&want=` shows the needs panel and a package at 1400 and 390 px, no console errors, no horizontal scroll, no impact key.
+- Worth knowing: the cheapest package can be many small pieces (raise `PieceCost`); packages can include players the advisor says Keep; the advisor marks many players Sell on rebuilding/seller teams (tunable). Helper also hid the value bar on partner rows below 700 px.
 
 ### 2026-11-16, handoff made a core rule; session moved to a new window
 - Owner: keeping `HANDOFF.md` current is a core principle for every session and window. Written as hard limit 6 in `RULES.md` section 1 (log plus sections 0, 3, 4, 7, 10 after every piece, decision, push, and before a session ends or moves; work in progress noted in section 0; a piece is not finished while the handoff is stale), section 11 points to it, and `CLAUDE.md` carries the short version.
