@@ -171,21 +171,64 @@ The owner is learning Go and often dictates by voice, so restate the request in 
 
 ## 10. Prompt to paste into a new session
 
+Updated 2026-11-16. Copy everything inside the block.
+
 ```
-You are taking over HoopSim, a Go basketball GM simulation in /Users/apple/Documents/sim.
-Read, in this order: CLAUDE.md, HANDOFF.md (state, decisions, problems, next steps),
-RULES.md (the rules), and ARCHITECTURE.md when you need to find or change code.
-They replace any earlier conversation.
-Start by running: export PATH="/usr/local/bin:$PATH"; go vet ./... && go test ./... -count=1
-and tell me the result.
-Then restate in two or three sentences what you understand the state to be (HANDOFF.md
-section 0), then ask me what to build next (section 0 lists the open choices). Keep token use low: cheaper named models for
-helpers, scripts for long jobs, short answers.
-The owner is learning Go and may dictate by voice: use plain words, write the code for them.
-Never touch port 8080 or saves/league.json; test on port 8097 with a scratch save.
-Never show the hidden Impact number or true prospect values; never commit data/real/.
-Do not commit or push unless the rules in RULES.md section 8 allow it.
-Report what you ran and saw separately from what a helper reported.
+You are taking over HoopSim, a Go basketball GM simulation (GM mode, simulation only) in
+/Users/apple/Documents/sim. Go standard library only in engine/ and cmd/; React +
+TypeScript + Vite + Tailwind + react-query in web/.
+
+1. Read, in this order: CLAUDE.md, HANDOFF.md (section 0 first: state, what is pushed,
+   work in progress, next choices; then sections 5, 7 and the newest update-log entries),
+   RULES.md (all of it; section 1 is the hard limits), and ARCHITECTURE.md when you need
+   to find or change code. These files replace any earlier conversation.
+2. Run: export PATH="/usr/local/bin:$PATH"; git status -sb; go vet ./... && go test ./... -count=1
+   (engine tests take 3 to 5 minutes now; run them in the background) and tell me the result.
+3. Restate in two or three sentences what you understand the state to be, then ask me
+   what to build next. Open choices (HANDOFF.md section 0): owner goals and team finances
+   (would give the luxury tax and dead money a real cost), a fuller news feed (League.Events
+   from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small
+   polish (two clear buttons in the phone search box; advisor marks many players Sell on
+   rebuilding teams). Ask simple either/or questions with a recommendation.
+
+What exists (all merged and pushed): photos/avatars (real mode), motivations, stances and
+extensions, training focus, best-five automatic lineup, 40 badges in five tiers, coaches
+with six systems and roster fit (save version 4), weekly morale and trade requests,
+release any time with dead money, draft-night trades with trade-up offers, player search,
+and a trade assistant (team needs, "What would it take?", Keep/Shop/Sell advisor).
+
+How we work (RULES.md sections 9 to 11):
+- The owner is learning Go and dictates by voice (expect misheard words, e.g. "hamdog.md"
+  means HANDOFF.md). Restate the request in plain words, write the code for them, keep
+  answers short.
+- Main session designs, briefs and reviews; helpers write code. Always give a helper a
+  named model (sonnet for code, haiku for searching/measuring), one layer only, one or two
+  at a time, and a brief naming the files it may edit, the exact JSON keys, the tests, and
+  "never change a test limit: if a stability test fails after two effect cuts, stop and
+  report". Write the JSON contract before the screens helper starts.
+- One feat/ branch per piece; checks once per finished piece; a browser pass on port 8097
+  with a scratch save and headless Chromium (Playwright from
+  /Users/apple/Documents/pluggy-frontend/node_modules/playwright, executablePath
+  ~/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-x64/chrome-headless-shell;
+  never download browsers); build the server with go build -o <scratch dir>/... ./cmd/web.
+- Commit and merge to main locally when correct (standing permission). Push only when I say.
+- New game effects are measured against the league average (badges, coaches, morale) so
+  league scoring stays put; measure with go run ./cmd/sim -mode sanity before and after.
+  TestTeamBalance and TestLongStability have thin margins: report numbers and ask me
+  before changing any limit.
+
+CORE RULE (RULES.md hard limit 6): HANDOFF.md is always current. After every finished
+piece, owner decision or push, and before a session ends or moves, update the update log
+AND sections 0, 3, 4, 7 and 10 where they changed; note work in progress (branch, done,
+left) in section 0; write it yourself and commit it with the piece. A piece is not
+finished while the handoff is stale.
+
+Hard limits: never touch port 8080 or saves/league.json (ask first); never show the
+hidden Impact number or true prospect values (checkNoImpact in cmd/web/api_test.go);
+never commit data/real/, saves/, web/dist, node_modules; randomness only through
+engine.RNG with a new stream offset per feature (next free 140000); saved-field changes
+follow RULES.md section 4 (SaveVersion is 4); ask before anything leaves the machine.
+Report what you ran and saw separately from what a helper reported, and what was not tried.
 ```
 
 ## 11. Reference: what a full console-style GM mode has that HoopSim lacks
@@ -305,6 +348,9 @@ Owner choices: (1) trades open during the draft, including this year's unused pi
 Pieces, in order (shared files): A. draft-night trades (`feat/draft-trades`); C. player search (owner asked 2026-11-16: no search existed; a search box in the top bar plus a Players page filtering every player in the league and free agency by name, team, position, age, overall, contract, badge, morale/trade request, sortable; `GET /api/players` with query parameters; prospects excluded, as their true values are secret); B. trade assistant (`feat/trade-assistant`), whose "What would it take?" can then start from a search result.
 
 ## Update log (newest first)
+
+### 2026-11-16, detailed restart prompt
+- Owner asked for a detailed prompt for the next session: section 10 rewritten (reading order, first checks, open choices, what exists, how we work, the core handoff rule, hard limits, browser test setup, next free stream 140000).
 
 ### 2026-11-16, pushed again
 - Owner said "push it": `main` pushed to origin, 86655a4..88df2fd (morale, release, draft-night trades, search, trade assistant, handoff and rules). Checked first that no private folders are tracked.
