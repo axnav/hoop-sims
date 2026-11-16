@@ -244,3 +244,30 @@ func TestFindOffersSpeed(t *testing.T) {
 		}
 	}
 }
+
+// The work FindOffers does is counted, not timed, so a slowdown (for example
+// full deal checks or salary checks running away) is caught on any machine.
+func TestFindOffersWorkBounded(t *testing.T) {
+	lg := realSalaryLeague(1)
+	ps := userBest(lg)
+	teams := len(lg.Teams) - 1
+	for _, want := range finderWantKeys {
+		give := append([]Asset{PlayerOf(ps[0].ID), PlayerOf(ps[1].ID), PlayerOf(ps[2].ID)}, someUserPicks(lg, 2)...)
+		finderEvals, finderSalaryChecks = 0, 0
+		if _, err := lg.FindOffers(give, want); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%s: %d full checks, %d salary checks", want, finderEvals, finderSalaryChecks)
+		if finderEvals > teams*FinderTuning.MaxTries {
+			t.Fatalf("%s: %d full deal checks, more than %d teams times %d", want, finderEvals, teams, FinderTuning.MaxTries)
+		}
+		if finderSalaryChecks > teams*FinderTuning.MaxSalaryChecks {
+			t.Fatalf("%s: %d salary checks, more than %d teams times %d", want, finderSalaryChecks, teams, FinderTuning.MaxSalaryChecks)
+		}
+		// Typical numbers are far below the cap on full checks (cap relief may
+		// legitimately use every salary check).
+		if finderEvals > teams*FinderTuning.MaxTries/2 {
+			t.Fatalf("%s: finder work grew: %d full checks", want, finderEvals)
+		}
+	}
+}

@@ -111,6 +111,18 @@ type finderCombo struct {
 	salaryIn int
 }
 
+// finderKey is a sort key for one combo: its score and its index.
+type finderKey struct {
+	score float64
+	idx   int
+}
+
+// finderScratch holds buffers reused from team to team within one FindOffers call.
+type finderScratch struct {
+	combos []finderCombo
+	keys   []finderKey
+}
+
 // FindOffers asks every computer team what it would give for the user's assets.
 // want is one of the keys of FindWants. An error is for an unknown want or an
 // asset that does not exist or is not the user's; every other refusal is
@@ -181,11 +193,12 @@ func (lg *League) FindOffers(give []Asset, want string) (FindResult, error) {
 	}
 	giveSalary := sumSalary(givePlayers)
 
+	var sc finderScratch
 	for tid := range lg.Teams {
 		if tid == user {
 			continue
 		}
-		offer, why := lg.findForTeam(tid, give, givePlayers, giveSalary, res.GiveValue, want, cf)
+		offer, why := lg.findForTeam(tid, give, givePlayers, giveSalary, res.GiveValue, want, cf, &sc)
 		if offer == nil {
 			res.Passed = append(res.Passed, FindPass{tid, why})
 			continue
@@ -212,7 +225,7 @@ func (lg *League) FindOffers(give []Asset, want string) (FindResult, error) {
 }
 
 // findForTeam returns the best accepted package of team tid, or the reason there is none.
-func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, giveSalary int, giveValue float64, want string, cf []float64) (*FindOffer, string) {
+func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, giveSalary int, giveValue float64, want string, cf []float64, sc *finderScratch) (*FindOffer, string) {
 	user := lg.UserTeamID
 	t := &FinderTuning
 	un := lg.untouchables(tid, cf)
@@ -290,7 +303,7 @@ func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, give
 	relief := want == "relief"
 	young := want == "young"
 	baseNeed, coreNeed := 1+TradeMargin, 1+UntouchableMargin
-	var combos []finderCombo
+	combos := sc.combos[:0]
 	valueOK := false
 	for _, ps := range playerSets {
 		var pm, pt float64
@@ -352,13 +365,57 @@ func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, give
 		}
 		return nil, "Nothing to offer that is worth enough to you."
 	}
-	sort.SliceStable(combos, func(i, j int) bool { return combos[i].score > combos[j].score })
+	// Sort small (score, index) keys instead of the big combos; the index as
+	// tie-break gives the same order as a stable sort, much faster.
+	keys := sc.keys[:0]
+	if cap(keys) < len(combos) {
+		keys = make([]finderKey, 0, len(combos))
+	}
+	keys = keys[:len(combos)]
+	for i := range combos {
+		keys[i] = finderKey{combos[i].score, i}
+	}
+	// A heap of the keys: building it is cheap and only the few best combos
+	// are ever taken out, so the whole list is never sorted.
+	less := func(a, b finderKey) bool {
+		if a.score != b.score {
+			return a.score > b.score
+		}
+		return a.idx < b.idx
+	}
+	down := func(h []finderKey, i int) {
+		for {
+			l := 2*i + 1
+			if l >= len(h) {
+				return
+			}
+			if r := l + 1; r < len(h) && less(h[r], h[l]) {
+				l = r
+			}
+			if !less(h[l], h[i]) {
+				return
+			}
+			h[i], h[l] = h[l], h[i]
+			i = l
+		}
+	}
+	for i := len(keys)/2 - 1; i >= 0; i-- {
+		down(keys, i)
+	}
+	heapKeys := keys
 
+	sc.combos, sc.keys = combos, keys // keep the buffers for the next team
+	userPay, teamPay := lg.Payroll(user), lg.Payroll(tid)
 	salaryFail, tries := false, 0
-	for ci, c := range combos {
+	for ci := 0; len(heapKeys) > 0; ci++ {
 		if ci >= t.MaxSalaryChecks || tries >= t.MaxTries {
 			break
 		}
+		c := combos[heapKeys[0].idx] // the best remaining combo
+		last := len(heapKeys) - 1
+		heapKeys[0] = heapKeys[last]
+		heapKeys = heapKeys[:last]
+		down(heapKeys, 0)
 		var out []*Player
 		var recv []Asset
 		for _, i := range c.ps[:c.np] {
@@ -368,11 +425,13 @@ func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, give
 		for _, i := range c.ks[:c.nk] {
 			recv = append(recv, pool[i].a)
 		}
-		if lg.salaryProblem(user, givePlayers, out) != nil || lg.salaryProblem(tid, out, givePlayers) != nil {
+		finderSalaryChecks++
+		if !salaryFits(userPay, givePlayers, out) || !salaryFits(teamPay, out, givePlayers) {
 			salaryFail = true
 			continue
 		}
 		tries++
+		finderEvals++
 		offer := FindOffer{Team: tid, Receive: recv}
 		if v := evaluateDealBase(lg, offer.Deal(user, give), user); !v.Valid || !v.Accept {
 			continue
@@ -387,6 +446,27 @@ func (lg *League) findForTeam(tid int, give []Asset, givePlayers []*Player, give
 		return nil, "Cannot match the salaries."
 	}
 	return nil, "Does not value your offer enough."
+}
+
+// finderEvals and finderSalaryChecks count the full deal evaluations and salary checks made by FindOffers (read by a test
+// that guards against a slowdown on any machine; the finder is single-threaded per call).
+var finderEvals, finderSalaryChecks int
+
+// salaryFits is salaryProblem(tid, out, in) == nil without building the message;
+// payroll is Payroll(tid), taken once per team by the caller.
+func salaryFits(payroll int, out, in []*Player) bool {
+	var o, i int
+	for _, p := range out {
+		o += p.Contract.counted()
+	}
+	for _, p := range in {
+		i += p.Contract.counted()
+	}
+	after := payroll - o + i
+	if after > Cap.HardCeiling {
+		return false
+	}
+	return after <= Cap.SalaryCap || i <= o*Cap.TradeMatchPct/100+Cap.TradeMatchExtra
 }
 
 // findNote is one plain sentence about why the team makes this offer.

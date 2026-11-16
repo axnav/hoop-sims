@@ -30,9 +30,9 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 - Owner goals and finances (section 18), merged locally 2026-11-17, not pushed: every team has an owner with a personality (win-now, patient, cheap) and a market size; the user's team gets a payroll budget, a revenue/costs/profit statement (luxury tax and dead money now cost profit), three goals a season (results, money, building), a trust meter, and is let go at zero at the start of the offseason, choosing one of three teams that are hiring. Owner page (`/owner`), `FiredDialog`, Dashboard card, budget mark on the payroll bar, Settings switch "Owner can let you go". Computer teams and game results unchanged. `engine/owner.go`, stream 140000 (next free 150000), `Options.NoFiring`, `cmd/sim -mode owner`.
 
-**Not pushed:** `main` is ahead of origin by the assistant tuning and owner goals and finances.
+**Not pushed:** `main` is ahead of origin by the assistant tuning, owner goals and finances, and the trade finder speed fix.
 
-**Next:** ask the owner. Small fix already promised: make the trade finder's cap-relief search faster so `TestFindOffersSpeed` stops failing when the machine is busy (limit stays at 1 s unless the owner says otherwise). Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
+**Next:** ask the owner. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
 **Owner, 2026-11-17: wants HoopSim on a CV and a detailed walk-through of the code; said "finish and merge both first, then start the walk-through".** Later the same day the owner said "walk-through later": it waits until the owner asks for it; session 1 text was shown once but not answered. Advice given: describe it truthfully (designed and directed, built with AI assistants) and learn it well enough to explain and change it. Six short sessions, each ending with a few lines the owner writes (use the Learning output style's "Learn by Doing" requests): 1 big picture and request flow; 2 Go basics through `player.go` and `rng.go`; 3 one game in `game.go` and determinism; 4 release with dead money end to end; 5 tests and tuning; 6 trades and the assistant. Then CV bullets and a README in the owner's words. Style (sessions with typing, or a written guide first) not yet answered. Sessions done so far: none.
 
@@ -414,6 +414,12 @@ Owner's choices are in section 4. This is the piece that gives the luxury tax an
 - Split: helper 1 engine + API (contract written first by the main session), helper 2 screens.
 
 ## Update log (newest first)
+
+### 2026-11-17, trade finder cap-relief search made faster
+- `TestFindOffersSpeed` (1 s per filter) had failed three times on a busy machine (relief 1.9 to 4.5 s; 0.34 s alone). One Sonnet helper profiled it: for the test's selection every relief candidate fails the salary rules, so each of 29 teams spent its whole budget of 4000 salary checks, each building an error sentence and recomputing payroll, after a stable sort of about 17,000 packages per team. Fix in `engine/finder.go`: `salaryFits` (the same test as `salaryProblem` without the message, payrolls computed once per team), a heap of (score, index) keys instead of the full sort (same order), buffers reused across teams. `FinderTuning` and the speed test are unchanged; the limit was not touched.
+- New test `TestFindOffersWorkBounded` counts full deal checks and salary checks per call instead of time (any: 94 full checks, relief: 0 full and 116,000 salary checks).
+- Helper reported: offers byte-identical before and after over seeds 1 to 3, user teams 0 and 3, six selections, all five filters (5,400 lines compared); full `go vet` and `go test ./... -count=1` pass (engine 251 s).
+- Verified by the main session: `go vet ./...`; the finder and assistant engine tests pass; relief 57 ms and any 17 ms in the speed test. The full suite was not re-run by the main session after this change (engine-only change inside `finder.go`).
 
 ### 2026-11-17, owner goals and finances (section 18)
 - Built by two Sonnet helpers (engine + API, then screens), with a second engine round after the main session's browser run. Owner's four choices are in section 4.
