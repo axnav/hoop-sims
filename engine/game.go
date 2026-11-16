@@ -97,13 +97,27 @@ type side struct {
 	home             bool
 	rec              *recorder
 	bd               *sideBadges
+	// From the coach and the system (coach.go, system.go); all zero or the
+	// plain constants without a league.
+	teamAdd float64 // make-chance nudge: coach Offense and team fit, against the league mean
+	pace    float64 // possessions added by the system
+	threeWt float64 // weight of three-point shots in the shot-kind choice
 }
 
 // newSide precomputes a team's weights and badge effects for one game. lg may
 // be nil (no personality badges).
 func newSide(lg *League, t *Team, home bool) *side {
-	s := &side{box: &TeamBox{Team: t}, home: home}
+	s := &side{box: &TeamBox{Team: t}, home: home, threeWt: threeShotWt}
 	pms := t.EffectiveMinutes()
+	exp := shootExp
+	var sys *System
+	var sets []BadgeSet
+	if lg != nil {
+		sys = t.systemOf()
+		exp += sys.StarExp
+		s.threeWt = threeShotWt * sys.ThreeMult
+		sets = make([]BadgeSet, 0, len(pms))
+	}
 	s.bd = newSideBadges(len(pms))
 	var totMin, def, reb float64
 	var means *badgeMeans
@@ -118,7 +132,9 @@ func newSide(lg *League, t *Team, home bool) *side {
 	for i, pm := range pms {
 		p, m := pm.Player, pm.Min
 		if lg != nil {
-			s.bd.add(lg.badgeSet(p), means, i, float64(m), teamMin)
+			bs := lg.badgeSet(p)
+			sets = append(sets, bs)
+			s.bd.add(bs, means, i, float64(m), teamMin)
 		}
 		s.box.Lines = append(s.box.Lines, &StatLine{Player: p, Min: m})
 		rt := p.Effective()
@@ -131,7 +147,7 @@ func newSide(lg *League, t *Team, home bool) *side {
 		scoring := (float64(top) + float64(second)) / 2
 		fm := float64(m)
 		usageWeight := 0.8 + float64(p.ShotUsage())/250
-		s.shootW = append(s.shootW, fm*math.Pow(scoring, shootExp)*usageWeight*s.bd.usage[i])
+		s.shootW = append(s.shootW, fm*math.Pow(scoring, exp)*usageWeight*s.bd.usage[i])
 		pm := float64(rt.Playmaking)
 		s.astW = append(s.astW, fm*math.Pow(pm, 2.5)*s.bd.astMult[i])
 		rb := float64(rt.Rebounding)
@@ -144,6 +160,7 @@ func newSide(lg *League, t *Team, home bool) *side {
 	s.rebound = reb / totMin
 	if lg != nil {
 		s.bd.finish(means)
+		s.applyCoach(lg, t, sys, pms, sets)
 	}
 	return s
 }
@@ -171,7 +188,7 @@ func (lg *League) SimGameRec(r *RNG, home, away *Team, record bool) *GameResult 
 		rc = &recorder{h: h, a: a}
 		h.rec, a.rec = rc, rc
 	}
-	n := int(r.Normal(possMean+h.bd.paceT+a.bd.paceT, possSD))
+	n := int(r.Normal(possMean+h.bd.paceT+a.bd.paceT+h.pace+a.pace, possSD))
 	for i := 0; i < n; i++ {
 		if rc != nil {
 			rc.per, rc.clk = rc.clk0(2*i, 2*n)
@@ -235,7 +252,7 @@ func possession(r *RNG, off, def *side, clutch bool) {
 		}
 
 		in, mid, three := float64(rt.Inside), float64(rt.Mid), float64(rt.Three)
-		kind := r.PickWeighted([]float64{in * in, mid * mid * midShotWeight, three * three * threeShotWt})
+		kind := r.PickWeighted([]float64{in * in, mid * mid * midShotWeight, three * three * off.threeWt})
 
 		if kind == 0 && r.Chance(foulChance+off.bd.foulAdd[si]-def.bd.foulT) {
 			p := ftBase + (mid-60)*0.004 + off.bd.ftAdd[si]
@@ -268,7 +285,7 @@ func possession(r *RNG, off, def *side, clutch bool) {
 		if off.home {
 			p += homeEdge
 		}
-		p += off.bd.kind[si][kind] + off.bd.leader
+		p += off.bd.kind[si][kind] + off.bd.leader + off.teamAdd
 		if clutch {
 			p += off.bd.clutch[si]
 		}

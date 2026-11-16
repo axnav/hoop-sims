@@ -95,7 +95,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 		if ps := lg.Season.statsFor(p.ID); ps != nil {
 			mpg = float64(ps.Min) / SeasonGames
 		}
-		p.ProgressMentored(r, mpg, lg.growthWeights(p), lg.growthMult(p, mentors))
+		p.ProgressMentored(r, mpg, lg.growthWeights(p), lg.growthMult(p, mentors)*lg.devMult(p.TeamID))
 	}
 
 	// Retirement.
@@ -164,6 +164,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	lg.Draft = &Draft{Pool: pool, Order: o1, Order2: order, Lottery: lot, Total: c.DraftSize}
 	lg.initScouting(lg.Draft)
 	lg.Report = rep
+	lg.openCoachPool()
 	return rep
 }
 
@@ -295,6 +296,7 @@ func (lg *League) finishOffseason(matchUser bool) {
 	}
 
 	lg.autoFocusTeams()
+	lg.finishCoaches()
 	lg.clearOffseasonInjuries()
 	lg.Year++
 	lg.SimAITrades(NewRNG(lg.Seed*1000003 + uint64(lg.Year)*10007 + tradeOffset))

@@ -59,6 +59,7 @@ func (s *server) lineupObj() M {
 		if st := lg.Season.Stats[p.ID]; st != nil && st.GP > 0 {
 			row["gp"], row["mpg"] = st.GP, float64(st.Min)/float64(st.GP)
 		}
+		row["fit"] = fitObj(lg.PlayerFit(t, p).Score)
 		addInjury(row, p)
 		addDev(row, p)
 		s.addPhoto(row, p)
@@ -66,7 +67,7 @@ func (s *server) lineupObj() M {
 	}
 	return M{"custom": custom, "total": engine.TeamMinutes, "maxMinutes": engine.MaxPlayerMinutes,
 		"minPlayers": engine.MinLineupPlayers, "slots": []string{"PG", "SG", "SF", "PF", "C"},
-		"starters": cur.Starters[:],
+		"starters": cur.Starters[:], "teamFit": fitObj(lg.TeamFit(t)),
 		"dev": M{"maxAge": engine.Progression.MinutesDevMaxAge, "fullMinutes": engine.Progression.MinutesDevFull,
 			"noneMinutes": engine.Progression.MinutesDevNone},
 		"players": rows}

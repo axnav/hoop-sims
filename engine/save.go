@@ -12,7 +12,7 @@ const SavePath = "saves/league.json"
 
 // SaveVersion is the current save format. Bump it and append one step to
 // saveUpgrades whenever a saved field is added or changes meaning.
-const SaveVersion = 3
+const SaveVersion = 4
 
 // saveUpgrades[i] upgrades a league from version i to version i+1.
 var saveUpgrades = []func(*League){
@@ -39,6 +39,9 @@ var saveUpgrades = []func(*League){
 		}
 		lg.assignInitialContracts()
 	},
+	// 3 -> 4: coaches and systems; give every team a generated coach (the
+	// system stays "", the coach's favourite).
+	func(lg *League) { lg.initCoaches() },
 }
 
 // Save writes the whole league as JSON, creating the folder if needed.

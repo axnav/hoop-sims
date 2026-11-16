@@ -88,7 +88,7 @@ func (lg *League) inSeasonDev(step int) {
 		if s < 0 {
 			sign = -1
 		} else {
-			s *= lg.growthMult(p, mentors)
+			s *= lg.growthMult(p, mentors) * lg.devMult(p.TeamID)
 		}
 		// Growth is split over the ratings by training weights (training.go),
 		// total unchanged; a loss is spread equally.

@@ -124,6 +124,7 @@ export function TopBar() {
         {link('/', 'Dashboard')}
         {link(`/team/${u.team.id}`, 'Roster', s.injured, true, s.expiring)}
         {link('/lineup', 'Lineup')}
+        {link('/coach', 'Coach')}
         {link('/standings', 'Standings')}
         {link('/teams', 'Teams')}
         {link('/leaders', 'Leaders')}

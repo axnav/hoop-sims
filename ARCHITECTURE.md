@@ -169,6 +169,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | `progression.go` | Yearly development, retirement, rookie generation | `Player.Progress`, `ProgressMinutes`, `RetireChance`, `TrueCeiling`, `MinutesAdjust`, `GenerateRookie` | `Progression` (also roster and draft sizes, `FreeAgentPool`) |
 | `training.go` | Training focus (`Player.Focus`, saved, omitempty) and learning speeds (`Aptitude`, hashed, offset 90001, nothing saved). Every growth step is split over the ratings by weight = focus x speed x age window, then scaled so total positive growth is unchanged (`reweightGrowth`); decline untouched. Computer teams pick a focus at the end of each offseason (`autoFocus`). `ProgressWeighted` is `ProgressMinutes` with weights (nil = equal) | `Focus`, `FocusFromKey`, `AllFocuses`, `Aptitude`, `AptitudeLabel`, `SetFocus`, `TrainingView` | `TrainingTuning`, `Progression.GrowthWindowClose` |
 | `badges.go` (+ generated `badge_thresholds.go`) | 40 badges in the style of a console basketball game: 37 skill badges (six groups, five tiers Bronze/Silver/Gold/Hall of Fame/Legend) and three personality badges (Leader, Mentor, Star, no tier, hashed stream 100000). A skill badge has a rating formula (single rating, the lower of two, or a weighted blend of the seven ratings and shot-taking tendency), five thresholds and a highest tier by primary position (`limit`, stand-in for height); nothing is saved for rating tiers. Last season's stats can lift one badge one tier (`perfRules`, 8 rules; `awardPerfBadges` at season end saves `Player.PerfBadges` as key to 1, omitempty, no version bump; never above the position limit). Each badge feeds one hook (`hookDefs`: rim/mid/three make chance, free throws, fouls drawn, turnovers, assister weight, shot share, clutch, team assist chance, defense, rim defense, steals, offensive and defensive rebounds, pace, fouls avoided) with a share. Per player and hook: points = sum of tier x share, raised to `BadgeTuning.Power`; effect = Scale x (points - league mean), clamped by `Cap`. The league mean (`badgeMeansNow`, cached in the unexported `League.bmeans`, cleared at the start of each `SimDay` and playoff day, never saved) is weighted by who actually uses the hook (shot share, shot-kind share, assist share, minutes for team hooks), so an average badge load plays exactly as before. Team hooks are the minutes-weighted average of the players' effects. Clutch Shooter and Iron Will only act in the last 12% of regulation or overtime with the score within 5 (`lateAndClose`). Leader is centred on the league's average Leader minutes share; Star multiplies shot share. Draft prospects have none (`IsProspect`). `League.SimGame`/`SimGameRec` know the league; plain `SimGame` has no badge effects. Mentor: teammates 24 and under grow 5% faster (`growthMult`; `BeginOffseason` via `ProgressMentored`, and `inSeasonDev`; one Mentor is enough). Web: `cmd/web/badges.go` (`badges` with `next` on the player page, `badgeCount` on rows via `addPhoto`, `GET /api/badges`, `?badge=` on Leaders) | `Tier`, `BadgesOf`, `BadgeCount`, `HasBadge`, `BadgeCatalogue`, `ValidBadgeKey`, `IsProspect`, `League.SimGame` | `BadgeTuning`, `badgeSpecs`, `badgeThresholds`, `perfRules`, `cmd/sim -mode badges` |
+| `coach.go`, `system.go` | Coaches, systems and roster fit (piece 3). `Coach{ID, Name, Age, Offense, Defense, Development, System}` (fictional names in both modes, no salary) is saved as `Team.Coach` (nil = no coach effects, so hand-built test teams are unchanged); `Team.System` (saved, omitempty, "" = the coach's favourite) is the system the team runs; `League.CoachPool` (saved, omitempty) holds the offseason candidates. Six systems of our own (`Systems`: balanced, pace_space, run_gun, inside_out, star_led, defense_first), each with shifts (pace, three-point weight multiplier, star shot exponent, team defense; trade-offs, tuned so one team on any system stays within about 0.6 points of Balanced per game) and wanted ratings plus badge keys. Fit: per player 0-100 from the wanted ratings (0-60) and wanted badge tiers (0-40, `SystemTuning`), plus a per-system `Bias` that evens out how easy each system is; grades A/B/C/D; up to three reasons (`System.FitFor`). Team fit = minutes-weighted average over players with minutes, minus `CoachTuning.FavouritePenalty` (8) when the team does not run its coach's favourite (`Team.teamFit`). Game effects are computed once per game in `newSide` (`side.applyCoach`) and measured against league means (`coachMeansNow`, cached in the unexported `League.cmeans` beside `bmeans`, never saved): team make chance = FitScale x (team fit - mean) + OffScale x (coach Offense - mean); team defense = DefScale x (coach Defense - mean) + the system's shift; pace, three weight and star exponent come from the system. Plain `SimGame` (no league) ignores coaches and systems. Development: growth steps are multiplied by `devMult` (1 +- 8% at 25 points from the league mean; called beside `growthMult` in `BeginOffseason` and `inSeasonDev`). Offseason: `BeginOffseason` calls `openCoachPool` (12 candidates); `HireCoach` (user only, only while the pool is open; the old coach is gone, the new one runs his favourite); `FinishOffseason` calls `finishCoaches`: computer teams whose coach averages below 60 replace him from the pool (60% chance after a 35-win season or worse, 15% otherwise, only for a clearly better candidate), every computer team then picks its system (`chooseSystem`: the favourite unless another beats it by 5 fit points), and the pool is emptied. Web: `cmd/web/coach.go` | `Coach`, `Systems`, `SystemByKey`, `ValidSystemKey`, `GradeOf`, `League.TeamFit`, `TeamFitUnder`, `PlayerFit`, `PlayerFitUnder`, `BestSystem`, `SetSystem`, `HireCoach`, `CoachPoolOpen`, `Team.CurrentSystem`, `Team.OnFavourite` | `CoachTuning`, `SystemTuning`, `Systems`, `cmd/sim -mode coaches` |
 | `inseason.go` | In-season development: after days 16, 32, 48 and 64 `SimDay` calls `inSeasonDev`, which gives every player a small step (half of the expected yearly trend over the four steps). The steps are an advance: `ProgressMinutes` starts from the season-start overall and subtracts the in-season gain, so the yearly total keeps its average. `expectedTrend` is the one copy of the yearly formula | `DevLine`, `DevChangesLastDay` | `Progression.InSeason...`; switch `Options.NoInSeasonDev` |
 
 ### Saving
@@ -217,7 +218,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### Team
 
-`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `TaxPaid` (luxury tax by season year), `Lineup` (nil means the automatic rotation), and `ExceptionYear` (the league year in whose offseason the mid-level exception was used; 0 means never).
+`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `TaxPaid` (luxury tax by season year), `Lineup` (nil means the automatic rotation), `ExceptionYear` (the league year in whose offseason the mid-level exception was used; 0 means never), `Coach` (`*Coach`, nil = no coach effects; see `coach.go`) and `System` (key of the system the team runs; empty = the coach's favourite). `League.CoachPool` holds the coach candidates during the offseason only.
 
 ### Player
 
@@ -350,6 +351,9 @@ Streams in the code today:
 | 90000 | Hashed stream per player (seed, 90000, player ID; no year, so a player keeps his motivations) | `MotivationOf` |
 | 90001 | Hashed stream per player for learning speeds (seed, 90001, player ID) | `Aptitude` |
 | 100000 | Hashed stream per player for personality badges (seed, 100000, player ID; three draws: Leader, Mentor, Star) | `personality` |
+| 110000 | Coaches: hashed per team at league creation and in the 3-to-4 upgrade (seed, 110000, 0, team ID: name, age, three ratings, favourite system); `dayRNG(year, 110001 + n)` for offseason candidate n; `dayRNG(year, 110050)` for the computer teams' replacement chances | `initCoaches`, `openCoachPool`, `finishCoaches` |
+
+Next free offset: 120000.
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 
@@ -357,13 +361,14 @@ The hashed streams (`mix64`) are built from the seed, year, offset and ids, so t
 
 `League.Save(path)` stamps `Version = SaveVersion`, prunes each team's lineup, marshals the whole league with `encoding/json`, creates the folder if needed, writes `path + ".tmp"` and renames it over the target (so a crash does not leave a half-written save). There is one save file; the web server uses `saves/league.json` unless `-save` says otherwise.
 
-`SaveVersion` is currently 3. `saveUpgrades[i]` upgrades a league from version `i` to `i+1`:
+`SaveVersion` is currently 4. `saveUpgrades[i]` upgrades a league from version `i` to `i+1`:
 
 | Step | What it does |
 |---|---|
 | 0 to 1 | Saves from before versioning: makes sure `Careers` exists |
 | 1 to 2 | Draft picks became owned objects: if `Picks` is empty, gives every team its own picks (`initPicks`) |
 | 2 to 3 | Contracts and the cap arrived: if nobody has a contract, assigns market-salary contracts (`assignInitialContracts`) |
+| 3 to 4 | Coaches and systems arrived: every team gets a generated coach (`initCoaches`, deterministic from the seed and team ID); `Team.System` stays empty (the coach's favourite) |
 
 `Load` reads the file and then:
 
@@ -392,7 +397,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/leaders` | Top 10 in points, rebounds, assists; optional `?badge=<key>` keeps only players with that badge (unknown key: 400) | `leaders` (league.go) |
 | GET | `/api/badges` | Badge catalogue `{badges:[{key,name,group,kind,rule,effect}]}` | `badgeCatalogue` (badges.go) |
 | GET | `/api/teams` | All 30 teams: record, rank, payroll, cap room, top-8 average, best player, status, pending offers | `teamsList` (teams.go) |
-| GET | `/api/team/{id}` | A team's roster, record, payroll | `teamPage` (league.go) |
+| GET | `/api/team/{id}` | A team's roster, record, payroll, `coach` (name, system in use) and `teamFit` | `teamPage` (league.go) |
 | GET | `/api/player/{id}` | A player's page (prospects get ranges only; others get `badges`) | `player` (league.go) |
 | GET | `/api/schedule` | A team's games; `?team=` (default user) | `schedule` (league.go) |
 | GET | `/api/box/{id}` | A box score (`last` or a playoff game id) | `box` (league.go) |
@@ -425,6 +430,10 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/lineup` | The user's lineup and minutes | `lineupGet` (lineup.go) |
 | POST | `/api/lineup` | Set starters and minutes | `lineupSet` (lineup.go) |
 | POST | `/api/lineup/auto` | Clear the custom lineup | `lineupAuto` (lineup.go) |
+| GET | `/api/coach/{teamId}` | A team's coach, the system in use, `systems` (with this team's fit under each), `teamFit`, `players` (fit with score, grade and up to three reasons, by minutes); `canChangeSystem`, `canHire` and `editable` are true only for the user's team | `coachGet` (coach.go) |
+| POST | `/api/coach/system` | Body `{system}`: change the user's system any time (400 unknown key) | `coachSetSystem` (coach.go) |
+| GET | `/api/coach/pool` | `{open, candidates:[{id,name,age,offense,defense,development,system,systemName}]}`; open only in the offseason | `coachPool` (coach.go) |
+| POST | `/api/coach/hire` | Body `{id}`: fire the user's coach and hire the candidate (409 outside the offseason or for an unknown id) | `coachHire` (coach.go) |
 | GET | `/api/injuries` | Injury report; `?team=` an id or `all` (default user) | `injuries` (admin.go) |
 | GET | `/api/contracts/expiring` | The user's expiring players and their asks | `expiring` (contracts.go) |
 | GET | `/api/contracts/extension/{id}` | Extension ask for one of the user's players: `{ok:true, salary, maxSalary, maxYears, current}` or `{ok:false, reason}` (200 both ways) | `extensionAsk` (motivation.go) |
@@ -513,6 +522,7 @@ Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have
 | `engine/negotiate_test.go` | Asks, proposals generated, accept, reject and drop, proposals leave game results alone, deadline pause |
 | `engine/injury_test.go` | Determinism with and without injuries, sitting and healing, rates, serious injuries, offseason clearing, saving |
 | `engine/lineup_test.go` | Automatic minutes, custom lineup rules and effect, injured starter, departed player, saving, minutes-based development |
+| `engine/coach_test.go` | Coach determinism, the version 3 save upgrade, fit grades and reasons, the off-favourite penalty, centred effects, system shifts, offseason-only hiring, computer teams replacing weak coaches, system choice |
 | `engine/commissioner_test.go` | Player editing |
 | `engine/realdata_test.go` | Real league shape, determinism, potential blur (skipped without data) |
 | `cmd/web/api_test.go` | The API end to end through the handlers: a full flow, hidden number never present, real conferences, trades and deals, negotiation, offers, injuries and commissioner, contracts, free agency, lineup, lottery and scouting, prospect secrecy, scouting points running out |
