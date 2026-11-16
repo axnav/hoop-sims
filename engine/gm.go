@@ -279,6 +279,9 @@ func (lg *League) gmLog(area, text string, auto bool) {
 type gmCand struct {
 	s  GMSuggestion
 	do func() (string, error)
+	// manual marks a step auto mode never takes by itself (owner 2026-11-17:
+	// a release always needs the owner's click).
+	manual bool
 }
 
 func yearsText(n int) string {
@@ -989,6 +992,7 @@ func (lg *League) gmFreeAgency() []gmCand {
 			cutID = cut.ID
 		}
 		out = append(out, gmCand{
+			manual: cut != nil,
 			s: GMSuggestion{ID: fmt.Sprintf("fa:%d", p.ID), Area: GMAreaFreeAgency,
 				Title: title, Reasons: reasons, Action: action, PlayerID: p.ID, Link: "/free-agency"},
 			do: func() (string, error) {
@@ -1405,7 +1409,7 @@ func (lg *League) gmAutoRun(area string, prefixes ...string) int {
 			for _, p := range prefixes {
 				ok = ok || strings.HasPrefix(c.s.ID, p)
 			}
-			if !ok {
+			if !ok || c.manual {
 				continue
 			}
 			msg, err := c.do()

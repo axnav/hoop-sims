@@ -625,8 +625,10 @@ func autoNoAlerts() GMAuto {
 }
 
 // The browser case: fictional league seed 2, user team 3, plan balanced, every
-// switch on. Before the fix the roster was full (13 or more) at every free
-// agency day, so the assistant made no offers at all in the first summers.
+// switch on. The roster is full (13 or more) in the first summers, so auto
+// mode has no open spot to bid into. Owner's rule (2026-11-17): auto mode never
+// releases a player, so there the "release and offer" idea must be shown for
+// the owner to click, and the automatic offers come once spots are open.
 func TestGMAutoFreeAgencyMakesOffersAndSigns(t *testing.T) {
 	lg := gmTeamLeague(2, 3)
 	lg.SetGMPlan("balanced")
@@ -648,6 +650,9 @@ func TestGMAutoFreeAgencyMakesOffersAndSigns(t *testing.T) {
 			for _, s := range lg.GMSuggestions() {
 				if s.Area == GMAreaFreeAgency {
 					sawSuggestion = true
+					if y < 3 && s.Action == "Release and offer" {
+						early++
+					}
 				}
 			}
 			if _, err := lg.AdvanceFreeAgency(); err != nil {
@@ -667,13 +672,6 @@ func TestGMAutoFreeAgencyMakesOffersAndSigns(t *testing.T) {
 		if n := len(lg.Teams[3].Roster); n != RosterSize {
 			t.Fatalf("year %d: roster %d", y, n)
 		}
-		if y == 2 {
-			for _, e := range lg.GMLogEntries() {
-				if e.Area == GMAreaFreeAgency {
-					early++
-				}
-			}
-		}
 	}
 	for _, e := range lg.GMLogEntries() {
 		if e.Area == GMAreaFreeAgency {
@@ -687,8 +685,11 @@ func TestGMAutoFreeAgencyMakesOffersAndSigns(t *testing.T) {
 	if offers == 0 {
 		t.Fatal("auto free agency made no offers in five summers")
 	}
+	if cuts != 0 {
+		t.Fatalf("auto mode released %d players; a release always needs the owner's click", cuts)
+	}
 	if early == 0 {
-		t.Fatal("auto free agency made no offers in the first three summers (roster full every time)")
+		t.Fatal("no release-and-offer idea was shown in the first three summers (roster full every time)")
 	}
 	if signed == 0 {
 		t.Fatal("auto free agency signed nobody above the minimum in five summers")
