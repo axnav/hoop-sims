@@ -70,7 +70,10 @@ func (s *server) offerDTO(p engine.Proposal) M {
 	if left < 0 {
 		left = 0
 	}
-	return M{"id": p.ID, "team": s.team(p.Team), "message": p.Message, "day": p.Day, "expires": p.Expires,
+	if p.DraftPick > 0 {
+		left = 0
+	}
+	return M{"draftPick": p.DraftPick, "id": p.ID, "team": s.team(p.Team), "message": p.Message, "day": p.Day, "expires": p.Expires,
 		"status": s.statusObj(p.Team), "daysLeft": left, "give": give, "get": get, "moves": moves}
 }
 
@@ -83,6 +86,7 @@ func (s *server) offerList() []M {
 }
 
 func (s *server) offersList(r *http.Request) (any, error) {
+	s.lg.EnsureDraftOffer()
 	return M{"offers": s.offerList()}, nil
 }
 
@@ -98,6 +102,7 @@ func (s *server) offerAccept(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, conflict("%v", err)
 	}
+	// On draft night the draft simply carries on: the new owner of the pick is on the clock.
 	out := s.txDTO(res)
 	out["state"] = s.state()
 	return out, nil

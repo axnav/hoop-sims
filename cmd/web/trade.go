@@ -24,7 +24,7 @@ func (s *server) tradeStatus(r *http.Request) (any, error) {
 	}
 	return M{"open": open, "reason": why, "reopens": reopens, "deadlineDay": engine.TradeDeadlineDay,
 		"day": s.lg.Season.Day, "maxPlayers": engine.MaxTradePlayers, "rosterSize": engine.RosterSize,
-		"maxTeams": engine.MaxDealTeams, "maxPicks": engine.MaxDealPicks}, nil
+		"maxTeams": engine.MaxDealTeams, "maxPicks": engine.MaxDealPicks, "draftNight": s.lg.Draft != nil && open}, nil
 }
 
 func (s *server) tradeBlock(r *http.Request) (any, error) {
@@ -68,6 +68,18 @@ func (s *server) playerRow(owner int, a engine.TradeAsset) M {
 
 func (s *server) pickLabelFor(owner, year, round, original int) string {
 	label := pickLabel(year, round)
+	if slot, ok := s.lg.DraftSlot(year, round, original); ok {
+		// draft night: this year's pick with its slot, e.g. "2026 1st round, pick 7"
+		rd := "1st"
+		if round == 2 {
+			rd = "2nd"
+		}
+		label = strconv.Itoa(year) + " " + rd + " round, pick " + strconv.Itoa(slot)
+		if original != owner {
+			label += " (from " + s.team(original)["abbr"].(string) + ")"
+		}
+		return label
+	}
 	if original != owner {
 		label += " (via " + s.team(original)["abbr"].(string) + ")"
 	}

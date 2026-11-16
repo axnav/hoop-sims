@@ -2512,3 +2512,76 @@ func TestMoraleAPI(t *testing.T) {
 	// The mood is never taken from the browser: there is no way to set it.
 	c.call("POST", "/api/player/"+strconv.Itoa(mine.ID), M{"morale": 50}, 404)
 }
+
+func TestDraftNightAPI(t *testing.T) {
+	sawOffer := false
+	for seed := 1; seed <= 12 && !sawOffer; seed++ {
+		c := newTC(t)
+		toDraftStart(c, seed)
+		st := c.call("GET", "/api/trade/status", nil, 200)
+		if st["open"] != true || st["reason"] != "Draft night: trades are open." {
+			t.Fatalf("status: %v", st)
+		}
+		blk := c.call("GET", "/api/trade/block/3", nil, 200)
+		picks := blk["picks"].([]any)
+		hasSlot := false
+		for _, p := range picks {
+			if l, _ := p.(M)["label"].(string); strings.Contains(l, " round, pick ") {
+				hasSlot = true
+			}
+		}
+		if !hasSlot {
+			t.Fatalf("no slot label in %v", picks)
+		}
+		// step the draft to the user's turn (or the end)
+		for i := 0; i < 70; i++ {
+			d := c.call("GET", "/api/draft", nil, 200)
+			if d["done"] == true || d["userOnClock"] == true {
+				break
+			}
+			c.call("POST", "/api/draft/step", M{"max": 1}, 200)
+		}
+		for round := 0; round < 3; round++ {
+			d := c.call("GET", "/api/draft", nil, 200)
+			if d["done"] == true {
+				break
+			}
+			if d["userOnClock"] != true {
+				c.call("POST", "/api/draft/step", M{"max": 70}, 200)
+				continue
+			}
+			offers := c.call("GET", "/api/offers", nil, 200)["offers"].([]any)
+			if len(offers) > 0 {
+				o := offers[0].(M)
+				if num(o["draftPick"]) == 0 {
+					t.Fatalf("offer has no draftPick: %v", o)
+				}
+				mv := o["moves"].([]any)[0].(M)["pick"].(M)
+				id := itoa(num(o["id"]))
+				c.call("POST", "/api/offers/"+id+"/accept", nil, 200)
+				d2 := c.call("GET", "/api/draft", nil, 200)
+				var found bool
+				for _, p := range d2["picks"].([]any) {
+					pm := p.(M)
+					if num(pm["pick"]) == num(o["draftPick"]) {
+						found = true
+						if num(pm["team"].(M)["id"]) != num(o["team"].(M)["id"]) {
+							t.Fatalf("pick %v did not move to the offering team: %v", mv, pm)
+						}
+					}
+				}
+				if !found {
+					t.Fatal("pick not in draft list")
+				}
+				sawOffer = true
+				break
+			}
+			// no offer here: make the pick and carry on
+			pros := c.call("GET", "/api/draft", nil, 200)["prospects"].([]any)
+			c.call("POST", "/api/draft/pick", M{"playerId": num(pros[0].(M)["id"])}, 200)
+		}
+	}
+	if !sawOffer {
+		t.Fatal("no trade-up offer in 12 seeds")
+	}
+}

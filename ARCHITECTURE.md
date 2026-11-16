@@ -143,6 +143,7 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 | `trade.go` | Player valuation, contend factors, the window, the two-team path, trades between computer teams | `TradeWindowOpen`, `TradeValue`, `TradeBlock`, `TradeOffer`, `EvaluateTrade`, `SuggestCounter`, `ExecuteTrade`, `SimAITrades`, `TradeResult`, `TradeDeadlineDay` | constants at the top (`TradeMargin`, `UntouchableMargin`, `MaxTradePlayers`, `tradeOffset`) |
 | `deal.go` | Multi-asset deals (players and picks, 2 or 3 teams) | `Asset`, `Move`, `Deal`, `ValidateDeal`, `EvaluateDeal`, `ExecuteDeal`, `PickValueFor`, `PickValue` | pick-value constants at the top (`pickR1Late`, `pickYearDiscount`, ...), `MaxDealTeams`, `MaxDealPicks` |
 | `negotiate.go` | Tiers, asks, proposals from computer teams, user options, deadline pause | `PlayerTier`, `PickTier`, `Options`, `Proposal`, `PendingProposals`, `AcceptProposal`, `RejectProposal`, `ShouldPauseForDeadline` | constants (`CloseFraction`, `ProposalChancePerDay`, `MaxPendingProposals`, `ProposalLifeDays`, `proposalOffset`) |
+| `drafttrade.go` | Draft night trades: `TradeWindowOpen` is true while picks remain (reason "Draft night: trades are open."); this year's picks are valued by their real slot (`pickValue` in `deal.go` via `draftSlotIndex`), used picks are never listed (`PicksOwnedBy`) or tradable (`pickUsed`, `ValidateDeal`, `TransferPick`), expiring contracts cannot be traded (`draftTradeProblem`, also hidden from `TradeBlock`), and `fixRosters` does nothing during a draft (no trim, no signing, no dead money; `FinishOffseason` trims). `EnsureDraftOffer` (idempotent; saved `Draft.OfferChecked`; also called from `DraftAutoUntilUser` and the API `state`, `draftState`, `offersList`) may create one pick-only `Proposal` (`DraftPick` > 0) from a computer team whose favourite prospect clearly beats what it expects at its own later pick (`likesToMoveUp`, `DraftTradeTuning`: chance 0.6, min gain 2.0, max jump 12); it lasts only while that pick is on the clock | `EnsureDraftOffer`, `DraftSlot`, `DraftTradeTuning` | `DraftTradeTuning` |
 | `picks.go` | Ownership of draft picks | `DraftPick`, `PicksOwnedBy`, `PickOwner`, `TransferPick`, `PickYearsAhead` (4) | none |
 | `teamstatus.go` | A team's direction from the contend factor (visible strength and record) | `TeamStatus`, `TeamStatuses`, `TeamStatusOf`, `TeamTop8` | `StatusBands` |
 
@@ -354,8 +355,9 @@ Streams in the code today:
 | 100000 | Hashed stream per player for personality badges (seed, 100000, player ID; three draws: Leader, Mentor, Star) | `personality` |
 | 110000 | Coaches: hashed per team at league creation and in the 3-to-4 upgrade (seed, 110000, 0, team ID: name, age, three ratings, favourite system); `dayRNG(year, 110001 + n)` for offseason candidate n; `dayRNG(year, 110050)` for the computer teams' replacement chances | `initCoaches`, `openCoachPool`, `finishCoaches` |
 | 120000 | Morale: `(seed, 120000, player ID, year*100+week)` hashed for a trade request starting; `(seed, 120000, 1, year*100+week)` for the weekly swap with a requester; `(seed, 120000, 2, year)` for the offseason swaps | `requestStep`, `moveRequesters`, `moveRequestersOffseason` |
+| 130000 | Draft night: `(seed, year, 130000, slot)` hashed once per user pick on the clock: the chance of a trade-up offer, then the order teams are tried | `EnsureDraftOffer` |
 
-Next free offset: 120000.
+Next free offset: 140000.
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 

@@ -7,6 +7,7 @@ import { api, type LotteryRow, type Pick } from '../api'
 import { useScout } from '../scout'
 import { useFlow } from '../flow'
 import { InlineContinue } from '../Inline'
+import { OffersCard } from '../OffersCard'
 import { Card, ErrorBox, Page, PlayerLink, Q, RangeBar, TeamBadge, rangeText } from '../ui'
 
 type SortKey = 'pot' | 'ovr' | 'age' | 'name'
@@ -122,10 +123,11 @@ export default function Draft() {
   }
 
   return (
-    <Page title="Draft" right={d && !d.done && d.started ? (
-      <div className="flex items-center gap-2">
-        {!d.userOnClock && <button className="btn" onClick={() => setRunning((r) => !r)}>{running ? <Pause size={15} /> : <Play size={15} />}{running ? 'Pause' : d.made === 0 ? 'Start the draft' : 'Resume'}</button>}
-        <button className="btn" disabled={busy} onClick={() => run('draft_auto')}>Auto-draft the rest</button>
+    <Page title="Draft" right={d && !d.done ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <Link to="/trade" className="btn">Trade</Link>
+        {d.started && !d.userOnClock && <button className="btn" onClick={() => setRunning((r) => !r)}>{running ? <Pause size={15} /> : <Play size={15} />}{running ? 'Pause' : d.made === 0 ? 'Start the draft' : 'Resume'}</button>}
+        {d.started && <button className="btn" disabled={busy} onClick={() => run('draft_auto')}>Auto-draft the rest</button>}
       </div>
     ) : null}>
       {err && <ErrorBox error={err} />}
@@ -150,6 +152,7 @@ export default function Draft() {
                   You are on the clock: pick #{cur}. Choose a prospect below.
                 </motion.div>
               )}
+              {!data.done && <OffersCard />}
               {data.done && (
                 <div className="card mb-4 flex items-center justify-between p-4">
                   <span className="text-lg font-bold">Draft complete.</span>

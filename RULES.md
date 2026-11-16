@@ -64,7 +64,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
 
    | 120000 | Morale and trade requests (`engine/morale.go`: 120000 hashed per player and week for a request starting, `(seed, 120000, 1, year*100+week)` for the weekly swap with a requester, `(seed, 120000, 2, year)` for the offseason swaps; the mood and request are saved on the player) |
 
-   Take the next free ten-thousand (130000) for a new feature and add it here and to
+   | 130000 | Draft night trade-up offers (`engine/drafttrade.go`: `(seed, year, 130000, slot)` hashed once per user pick for the chance and the team order; the offer itself is saved as a proposal) |
+
+   Take the next free ten-thousand (140000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

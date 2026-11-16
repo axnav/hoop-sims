@@ -25,6 +25,7 @@ func (s *server) userSeries() *engine.Series {
 // one action the Continue button performs.
 func (s *server) state() M {
 	lg := s.lg
+	lg.EnsureDraftOffer() // draft night: a computer team may offer to trade up (once per user pick)
 	st := lg.Season
 	u := lg.UserTeamID
 	ph := s.phase()

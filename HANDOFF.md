@@ -289,7 +289,20 @@ Owner choices: morale moves week by week (saved); a small on-court effect measur
 - API and screens: `morale` (score, label, trend, reasons, tradeRequest) on the player page and roster rows, team morale on the team page, a request flag on trade screens, an event in the existing transactions/news list.
 - Measure: sanity before/after, morale spread and requests per season, `TestLongStability` and `TestTeamBalance` with no limit changes.
 
+## 16. Build plan for draft-night trades and the trade assistant (owner approved 2026-11-16)
+
+Found on checking: `TradeWindowOpen` (engine/trade.go) closes trades for the whole draft and between the end of the playoffs and the offseason; the draft already lets a pick's owner select (`PickOwner`), so trading picks during the draft mostly needs the window opened. The trade screen shows each team's block, an accept/reject evaluation and a counter, but not what a team wants or who the user should move.
+
+Owner choices: (1) trades open during the draft, including this year's unused picks and just-drafted players, and a computer team may offer to trade up when the user is on the clock; (2) on another team: a needs panel (direction, what they value, missing positions/skills) plus "What would it take?" on any of their players, which builds the package from the user's roster they would accept; (3) a built-in advisor (rules, offline, advice only) labelling each of the user's players Keep / Shop / Sell with a reason.
+
+Pieces, in order (shared files): A. draft-night trades (`feat/draft-trades`); C. player search (owner asked 2026-11-16: no search existed; a search box in the top bar plus a Players page filtering every player in the league and free agency by name, team, position, age, overall, contract, badge, morale/trade request, sortable; `GET /api/players` with query parameters; prospects excluded, as their true values are secret); B. trade assistant (`feat/trade-assistant`), whose "What would it take?" can then start from a search result.
+
 ## Update log (newest first)
+
+### 2026-11-16, draft-night trades (section 16 piece A)
+- Built by one Sonnet helper (engine, API, screens). `TradeWindowOpen` is open while the draft has picks left ("Draft night: trades are open.") and closes after the last pick until the offseason ends; the playoffs-to-offseason gap stays closed. Unused current-year picks are valued by their known slot (same units as `PickValueFor`), labelled "2025 1st round, pick 18"; used picks are hidden and refused. Just-drafted players tradable; expiring contracts (0 years) refused during the draft (helper's addition: they would walk away). `fixRosters` does nothing during the draft (no trims, signings or dead money). Trade-up offers (`engine/drafttrade.go`, `DraftTradeTuning`, offset 130000, next free 140000): once per user pick on the clock, 0.6 chance, from a computer team whose favourite prospect clearly beats its own later pick (within 12 slots), 1-3 picks worth 95-135% of the user's pick; about 22% of user picks drew one over 20 seeds; saved `Draft.OfferChecked`, `Proposal.DraftPick` (omitempty). Draft page: Trade button and the offer card.
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 325 s under load), web build. Port 8097 seed 1 team 0: status open with draftNight during the draft, pick labels with slots, one draft offer when on the clock at pick 18, Draft page shows the Trade link and the offer at 1400 and 390 px, no console errors, no horizontal scroll, no impact key. Helper traded pick 18 through the Trade page and saw the new owner select.
+- Not tried: real-data league, an old mid-draft save, "Change it" on a draft offer.
 
 ### 2026-11-16, release any time, with dead money
 - Owner noticed there was no way to release players (only "Let go" on expiring contracts in the offseason) and chose: release any time from the drawer; the team still pays him (dead money).
