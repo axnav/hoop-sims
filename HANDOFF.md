@@ -16,6 +16,8 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Pushed:** `main` up to `88df2fd` (everything through the trade assistant) on 2026-11-16. Only the commit recording this push is local.
 
+**Documents (2026-11-16):** `ARCHITECTURE.md` was checked against the code and brought up to date, and keeping it current is now `RULES.md` hard limit 7 (owner's request). Folder structure reviewed: Go tests stay beside the code; no restructuring. Merged locally, not pushed.
+
 **Next:** ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small polish (two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams, tunable in `AdvisorTuning`).
 
 **Earlier (2026-11-14 to 2026-11-15):**
@@ -52,7 +54,7 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 
 | What | Command |
 |---|---|
-| Checks (Go) | `go vet ./... && go test ./... -count=1` (engine tests take 30 to 40 seconds; verified result on 2026-11-14: all pass) |
+| Checks (Go) | `go vet ./... && go test ./... -count=1` (engine tests take about 4 to 5 minutes, run them in the background; verified 2026-11-16 on `dd7c11c`: vet clean, all pass, engine 202 s, `cmd/web` 15 s) |
 | Build the web app (needed once, and after screen changes) | `cd web && npm install && npm run build` |
 | Run the game | `go run ./cmd/web` then open http://localhost:8080 (flags `-port`, `-save`, `-web`) |
 | Front-end dev server | `cd web && npm run dev` (proxies `/api` to port 8095, so also run `go run ./cmd/web -port 8095`) |
@@ -98,6 +100,7 @@ Owner decisions and standing preferences:
 - Later, not built: owner goals and job security, a full news feed. (Morale, trade requests and coaches were built on 2026-11-16.)
 - 2026-11-16: badges in the 2K style (about 40, five tiers, effects measured against the league average, earned by ratings plus position); release any time with dead money; trades on draft night; a built-in trade advisor (rules, offline), not an AI chat.
 - The interface is React (the owner knows it) with an animated flow that never dead-ends; a 3D court viewer was asked for.
+- 2026-11-16: `ARCHITECTURE.md` is updated in the same commit as any piece that changes a file, route, page, saved field, stream, stage, test file or game rule (`RULES.md` hard limit 7). Go tests stay beside the code they test (`x.go` with `x_test.go`): the owner asked whether to separate them; that is the Go standard and lets tests reach unexported functions, so the layout stays, and the engine stays one flat package.
 - Checks run once per finished piece of work. Every feature gets one end-to-end pass on port 8097. The owner gave standing permission to commit and merge to `main` locally when the code is correct, and on 2026-11-14 asked for `main` to be pushed.
 
 Design decisions from earlier work (checked against the code):
@@ -121,7 +124,7 @@ Design decisions from earlier work (checked against the code):
 6. **Few trades in real-data mode.** Only one trade was logged in a year, against 26 in the owner's fictional save. Computer teams may trade less under the salary rules there.
 7. **Hands-off teams suffer.** A team that ignores re-signing and free agency ends with leftovers (a hands-off team went 4-78 in a helper test). An over-the-cap team can only sign players whose ask is the minimum. This is intended but harsh; the screens warn before both steps.
 8. **Money is thin.** A released player's contract simply ends (no money still owed). The luxury tax is recorded but has no consequence because teams have no finances. When a full roster receives extra players the game releases the lowest-valued ones without asking.
-9. **Tests.** `TestFreeAgencyMarket` was loosened by a helper (top ten signing early: at least 4, was 5). `TestLongStability`'s home-win band (54 to 60%) sits near its edge; the test was reworked on 2026-11-15 to check drift on five seeds (see the update log), and seed 3 sits close to the drift band (+1.93 of 2.0). The engine trade tests halve salaries in a fixture. Engine tests take 30 to 40 seconds. `cmd/web` has API tests; `cmd/sim` and `cmd/realcheck` have none.
+9. **Tests.** `TestFreeAgencyMarket` was loosened by a helper (top ten signing early: at least 4, was 5). `TestLongStability`'s home-win band (54 to 60%) sits near its edge; the test was reworked on 2026-11-15 to check drift on five seeds (see the update log), and seed 3 sits close to the drift band (+1.93 of 2.0). The engine trade tests halve salaries in a fixture. Engine tests take about 4 to 5 minutes (202 s on a quiet machine, 2026-11-16). `cmd/web` has API tests; `cmd/sim` and `cmd/realcheck` have none.
 10. **Tracked binary.** The compiled file `cmd/web/web` is tracked in git (verified) and is rewritten by a build inside that folder. The owner was asked whether to untrack it and has not answered.
 11. **Old save mode label.** The owner's old save reports mode "fictional" although it holds real player names.
 12. **Cheaper helpers.** Two changes were proposed for helper cost and not applied: an environment setting in the user's Claude settings making helpers default to a cheaper model, and a note that helpers must always be given a named model. The note is now in `CLAUDE.md` and `RULES.md`; the settings change was not made and needs the owner's say.
@@ -222,6 +225,9 @@ piece, owner decision or push, and before a session ends or moves, update the up
 AND sections 0, 3, 4, 7 and 10 where they changed; note work in progress (branch, done,
 left) in section 0; write it yourself and commit it with the piece. A piece is not
 finished while the handoff is stale.
+SECOND CORE RULE (RULES.md hard limit 7): ARCHITECTURE.md matches the code. A piece that
+adds or changes a file, route, page, saved field, stream, stage, test file or game rule
+updates it in the same commit. Go tests stay beside the code (x.go with x_test.go).
 
 Hard limits: never touch port 8080 or saves/league.json (ask first); never show the
 hidden Impact number or true prospect values (checkNoImpact in cmd/web/api_test.go);
@@ -348,6 +354,13 @@ Owner choices: (1) trades open during the draft, including this year's unused pi
 Pieces, in order (shared files): A. draft-night trades (`feat/draft-trades`); C. player search (owner asked 2026-11-16: no search existed; a search box in the top bar plus a Players page filtering every player in the league and free agency by name, team, position, age, overall, contract, badge, morale/trade request, sortable; `GET /api/players` with query parameters; prospects excluded, as their true values are secret); B. trade assistant (`feat/trade-assistant`), whose "What would it take?" can then start from a search result.
 
 ## Update log (newest first)
+
+### 2026-11-16, architecture document brought up to date and made a rule
+- New session started from the section 10 prompt. Verified by the main session on `dd7c11c`: `go vet` clean, `go test ./... -count=1` passes (engine 202 s, `cmd/web` 15 s), tree clean and level with origin.
+- Owner: `ARCHITECTURE.md` must be kept current as a habit, and asked for the folder structure to be vetted, in particular whether engine tests should be separated from the code. Answer given: no. In Go a `_test.go` file belongs in the package folder it tests, and the engine tests use unexported functions; the flat `engine/` package also stays (features share `League`/`Player`/`Team`; Go forbids import cycles).
+- `ARCHITECTURE.md` fixed after comparing it with the code (routes in `cmd/web/main.go`, pages in `App.tsx`, test files, structs): new folder-layout note in section 2; `cmd/sim` modes; `League.Events`, `CoachPool`, `Team.DeadMoney`, `Player.Focus` and the morale fields in section 6; draft-night window in section 7; release and dead money in section 8; release preview and photo routes in section 11; Coach and Players pages, `PlayerSearch.tsx`, `TradeRequestCard.tsx` in section 12; eleven missing test files and the real test time in section 13.
+- Rules: `RULES.md` hard limit 7 and section 11; `CLAUDE.md` (also save version 4 and the test time, both stale there). No code changed, so no checks were re-run and no browser pass was needed.
+- Untidy spots noted, not changed: `cmd/web/api_test.go` is about 96 KB in one file; the tracked binary `cmd/web/web` (problem 10, still waiting for the owner); shared cards sit at the top of `web/src/`.
 
 ### 2026-11-16, detailed restart prompt
 - Owner asked for a detailed prompt for the next session: section 10 rewritten (reading order, first checks, open choices, what exists, how we work, the core handoff rule, hard limits, browser test setup, next free stream 140000).

@@ -38,6 +38,22 @@ Dependencies point downward only. `engine/` imports nothing from the project. `c
 
 The standard library is the only Go dependency (`go.mod` says `module hoopsim`, `go 1.22`).
 
+**Folder layout and why tests sit beside the code** (checked against the code 2026-11-16).
+
+```
+engine/            one Go package: <feature>.go with <feature>_test.go beside it
+cmd/web/           the API server: one <feature>.go per group of routes, api_test.go for all of them
+cmd/sim/           terminal tool (main.go, develop.go, resign.go)
+cmd/realcheck/     terminal tool (main.go)
+web/src/           api.ts, flow.tsx, ui.tsx, shared cards; pages/ one file per screen; court3d/
+data/real/, saves/ private, git-ignored
+```
+
+- In Go a test file must be in the same folder as the code it tests: a folder is a package, `go test` looks for `*_test.go` there, and only a file in the same package can call the unexported functions (the engine tests call many, for example `reweightGrowth`, `aiTradeOnce`). Test files are never compiled into the game. So `engine/trade.go` next to `engine/trade_test.go` is the standard Go layout; a separate `tests/` folder would be the unusual choice and would force the engine to export its internals.
+- The engine is one flat package on purpose: the features share `League`, `Player` and `Team` and call each other freely, and Go forbids two packages importing each other. Splitting it into sub-packages is a large refactor with no gain at this size (about 19,000 lines with tests).
+- Engine files with no test file of their own (`generate.go`, `player.go`, `offseason.go`, `rng.go`, `system.go`, `names.go`, `realteams.go`, generated `badge_thresholds.go`) are exercised through other tests (`season_test.go`, `phase_test.go`, `coach_test.go`).
+- Known untidy spots: `cmd/web/api_test.go` is one very large file (newer features add their own, as `assistant_test.go` does); the tracked binary `cmd/web/web` (section 15); `web/src/` keeps shared cards at the top level instead of a `components/` folder.
+
 ## 3. How to run, build and test
 
 Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from the project root.
@@ -53,7 +69,7 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 | Rating and rookie tables | `go run ./cmd/sim -mode ratings` |
 | Real-data comparison | `go run ./cmd/realcheck -runs 30` |
 
-`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons` or `ratings`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`.
+`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `badges`, `coaches`, `morale`, `develop` or `resign`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`.
 
 The Go server serves `web/dist` for any path that is not `/api/...` and falls back to `index.html`, so the browser router can use real URLs. If `web/dist/index.html` is missing it answers 503 with the build command. The Vite dev server (`web/vite.config.ts`) proxies `/api` to `http://localhost:8095`, which is why the dev instance of the Go server must use port 8095.
 
@@ -216,12 +232,14 @@ The whole game is one `League` value (`engine/generate.go`). Engine structs have
 | `Transactions` | Log of executed trades, oldest first |
 | `Proposals`, `NextProposalID`, `DeadlineStopYear` | Computer-team trade offers waiting for the user, their ID counter, and the season in which the deadline pause already fired |
 | `Options` | User switches (see below) |
+| `Events` | Morale events (trade requests, withdrawals, requesters traded), newest 300 (omitempty; `morale.go`) |
+| `CoachPool` | Coach candidates, only while an offseason is in progress (omitempty; `coach.go`) |
 
 Two unexported fields, `newProposals` and `newInjuries`, hold what the most recent day produced; they are not saved.
 
 ### Team
 
-`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `TaxPaid` (luxury tax by season year), `Lineup` (nil means the automatic rotation), `ExceptionYear` (the league year in whose offseason the mid-level exception was used; 0 means never), `Coach` (`*Coach`, nil = no coach effects; see `coach.go`) and `System` (key of the system the team runs; empty = the coach's favourite). `League.CoachPool` holds the coach candidates during the offseason only.
+`ID`, `City`, `Name`, `Roster` (up to 13 `*Player`), `DeadMoney` (`[]DeadContract`, omitempty: salary still owed to released players, counted in `Payroll`, counts down each offseason), `TaxPaid` (luxury tax by season year), `Lineup` (nil means the automatic rotation), `ExceptionYear` (the league year in whose offseason the mid-level exception was used; 0 means never), `Coach` (`*Coach`, nil = no coach effects; see `coach.go`) and `System` (key of the system the team runs; empty = the coach's favourite). `League.CoachPool` holds the coach candidates during the offseason only.
 
 ### Player
 
@@ -238,6 +256,8 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 | `Contract` | `Contract{Salary, Years, NextSalary, NextYears}`; `Years` counts seasons left including the current one, 0 means none or expiring in the offseason. `NextSalary`/`NextYears` (omitempty) are an extension signed in the last year; `BeginOffseason` makes them the contract when the current one runs out |
 | `TeamSince` | League year he joined his team (draft, signing, trade; omitempty, 0 = unknown = neutral); feeds the Loyalty part of `StanceOf` |
 | `PerfBadges` | `map[string]int` (omitempty): badges lifted one tier by last season's stats (key to 1), replaced at season end (`badges.go`); nil in old saves |
+| `Focus` | Training focus (omitempty; zero = Balanced = the old behaviour; `training.go`) |
+| `Morale`, `TradeRequest`, `MoraleStreak` | Mood from -50 to +50 (0 = content), when he asked for a trade (year*100+week, 0 = no request), and the weeks counter behind requests (all omitempty; `morale.go`) |
 | `Injury` | `*Injury{Name, GamesLeft, Serious}`; nil means healthy |
 | `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. It is the whole year (in-season steps plus the offseason) |
 | `SeasonDev` | `*DevChange`: change so far this season from in-season steps; nil before the first step, cleared by `ProgressMinutes`. `addDev` in `cmd/web/admin.go` sends `SeasonDev` if present (`changeScope` "season"), else `Dev` ("year"), as `ovrChange`, `potChange`, `ratingChanges` |
@@ -276,7 +296,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 **Assets.** `Asset` is either a player (`Kind: PlayerAsset`, `PlayerID`) or a draft pick (`Kind: PickAsset`, `Year`, `Round`, `Original`); build them with `PlayerOf` and `PickOf`. A `Move` sends one asset from one team to another. A `Deal` is a list of moves among 2 or 3 teams (`MaxDealTeams`).
 
-**Validation** (`ValidateDeal`): the trade window must be open; the deal is not empty; teams and assets exist and the sender really owns each asset; nothing is listed twice; every team both sends and receives something; the user's team is in the deal; each team sends at most 3 players (`MaxTradePlayers`) and 4 picks (`MaxDealPicks`); rosters can be refilled (a team left short signs free agents, a team left over releases players); and the salary rules below hold. The window (`TradeWindowOpen`) is open in the regular season while at most 50 days have been played (`TradeDeadlineDay`); it is closed after that, during the playoffs and the offseason report, and while a draft exists (which includes free agency). The code also has an "offseason window" state (`Season.Year < League.Year`), but through the web API `offseasonFinish` calls `StartSeason` straight after `FinishOffseason`, so in practice trading reopens on day 0 of the new season.
+**Validation** (`ValidateDeal`): the trade window must be open; the deal is not empty; teams and assets exist and the sender really owns each asset; nothing is listed twice; every team both sends and receives something; the user's team is in the deal; each team sends at most 3 players (`MaxTradePlayers`) and 4 picks (`MaxDealPicks`); rosters can be refilled (a team left short signs free agents, a team left over releases players); and the salary rules below hold. The window (`TradeWindowOpen`) is open in the regular season while at most 50 days have been played (`TradeDeadlineDay`); it is closed after that and during the playoffs and the offseason report. It opens again on draft night, while the draft still has picks left (`drafttrade.go`), and closes after the last pick until the offseason ends (which includes free agency). The code also has an "offseason window" state (`Season.Year < League.Year`), but through the web API `offseasonFinish` calls `StartSeason` straight after `FinishOffseason`, so in practice trading reopens on day 0 of the new season.
 
 **Salary rules** (`salaryProblem`, in `contract.go`): after the trade a team must be at or under the hard ceiling. If it ends over the salary cap it may take back at most 125% of the salary it sends out plus $250K (`TradeMatchPct`, `TradeMatchExtra`). Contracts that have run out count as zero.
 
@@ -322,7 +342,7 @@ All numbers are in the `Cap` block in `engine/contract.go`, in thousands of doll
 
 **Stance and extensions (`motivation.go`).** `StanceOf` gives a player on a team "resign", "open" or "test" from role (rank by overall and minutes), team direction, years with the team and whether the team can pay his market value, each weighted by his motivation (`MotivationTuning`). A "test" player is refused by `ReSign` and skipped by `reSignTeam` ("He wants to test free agency."). `ExtensionAsk`/`Extend` work for a player on the team with `Contract.Years == 1` and no extension, from the regular season (playoffs included) until free agency begins; the ask is his market salary ("open": times `Cap.ExtensionOpenMult`), refused above `Cap.ExtensionMaxRaise` (140%) of his salary. `Extend` also refuses when next season's payroll (contracts with more than one year left, extensions, plus this one) would pass the hard ceiling; there is no cap-room test. Current-season payroll ignores the extension; it becomes the contract in `BeginOffseason`, so payroll counts it from then on. Computer teams never extend.
 
-**Release.** `Release` sends a player to free agency and deletes the contract with no dead money; it is allowed only in the offseason.
+**Release and dead money.** `Release` works at any time and sends the player to free agency. If his contract has years left, the team still owes it: a `DeadContract` (salary and years) is added to `Team.DeadMoney`, counts in `Payroll` everywhere and counts down at each season rollover. An expiring contract leaves nothing; an agreed extension is cancelled; nothing is taken off if he signs elsewhere. In season the roster is refilled to 13 with the best free agent who takes the minimum (never the player just released), and the release is refused if that signing would pass the hard ceiling; in the offseason nobody is signed. Computer teams' cuts leave dead money too. `ReleasePreview` tells the screens what would happen (allowed, reason, dead salary and years, the refill).
 
 **Free agency days.** `BeginFreeAgency` opens a 10-day period (`FATuning.Days`). A free agent's asking salary starts at his `AskingContract` and softens linearly to 70% by the last day (`soften`, never below the minimum). The user places standing offers with `MakeOffer` (replaces his earlier offer for that player, needs a roster spot, must respect cap room after his other pending offers, and can only be accepted from the next day). Rival bids are hidden; only a count of offers is shown. Each `AdvanceFreeAgency` day, computer teams with open spots make up to 2 offers (plus a chance of a second) at 92% to 112% of the ask, minimum offers start on day 5, and a full team may bid for a clear upgrade and cut its worst player if it signs him. Then `playersDecide` runs for each free agent with offers made before today: he considers offers at or above 95% of his current ask (late in the period, 50% of his original ask), ranks them by an appeal score (salary, a small bonus per contract year, team quality, and a bonus if he would be among the team's best eight), and signs the best one that passes the cap rules. After the last day, players whose original ask was at least four times the minimum take the best real offer they have. Anyone left unsigned is a free agent when the season starts, and short rosters are filled with minimum deals by `fillRosters`.
 
@@ -449,7 +469,10 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/training` | Set a user-team player's focus `{playerId, focus}`; returns `{training, message}` (`training` block also on `GET /api/player/{id}`, never for prospects) | `setTraining` (training.go) |
 | POST | `/api/contracts/extend` | Extend `{playerId, salary, years}`; returns `{message, state}` | `extend` (motivation.go) |
 | POST | `/api/contracts/resign` | Re-sign `{playerId}` at his ask | closure over `League.ReSign` (main.go), `contractAction` (contracts.go) |
-| POST | `/api/contracts/release` | Release `{playerId}` | closure over `League.Release` (main.go), `contractAction` (contracts.go) |
+| GET | `/api/contracts/release/{id}` | What releasing this player would do: allowed, reason, `deadSalary`, `deadYears`, the refill signing | `releasePreview` (contracts.go) |
+| POST | `/api/contracts/release` | Release `{playerId}` (any time; leaves dead money) | closure over `League.Release` (main.go), `contractAction` (contracts.go) |
+| GET | `/api/photo/{id}` | A real-data player's photo file, else 404 (not through the JSON wrapper; section 16) | `photoFile` (photos.go) |
+| GET | `/api/photo/{id}/credit` | `{artist, licence, source}` for that photo | `photoCredit` (photos.go) |
 | GET | `/api/freeagents` | Pool, the user's offers, cap numbers, day | `freeAgents` (freeagency.go) |
 | POST | `/api/freeagents/begin` | Open free agency | `faBegin` (freeagency.go) |
 | POST | `/api/freeagents/offer` | Make an offer `{playerId, salary, years}` | `faOffer` (freeagency.go) |
@@ -480,6 +503,8 @@ The app is React 19 with TypeScript, built with Vite, styled with Tailwind v4, u
 | `/team/:id` | `pages/TeamPage.tsx` | A team's roster and contracts (`/roster` redirects to the user's team) |
 | `/lineup` | `pages/Lineup.tsx` | Starters and minutes, with a half-court picture (`CourtLineup.tsx`) to place starters |
 | `/trade` | `pages/Trade.tsx` | Build and evaluate deals, trade block, transactions; "What they want" panel per partner, "What would it take?" on each partner player (`?team=<id>&want=<playerId>` opens it), Players/Advisor tab on your roster (panels in `TradeAssistant.tsx`) |
+| `/coach`, `/coach/:teamId` | `pages/Coach.tsx` | A team's coach, the system it runs, roster fit; hiring and system choice for the user's team |
+| `/players` | `pages/Players.tsx` | Player search over the whole league with filters in the URL |
 | `/standings` | `pages/Standings.tsx` | Conference standings |
 | `/teams` | `pages/Teams.tsx` | All teams with direction (contender, buyer, seller, rebuilding), offers for the user, filters |
 | `/leaders` | `pages/Leaders.tsx` | Statistical leaders |
@@ -501,7 +526,7 @@ Unknown paths show the Dashboard. A player's detail opens as a side drawer drive
 - `ui.tsx`: small components and formatters used everywhere: `Card`, `Page`, `DataTable`, `Q` (renders a query's loading and error states), `TeamBadge`, `TeamLink`, `PlayerLink`, `TierChip`, `InjuryTag`, `RangeBar` and `rangeText` (scouting ranges), `PayrollBar`, `ConfirmDialog`, `money`, `ovrColor`.
 - `flow.tsx`: `FlowProvider` and `useFlow()`. It owns the `['state']` query, the `run(id)` action runner from section 4, the busy flag, the action error, and the latest free-agency signings. It decides whether to ask for confirmation first.
 - `SimOverlay.tsx`: the full-screen progress view for multi-day sims; it calls `POST /api/sim` one day at a time with `auto: true` so the server can pause for the deadline or a new offer. A new offer is shown and answered inside it (`OfferList` and `useOffers` from `OffersCard.tsx`). With "Watch my games" on, a day whose result has `hasReplay` plays in `LiveGame.tsx` (events from `/api/game/last/events`; `SimDay` records play-by-play for the user's game only) before the next day is simmed.
-- `TopBar.tsx`: navigation, the season stepper, the continue button, save. `App.tsx` also binds Space and Enter to the continue button.
+- `TopBar.tsx`: navigation, the season stepper, the continue button, save, and the search box (`PlayerSearch.tsx`, a dropdown of matches from `/api/players`). `TradeRequestCard.tsx` shows trade requests on the Dashboard. `App.tsx` also binds Space and Enter to the continue button.
 - Cards used on several pages: `TradeAssistant.tsx` (`NeedsPanel`, `TakePanel`, `AdvisorList`; the "What would it take?" action is also in the player drawer and on the Players page), `ExpiringCard.tsx` (re-sign or release), `InjuriesCard.tsx`, `OffersCard.tsx` (computer proposals), `TxItem.tsx` (one trade in a log).
 - `scout.ts`: the `useScout` hook that spends a scouting point and updates the cache.
 
@@ -511,7 +536,7 @@ Unknown paths show the Dashboard. A player's detail opens as a side drawer drive
 
 ## 13. Tests
 
-Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have none. The whole suite runs in about 35 to 45 seconds (`engine` about 33 seconds, `cmd/web` about 4 seconds when run just now, uncached). The real-data tests skip themselves when `data/real/` is missing. The API tests use a temporary save folder and a temporary web folder.
+Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have none. The whole suite now takes about 4 to 5 minutes, nearly all of it in `engine` (239 to 325 s in the runs logged on 2026-11-16; it was about 35 s before badges, coaches and morale), so run it in the background. The real-data tests skip themselves when `data/real/` is missing. The API tests use a temporary save folder and a temporary web folder.
 
 | File | What it covers |
 |---|---|
@@ -533,6 +558,16 @@ Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have
 | `engine/lineup_test.go` | Automatic minutes, custom lineup rules and effect, injured starter, departed player, saving, minutes-based development |
 | `engine/coach_test.go` | Coach determinism, the version 3 save upgrade, fit grades and reasons, the off-favourite penalty, centred effects, system shifts, offseason-only hiring, computer teams replacing weak coaches, system choice |
 | `engine/commissioner_test.go` | Player editing |
+| `engine/progression_test.go`, `engine/inseason_test.go` | The yearly change record; in-season steps (deterministic, switch off, games untouched, yearly totals kept, saving) |
+| `engine/motivation_test.go` | Motivations, stance keys, extension asks and refusals, extensions taking over, old saves |
+| `engine/training_test.go` | Learning speeds, focus moves growth without adding any, decline untouched, saving, computer focus |
+| `engine/badges_test.go` | Personality badges, tiers and position limits, stat boosts, effects centred on the league mean, Mentor growth, determinism |
+| `engine/morale_test.go` | Weekly drift, trade requests starting, ending and lowering value, computer teams moving requesters, centred effect, saving |
+| `engine/release_test.go` | In-season refill, hard-ceiling refusal, offseason release, dead money counting down, computer cuts, saving |
+| `engine/drafttrade_test.go` | The draft-night window, trading this year's picks and draftees, trade-up offers |
+| `engine/assistant_test.go` | Team needs, "What would it take?" packages accepted and executed, impossible cases, speed, the advisor |
+| `engine/teamstatus_test.go` | Team direction labels |
+| `cmd/web/assistant_test.go` | The trade assistant routes |
 | `engine/realdata_test.go` | Real league shape, determinism, potential blur (skipped without data) |
 | `cmd/web/api_test.go` | The API end to end through the handlers: a full flow, hidden number never present, real conferences, trades and deals, negotiation, offers, injuries and commissioner, contracts, free agency, lineup, lottery and scouting, prospect secrecy, scouting points running out |
 

@@ -33,6 +33,12 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
    - writes the handoff itself in the main session (no helper needed), commits it with the
      piece, and never reports a piece as finished while `HANDOFF.md` is stale.
 
+7. **`ARCHITECTURE.md` matches the code (owner 2026-11-16).** Any piece that adds, removes or
+   changes a file, route, page, saved field, random stream, stage, test file, tool mode or rule
+   of the game updates the matching part of `ARCHITECTURE.md` in the same commit. Before
+   merging, check it against the code (routes in `cmd/web/main.go`, pages in `web/src/App.tsx`,
+   test files, structs). If you find it stale while reading, fix it then and say so.
+
 ## 2. Code structure
 
 1. **`engine/` holds every game rule** and knows nothing about HTTP or JSON routes. If a handler
@@ -169,5 +175,4 @@ deal.go and negotiate.go. A new feature adds its own block the same way.
 A piece is done when: the code is in the right layer; tests cover the new rules; the checks
 pass; the end-to-end pass has been run; old saves still load; `HANDOFF.md` is current as hard
 limit 6 in section 1 requires (update log plus sections 0, 3, 4, 7 and 10 where they changed);
-and `ARCHITECTURE.md` is updated if a file, route, saved field, random stream or stage was
-added.
+and `ARCHITECTURE.md` matches the code as hard limit 7 requires.

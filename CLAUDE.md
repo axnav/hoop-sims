@@ -13,6 +13,8 @@ Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RU
 - Commit and merge to `main` locally when the code is correct (standing permission). Push only with the owner's go-ahead. Never commit `data/real/`, `saves/`, `web/dist`, `node_modules`.
 - Report honestly: what you ran and saw versus what a helper reported versus what was not tried.
 - **Core rule: `HANDOFF.md` is always current** (RULES.md hard limit 6). After every finished piece, owner decision or push, and before a session ends or moves: update the log AND sections 0, 3, 4, 7, 10 where they changed; note work in progress (branch, done, left) in section 0. Write it yourself and commit it with the piece. A piece is not finished while the handoff is stale.
+- **`ARCHITECTURE.md` matches the code** (RULES.md hard limit 7): a piece that adds or changes a file, route, page, saved field, stream, stage, test file or game rule updates it in the same commit; fix stale parts when you find them.
+- Go tests stay beside the code (`engine/x.go` with `engine/x_test.go`); that is the Go standard, do not move them to a separate folder.
 - Ask before: downloading anything; anything that leaves the machine; starting or restarting anything on port 8080.
 
 ## Hard constraints
@@ -20,13 +22,13 @@ Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RU
 - Prospects in the draft pool are secret: send scouting ranges only, never true values.
 - `data/real/` is private local testing data: never ship, redistribute or commit it. No lookalike names of real players.
 - Randomness only through `engine.RNG`; a new feature gets its own random stream (table in `RULES.md` section 3). No `math/rand` or clock in `engine/` or `cmd/`.
-- Saves are versioned (`SaveVersion` in `engine/save.go`, now 3): follow `RULES.md` section 4 when a saved field changes.
+- Saves are versioned (`SaveVersion` in `engine/save.go`, now 4): follow `RULES.md` section 4 when a saved field changes.
 - Never touch port 8080 or `saves/league.json` without asking. Never run `go build` inside `cmd/web` without `-o` pointing outside the repo.
 - Game rules live in `engine/`; `cmd/web/` only translates; `web/src/` only shows what the API returns.
 
 ## Commands
 Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from the project root.
-- `go vet ./... && go test ./... -count=1` : checks (engine tests take 30 to 40 s)
+- `go vet ./... && go test ./... -count=1` : checks (engine tests take 4 to 5 minutes; run in the background)
 - `cd web && npm install && npm run build` : build the app into `web/dist` (once, and after screen changes)
 - `go run ./cmd/web` : API plus built app on http://localhost:8080 (flags `-port`, `-save`, `-web`)
 - `cd web && npm run dev` : Vite dev server (proxies `/api` to port 8095; also run `go run ./cmd/web -port 8095`)
