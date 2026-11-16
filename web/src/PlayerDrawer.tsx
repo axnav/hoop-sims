@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
-import { X } from 'lucide-react'
+import { Sparkles, X } from 'lucide-react'
 import { api, type ExtensionAsk, type PlayerPage, type ReleasePreview, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
-import { BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
+import { AdviceChip, BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -364,6 +364,18 @@ function ReleaseBox({ p, close }: { p: PlayerPage; close: () => void }) {
   )
 }
 
+function AdviceBlock({ id }: { id: number }) {
+  const q = useQuery({ queryKey: ['advisor'], queryFn: api.tradeAdvisor, staleTime: 0 })
+  const row = q.data?.players.find((r) => r.id === id)
+  if (!row) return null
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-panel2/50 p-3" aria-label="Trade advice">
+      <div className="flex items-center gap-2"><span className="h2">Trade advice</span><AdviceChip advice={row.advice} /></div>
+      <ul className="mt-1 list-disc pl-5 text-[13px] text-muted">{row.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>
+    </div>
+  )
+}
+
 function Body({ id, close }: { id: number; close: () => void }) {
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['player', id], queryFn: () => api.player(id) })
@@ -417,8 +429,12 @@ function Body({ id, close }: { id: number; close: () => void }) {
             <div className="mt-2 text-sm text-muted">{p.changeScope === 'season' ? 'This season' : 'Last year'}: OVR<Delta value={p.ovrChange} scope={p.changeScope} /> POT<Delta value={p.potChange} scope={p.changeScope} /></div>
           )}
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
-            <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
+              {!p.prospect && <button className="btn" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&want=${p.id}`) }}><Sparkles size={14} className="text-accent" />What would it take?</button>}
+            </div>
           )}
+          {!p.prospect && p.team && p.team.id === state?.user.team.id && <AdviceBlock id={p.id} />}
           {!p.prospect && p.team && p.team.id === state?.user.team.id && <ReleaseBox p={p} close={close} />}
           <MoodBlock p={p} />
           <Wants p={p} />

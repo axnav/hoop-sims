@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { MoraleBrief, MoraleLabel, Fit, Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
+import type { Advice, MoraleBrief, MoraleLabel, Fit, Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -319,6 +319,19 @@ export function StatusChip({ status }: { status?: TeamStatus }) {
   if (!status) return null
   return (
     <span title={status.wants} className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${statusStyle[status.key]}`}>{status.label}</span>
+  )
+}
+
+const adviceStyle: Record<Advice, string> = {
+  keep: 'bg-win/20 text-win ring-win/50',
+  shop: 'bg-amber-400/20 text-amber-400 ring-amber-400/50',
+  sell: 'bg-loss/20 text-loss ring-loss/50',
+}
+
+// Small pill for the advisor's Keep / Shop / Sell.
+export function AdviceChip({ advice }: { advice: Advice }) {
+  return (
+    <span className={`inline-block shrink-0 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${adviceStyle[advice]}`}>{advice}</span>
   )
 }
 

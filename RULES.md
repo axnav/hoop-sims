@@ -19,6 +19,19 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
    without asking, and never write to `saves/league.json`. Test on a copy.
 5. **Ask before anything leaves the machine**: downloads, pushes, any outside service. A push
    needs the owner's go-ahead each time unless they have given a standing one.
+6. **`HANDOFF.md` is always current (core rule, owner 2026-11-16; applies to every session and
+   window).** The owner moves between sessions and windows at any time, and a new session knows
+   only the files. So every session, whoever wrote the code:
+   - after each finished piece of work, each owner decision, each push and before a session
+     ends or is moved: update the **update log** (what changed, what was verified and how, what
+     a helper only reported, what was not tried) **and** the sections that describe state:
+     section 0 (built list, pushed commit, work in progress, next), section 3 (what the game
+     has, save version), section 4 (decisions), section 7 (next steps) and section 10 (the
+     prompt for a new session) whenever what they say has changed;
+   - when work is in progress (a helper running, a branch not merged), say so in section 0:
+     branch, what is done, what is left;
+   - writes the handoff itself in the main session (no helper needed), commits it with the
+     piece, and never reports a piece as finished while `HANDOFF.md` is stale.
 
 ## 2. Code structure
 
@@ -154,6 +167,7 @@ deal.go and negotiate.go. A new feature adds its own block the same way.
 ## 11. Finishing a piece of work
 
 A piece is done when: the code is in the right layer; tests cover the new rules; the checks
-pass; the end-to-end pass has been run; old saves still load; `HANDOFF.md` has a few lines in
-its update log (what changed, what was verified and how, what was not tried); and
-`ARCHITECTURE.md` is updated if a file, route, saved field, random stream or stage was added.
+pass; the end-to-end pass has been run; old saves still load; `HANDOFF.md` is current as hard
+limit 6 in section 1 requires (update log plus sections 0, 3, 4, 7 and 10 where they changed);
+and `ARCHITECTURE.md` is updated if a file, route, saved field, random stream or stage was
+added.

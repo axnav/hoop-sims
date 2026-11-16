@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Filter } from 'lucide-react'
+import { ArrowDown, ArrowUp, Filter, Sparkles } from 'lucide-react'
 import { api, type SearchRow } from '../api'
 import { useOpenPlayer } from '../Inline'
+import { useFlow } from '../flow'
 import { Avatar, BadgeCount, Delta, ErrorBox, InjuryTag, MoraleChip, Page, Spinner, TradeRequestTag, groupLabel, groupOrder, money, ovrColor } from '../ui'
 
 const PER = 50
@@ -34,6 +35,10 @@ function Field({ label, value, onChange, type = 'text', width = 'w-20', placehol
 export default function Players() {
   const [sp, setSp] = useSearchParams()
   const open = useOpenPlayer()
+  const nav = useNavigate()
+  const { state } = useFlow()
+  const ts = useQuery({ queryKey: ['trade-status', state?.phase, state?.day], queryFn: api.tradeStatus })
+  const canAsk = !!ts.data?.open
   const [showFilters, setShowFilters] = useState(false)
   const get = (k: string) => sp.get(k) ?? ''
   const set = (changes: Record<string, string>, keepOffset = false) =>
@@ -110,11 +115,18 @@ export default function Players() {
     )
   }
   const small = 'max-[699px]:hidden'
+  const ask = (r: SearchRow, icon: boolean) => r.team && r.team.id !== state?.user.team.id && canAsk && (
+    <button type="button" className="inline-flex items-center gap-1 rounded border border-line bg-panel2 px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:border-accent"
+      aria-label={`What would it take to get ${r.name}?`} title="What would it take?" onClick={() => nav(`/trade?team=${r.team!.id}&want=${r.id}`)}>
+      <Sparkles size={12} />{!icon && <span className="max-[899px]:hidden">What would it take?</span>}
+    </button>
+  )
   const row = (r: SearchRow) => (
     <tr key={r.id} className="cursor-pointer" onClick={() => open(r.id)}>
       <td>
         <Avatar id={r.id} name={r.name} photo={r.photo} color={r.team?.primary} size={28} /> <span className="link font-medium">{r.name}</span>
         <InjuryTag injury={r.injury} /><span className="max-[699px]:hidden"><BadgeCount n={r.badgeCount} /></span>{r.tradeRequest && <TradeRequestTag />}
+        <span className="ml-2 inline-block min-[700px]:hidden" onClick={(e) => e.stopPropagation()}>{ask(r, true)}</span>
       </td>
       <td onClick={(e) => e.stopPropagation()}>{r.team ? <Link to={`/team/${r.team.id}`} className="link">{r.team.abbr}</Link> : <span className="text-muted">FA</span>}</td>
       <td>{r.pos}</td>
@@ -124,6 +136,7 @@ export default function Players() {
       <td className={`r ${small}`}>{r.team ? money(r.salary) : '-'}</td>
       <td className={`r ${small}`}>{r.team ? r.years : '-'}</td>
       <td className={small}><MoraleChip morale={r.morale} /></td>
+      <td className={small} onClick={(e) => e.stopPropagation()}>{ask(r, false)}</td>
     </tr>
   )
 
@@ -146,12 +159,12 @@ export default function Players() {
             <thead>
               <tr>
                 {head('name', 'Player')}{head(null, 'Team')}{head(null, 'Pos')}{head('age', 'Age', '', true)}{head('ovr', 'Ovr', '', true)}
-                {head('pot', 'Pot', small, true)}{head('salary', 'Salary', small, true)}{head(null, 'Yrs', `r ${small}`)}{head(null, 'Mood', small)}
+                {head('pot', 'Pot', small, true)}{head('salary', 'Salary', small, true)}{head(null, 'Yrs', `r ${small}`)}{head(null, 'Mood', small)}{head(null, '')}
               </tr>
             </thead>
             <tbody>
               {res.data.players.map(row)}
-              {res.data.players.length === 0 && <tr><td colSpan={9} className="text-muted">No players match these filters.</td></tr>}
+              {res.data.players.length === 0 && <tr><td colSpan={10} className="text-muted">No players match these filters.</td></tr>}
             </tbody>
           </table>
         </div>

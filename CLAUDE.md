@@ -12,7 +12,7 @@ Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RU
 - Do not weaken a test to make it pass.
 - Commit and merge to `main` locally when the code is correct (standing permission). Push only with the owner's go-ahead. Never commit `data/real/`, `saves/`, `web/dist`, `node_modules`.
 - Report honestly: what you ran and saw versus what a helper reported versus what was not tried.
-- Keep the update log at the bottom of `HANDOFF.md` current after each finished piece of work or owner decision (a few lines, you write it yourself).
+- **Core rule: `HANDOFF.md` is always current** (RULES.md hard limit 6). After every finished piece, owner decision or push, and before a session ends or moves: update the log AND sections 0, 3, 4, 7, 10 where they changed; note work in progress (branch, done, left) in section 0. Write it yourself and commit it with the piece. A piece is not finished while the handoff is stale.
 - Ask before: downloading anything; anything that leaves the machine; starting or restarting anything on port 8080.
 
 ## Hard constraints
@@ -40,4 +40,4 @@ Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from the project root.
 - `data/real/` private CSVs; `saves/league.json` the owner's current save
 
 ## Next
-Open decisions first (star variety in real mode, automatic lineup), then tuning, then morale, owner goals, news feed, coaches. Ordered list in `HANDOFF.md` section 7.
+See `HANDOFF.md` section 0 (work in progress and next steps) and section 7.
