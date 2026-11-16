@@ -225,6 +225,12 @@ type League struct {
 	// cmeans caches the league coach and fit means beside bmeans (coach.go; not saved).
 	cmeans *coachMeans
 
+	// mmeans caches the league mean morale beside bmeans (morale.go; not saved).
+	mmeans *moraleMeans
+	// Events is the log of morale events (trade requests and withdrawals),
+	// oldest first, newest 300 kept (morale.go).
+	Events []LeagueEvent `json:",omitempty"`
+
 	// CoachPool holds the coach candidates while the offseason is in progress;
 	// empty the rest of the year (coach.go).
 	CoachPool []*Coach `json:",omitempty"`

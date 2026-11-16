@@ -358,7 +358,11 @@ func (lg *League) forceSign(teamID int, p *Player, salary, years int) {
 		}
 	}
 	p.Contract = Contract{Salary: salary, Years: years}
+	if lg.findRosterPlayer(teamID, p.ID) != nil {
+		lg.moraleReSigned(p) // re-signed with his own team
+	}
 	if lg.findRosterPlayer(teamID, p.ID) == nil {
+		lg.moraleNewTeam(p, -1, false)
 		p.TeamID = teamID
 		p.TeamSince = lg.Year
 		lg.Teams[teamID].Roster = append(lg.Teams[teamID].Roster, p)
@@ -449,6 +453,7 @@ func (lg *League) Release(teamID, playerID int) error {
 
 // releaseToFA moves a player (already off his roster) to free agency, contract ended.
 func (lg *League) releaseToFA(p *Player) {
+	lg.moraleNewTeam(p, -1, false)
 	p.TeamID = -1
 	p.Contract = Contract{}
 	lg.FreeAgents = append(lg.FreeAgents, p)

@@ -119,7 +119,7 @@ func (s *server) teamPage(r *http.Request) (any, error) {
 	st := lg.Season
 	return M{"team": s.team(id), "w": st.Wins[id], "l": st.Losses[id], "pd": st.PointDiff[id], "confRank": s.rank(id),
 		"isUser": id == lg.UserTeamID, "roster": roster, "payroll": s.payrollObj(id), "status": s.statusObj(id),
-		"coach": s.coachTeamObj(t), "teamFit": fitObj(lg.TeamFit(t))}, nil
+		"coach": s.coachTeamObj(t), "teamFit": fitObj(lg.TeamFit(t)), "teamMorale": s.teamMoraleObj(t)}, nil
 }
 
 func (s *server) findPlayer(id int) *engine.Player {
@@ -195,6 +195,10 @@ func (s *server) player(r *http.Request) (any, error) {
 		s.addPhoto(out, p)
 		if status != "Retired" {
 			out["motivation"] = s.motivationObj(p)
+			if mo, ok := lg.MoraleOf(p); ok {
+				out["morale"] = M{"score": mo.Score, "label": mo.Label, "trend": mo.Trend,
+					"reasons": mo.Reasons, "tradeRequest": mo.TradeRequest}
+			}
 		}
 		out["training"] = s.trainingObj(p, p.TeamID == lg.UserTeamID && status == "Active")
 		if p.TeamID == lg.UserTeamID && status == "Active" {

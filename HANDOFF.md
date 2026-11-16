@@ -22,7 +22,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 1. ~~Plan piece 6: show photos and avatars.~~ Done 2026-11-15.
 2. ~~Plan piece 2: what players want, and extensions.~~ Done 2026-11-15.
 3. ~~Plan piece 4: training focus.~~ Done 2026-11-15.
-4. Pieces 5 (badges) and 3 (coaches, systems, fit) DONE 2026-11-16 (section 14, update log). Next: the older open items: section 5 problems 1 and 2, and section 7.
+4. Pieces 5 (badges) and 3 (coaches, systems, fit) DONE 2026-11-16 (section 14); morale and trade requests DONE 2026-11-16 (section 15). Next: the older open items: section 5 problems 1 and 2, and section 7.
 The owner will play a test stretch of games and may ask for changes; treat that feedback as higher priority than the next piece.
 
 **Cost preference (owner, 2026-11-15):** keep token use low. Helpers on a named cheaper model; a small model for downloads, searching and measuring; scripts instead of an AI watching a long job; short answers.
@@ -281,7 +281,23 @@ Owner choices (2026-11-16): 2K-size (about 40 badges, 6 groups, 5 tiers Bronze/S
 - API and screens: Coach page (coach, system picker, team fit, player grades with reasons), fit grades on the Lineup page, hiring step in the offseason flow.
 - Measure: scoring, home-win rate and the spread of wins before and after; `TestLongStability`.
 
+## 15. Build plan for morale and trade requests (owner approved 2026-11-16)
+
+Owner choices: morale moves week by week (saved); a small on-court effect measured against the league average (about +-1 point of shooting at the extremes); a trade request builds pressure (known league-wide, so his trade value to computer teams drops a little; if he stays, his mood sinks further and teammates dip slightly; trading him or fixing his situation ends it).
+- `engine/morale.go` (new): saved `Player.Morale` (int, -50..+50, zero = content, omitempty, no version bump) and `Player.TradeRequest` (omitempty). Each sim week morale drifts part of the way toward a target built from role vs minutes, team winning, pay vs market value, years with the team, weighted by the player's motivations (piece 2), plus Leader teammates. Offseason events: re-signed or extended (up), traded (back toward content). Random stream offset 120000 (timing of requests).
+- Effects: game make chance centred on the league mean; low morale pushes the stance toward "test" and raises extension asks; a request lowers his trade value to computer teams; computer teams move their own requesters more readily.
+- API and screens: `morale` (score, label, trend, reasons, tradeRequest) on the player page and roster rows, team morale on the team page, a request flag on trade screens, an event in the existing transactions/news list.
+- Measure: sanity before/after, morale spread and requests per season, `TestLongStability` and `TestTeamBalance` with no limit changes.
+
 ## Update log (newest first)
+
+### 2026-11-16, morale and trade requests (section 15)
+- Owner picked this as the next piece and chose: weekly saved morale, a small on-court effect against the league average, trade requests that build pressure.
+- Built by two Sonnet helpers (engine + API, then screens). `engine/morale.go`: saved `Player.Morale` (-50..+50, zero = content), `Player.TradeRequest`, `Player.MoraleStreak` (all omitempty, no version bump); every 7th sim day morale moves part way toward a target from role vs minutes, winning, pay vs market (skipped in the first 3 seasons), tenure, Leader teammates and request pressure, weighted by motivations; injuries never punished. Offseason: re-sign/extend +10 and ends a request, new team or release keeps half, new season keeps 75%. Requests after 3 weeks at -28 or lower, 30% a week (offset 120000; next free 130000); value to computer teams x0.88, own mood -2 a week (cap -16), teammates -1.5 each (cap -6); computer teams try to move requesters weekly and after offseason trades; ends on trade or recovery above -12. Morale feeds `StanceOf` and `ExtensionAsk`. New saved `League.Events` (newest 300) in `/api/transactions` as `events`. Screens: Morale block in the drawer (red banner on a request), mood chips and "Wants out" tags on roster and trade rows, team morale line, Player news card on the Trade page, Trade requests card on the Dashboard.
+- **Effect cut, as with coaches:** the full on-court effect failed `TestTeamBalance` (an 11-win team); after both allowed cuts the cap is about 0.3 points of FG% (target was 1). Raise `MoraleTuning.EffectScale`/`EffectCap` later if wanted. No test limit changed.
+- Helper measurement: sanity unchanged at a fresh league (everyone content). Seed 1, 10 seasons hands-off: about 4 requests a season, 13 of 41 traded, 1 withdrawn; season 10 end labels Furious 6, Unhappy 75, Content 188, Happy 106, Thrilled 15. TestTeamBalance most wins up to 68, fewest 12.
+- Verified by the main session: `go vet`, `go test ./... -count=1` (engine 254 s under load), web build. Port 8097 fictional seed 3 team 4 after 280 days: 4 events (trade_request, request_traded), labels spread across all five, a Furious requester's drawer shows the banner and four reasons at 1400 and 390 px, no horizontal page scroll on dashboard/team/drawer/trade, no console errors, no impact key.
+- Rough edges: the reasons list mixes positives into an unhappy player's list ("Looks up to a Leader on the team" for a Furious player); `request_withdrawn` events never seen in the browser.
 
 ### 2026-11-16, pushed
 - Owner said "push it": `main` pushed to origin (`axnav/hoop-sims`), d804fcd..2f8e965, 11 commits (photos, motivations, training, lineup, badges, coaches). Private folders checked: none tracked.

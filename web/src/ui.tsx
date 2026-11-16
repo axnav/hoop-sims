@@ -6,7 +6,7 @@ import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
-import type { Fit, Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
+import type { MoraleBrief, MoraleLabel, Fit, Badge, Injury, Level, Motivation, Payroll, Stance, Team, TeamStatus } from './api'
 
 export const f1 = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(1))
 export const pct3 = (v: number) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''))
@@ -415,3 +415,22 @@ export function FitGrade({ fit, size = 'sm', title }: { fit?: Fit; size?: 'sm' |
     </span>
   )
 }
+
+export const moraleColor: Record<MoraleLabel, string> = {
+  Furious: '#ef4444', Unhappy: '#fb923c', Content: '#94a3b8', Happy: '#4ade80', Thrilled: '#22ff88',
+}
+
+// Small pill: coloured dot plus the mood word. With dotOnly (narrow screens) the word is hidden.
+export function MoraleChip({ morale, dotOnly = false }: { morale?: MoraleBrief; dotOnly?: boolean }) {
+  if (!morale) return null
+  return (
+    <span title={`${morale.label} (${morale.score}/100)`} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-panel2 px-2 py-px align-middle text-[11px] font-semibold">
+      <span className="inline-block h-2 w-2 rounded-full" style={{ background: moraleColor[morale.label] }} />
+      <span className={dotOnly ? 'max-[699px]:sr-only' : ''}>{morale.label}</span>
+    </span>
+  )
+}
+
+export const TradeRequestTag = () => (
+  <span title="He has asked to be traded" className="ml-1.5 inline-block shrink-0 rounded bg-loss/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-loss ring-1 ring-loss/50">Wants out</span>
+)

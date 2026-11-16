@@ -76,7 +76,11 @@ export type Leader = { ovrChange?: number; changeScope?: ChangeScope; potChange?
 export type Badge = { key: string; name: string; group: string; tier: string; kind: 'rating' | 'performance' | 'personality'; rule: string; effect: string; next: string }
 export type BadgeDef = { key: string; name: string; group: string; kind: string; rule: string; effect: string }
 export type Leaders = { minGP: number; pts: Leader[]; reb: Leader[]; ast: Leader[] }
+export type MoraleLabel = 'Furious' | 'Unhappy' | 'Content' | 'Happy' | 'Thrilled'
+export type MoraleBrief = { score: number; label: MoraleLabel }
+export type Morale = MoraleBrief & { trend: 'up' | 'down' | 'steady'; reasons: string[]; tradeRequest: boolean }
 export type RosterRow = {
+  morale?: MoraleBrief; tradeRequest?: boolean
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; starter: boolean
   gp: number; mpg: number; ppg: number; rpg: number; apg: number
   injury?: Injury
@@ -89,9 +93,10 @@ export type TeamRow = {
   team: Team; w: number; l: number; confRank: number; payroll: number; capRoom: number; rosterSize: number; top8: number
   star?: { id: number; name: string; pos: string; ovr: number }; status: TeamStatus; offers: number; isUser: boolean
 }
-export type TeamPage = { status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll; coach?: { name: string; system: string; systemName: string }; teamFit?: Fit }
+export type TeamPage = { teamMorale?: MoraleBrief; status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll; coach?: { name: string; system: string; systemName: string }; teamFit?: Fit }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
+  morale?: Morale
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number; ratingChanges?: Record<string, number>
   role: string; usage: number; salary: number; years: number
@@ -130,7 +135,7 @@ export type OffseasonReport =
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
 export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
-export type TradeAssetRow = { id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number; photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
+export type TradeAssetRow = { morale?: MoraleBrief; tradeRequest?: boolean; id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number; photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
 export type TradeBlockData = { status?: TeamStatus; team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
 export type DealMove =
@@ -174,6 +179,7 @@ export type TradeVerdict = {
   theyGive: number; theyGet: number; youGive: number; youGet: number; needed: number
 }
 export type TxPlayer = { playerId: number; name: string; from: Team; to: Team }
+export type NewsEvent = { type: 'trade_request' | 'request_withdrawn' | 'request_traded'; text: string; year: number; day: number; playerId: number; name: string; team: Team }
 export type Transaction = { year: number; day: number; teamA: Team; teamB: Team; moved: TxPlayer[]; released: TxPlayer[]; signed: TxPlayer[]; teams?: Team[]; picks?: TxPick[] }
 export type TradeResult = Transaction & { state: GameState }
 export type Pick = { pick: number; round: number; team: Team; via?: Team; made: boolean; player?: { id: number; name: string; age: number; ovr: number; pot: number } }
@@ -286,7 +292,7 @@ export const api = {
   tradeExecute: (o: TradeOfferIn) => post<TradeResult>('/api/trade/execute', o),
   dealEvaluate: (moves: DealMove[]) => post<DealVerdict>('/api/deal/evaluate', { moves }),
   dealExecute: (moves: DealMove[]) => post<TradeResult>('/api/deal/execute', { moves }),
-  transactions: () => get<{ transactions: Transaction[]; userTeam: number }>('/api/transactions'),
+  transactions: () => get<{ transactions: Transaction[]; events: NewsEvent[]; userTeam: number }>('/api/transactions'),
   offers: () => get<{ offers: Offer[] }>('/api/offers'),
   offerAccept: (id: number) => post<TradeResult>(`/api/offers/${id}/accept`),
   offerReject: (id: number) => post<{ ok: true; offers: Offer[] }>(`/api/offers/${id}/reject`),

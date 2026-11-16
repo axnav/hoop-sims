@@ -5,9 +5,9 @@ import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { Check, Lock, Plus, Sparkles, X } from 'lucide-react'
 import { api, type AssetRow, type DealMove, type Team, type TradeAssetRow, type TradePickRow, type TradeResult, type TradeVerdict } from '../api'
 import { useFlow } from '../flow'
-import { TxItem } from '../TxItem'
+import { TxItem, NewsItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
-import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TierChip, money, ovrColor } from '../ui'
+import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TradeRequestTag, TierChip, money, ovrColor } from '../ui'
 
 // One selected asset in the deal in progress. `key` identifies the asset.
 type Sel = { key: string; label: string; from: number; to: number; playerId?: number; pick?: { year: number; round: number; original: number } }
@@ -26,7 +26,7 @@ function Row({ p, maxV, disabled, onPick, hl }: { p: TradeAssetRow; maxV: number
     >
       <span className="w-7 text-xs text-muted">{p.pos}</span>
       <span className="min-w-0 flex-1 truncate font-medium">
-        <PlayerLink id={p.id} name={p.name} /><InjuryTag injury={p.injury} />
+        <PlayerLink id={p.id} name={p.name} /><InjuryTag injury={p.injury} />{p.tradeRequest && <TradeRequestTag />}
         {p.untouchable && <Lock size={12} className="ml-1.5 inline text-accent" aria-label="Core player" />}
         <TierChip tier={p.tier} />
       </span>
@@ -440,6 +440,13 @@ function TradeScreen() {
         {txQ.data ? (
           txQ.data.transactions.length === 0 ? <div className="p-3 text-muted">No trades yet.</div> : (
             <ul className="max-h-[420px] overflow-y-auto"><AnimatePresence initial={false}>{txQ.data.transactions.map((t, i) => <TxItem key={`${t.year}-${t.day}-${i}-${t.moved[0]?.playerId}`} t={t} />)}</AnimatePresence></ul>
+          )
+        ) : <Spinner />}
+      </Card></div>
+      <div id="player-news" className="mt-4 scroll-mt-28"><Card title="Player news">
+        {txQ.data ? (
+          (txQ.data.events ?? []).length === 0 ? <div className="p-3 text-muted">No trade requests yet.</div> : (
+            <ul className="max-h-[420px] overflow-y-auto">{txQ.data.events.map((e, i) => <NewsItem key={`${e.year}-${e.day}-${e.playerId}-${e.type}-${i}`} e={e} />)}</ul>
           )
         ) : <Spinner />}
       </Card></div>
