@@ -284,18 +284,21 @@ export function PayrollBar({ p, compact = false }: { p: Payroll; compact?: boole
   const at = (v: number) => `${Math.min(100, (100 * v) / max)}%`
   const fill = p.payroll > p.taxLine ? 'bg-loss' : p.payroll > p.cap ? 'bg-warn' : 'bg-win'
   const marks: [string, number][] = [['Cap', p.cap], ['Tax', p.taxLine], ['Max', p.ceiling]]
+  const budget = p.budget !== undefined && p.budget > 0 ? p.budget : undefined
   return (
     <div className={compact ? 'px-2 pb-1' : 'px-2 pb-2'}>
       <div className="relative h-3.5 pt-0.5">
         <div className="h-2.5 overflow-hidden rounded-full bg-panel2">
           <div className={`h-full rounded-full ${fill}`} style={{ width: at(p.payroll) }} />
         </div>
+        {budget !== undefined && <div aria-hidden className="absolute top-0 h-3.5 w-0.5 bg-info" style={{ left: at(budget) }} />}
         {marks.map(([l, v], i) => (
           <div key={l} aria-hidden className="absolute top-0 h-3.5 w-px bg-ink/70" style={{ left: at(v), transform: i === marks.length - 1 ? 'translateX(-1px)' : undefined }} />
         ))}
       </div>
       <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] leading-tight text-muted">
         {marks.map(([l, v]) => <span key={l} className="whitespace-nowrap">{l} {money(v)}</span>)}
+        {budget !== undefined && <span className="whitespace-nowrap text-info">Budget {money(budget)}</span>}
       </div>
       <div className="mt-1 text-[12px] text-muted">
         <span>Payroll <b className="text-ink tabular-nums">{money(p.payroll)}</b></span>
@@ -457,3 +460,11 @@ export function MoraleChip({ morale, dotOnly = false }: { morale?: MoraleBrief; 
 }
 
 export const TradeRequestTag = () => <Chip tone="bad" title="He has asked to be traded" className="ml-1.5">Wants out</Chip>
+
+// Owner trust label -> tone, and the status chip of an owner goal (shared by the top bar, Dashboard and Owner page).
+export const trustTone = (label: string): Tone => (label === 'Secure' ? 'good' : label === 'Uneasy' ? 'warn' : label === 'Hot seat' ? 'bad' : 'neutral')
+const goalStatus: Record<string, [Tone, string]> = { on_track: ['good', 'On track'], at_risk: ['warn', 'At risk'], met: ['good', 'Met'], missed: ['bad', 'Missed'] }
+export function GoalStatusChip({ status }: { status: string }) {
+  const [tone, text] = goalStatus[status] ?? ['neutral', status]
+  return <Chip tone={tone}>{text}</Chip>
+}

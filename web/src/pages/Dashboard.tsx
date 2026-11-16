@@ -9,7 +9,8 @@ import { OffersCard } from '../OffersCard'
 import { InjuriesCard } from '../InjuriesCard'
 import { ExpiringCard } from '../ExpiringCard'
 import { TradeRequestCard } from '../TradeRequestCard'
-import { Card, Chip, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1 } from '../ui'
+import { ownerKey } from './Owner'
+import { Card, Chip, GoalStatusChip, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1, trustTone } from '../ui'
 
 function Hero({ children, tone = 'accent' }: { children: React.ReactNode; tone?: 'accent' | 'gold' }) {
   return (
@@ -44,6 +45,32 @@ function AssistantCard() {
         ))}
       </ul>
       <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/assistant">Open the assistant ({g.suggestions.length})</Link></div>
+    </Card>
+  )
+}
+
+function OwnerCard() {
+  const { state: s } = useFlow()
+  const q = useQuery({ queryKey: ownerKey(s), queryFn: api.owner, enabled: !!s?.owner && s.owner.label !== '' })
+  const d = q.data
+  if (!d || !d.active) return null
+  const arrow = d.trust.trend === 'up' ? '\u2191' : d.trust.trend === 'down' ? '\u2193' : '\u2192'
+  return (
+    <Card title="Owner" className="mb-4">
+      <div className="space-y-1 px-2 py-1">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <span className="text-xl font-black tabular-nums">{d.trust.score}</span><span className="text-muted">trust</span>
+          <Chip tone={trustTone(d.trust.label)}>{d.trust.label}</Chip>
+          <span className="text-[13px] text-muted tabular-nums">{arrow} {d.trust.lastChange > 0 ? '+' : ''}{d.trust.lastChange}</span>
+        </div>
+        <ul className="space-y-1">
+          {d.goals.map((g) => (
+            <li key={g.key} className="flex flex-wrap items-baseline gap-x-2"><GoalStatusChip status={g.status} /><span className="min-w-0">{g.title}</span></li>
+          ))}
+        </ul>
+        {s?.owner?.alert && <div className="rounded border border-warn/50 bg-warn/10 px-2 py-1 text-[13px] text-warn" role="status">{s.owner.alert}</div>}
+      </div>
+      <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/owner">Open the Owner page</Link></div>
     </Card>
   )
 }
@@ -160,6 +187,7 @@ export default function Dashboard() {
       )}
       <Interlude />
       <OffseasonTrades />
+      <OwnerCard />
       <AssistantCard />
       <OffersCard />
       <ExpiringCard />

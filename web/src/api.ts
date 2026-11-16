@@ -4,7 +4,7 @@ export type Team = {
   id: number; abbr: string; city: string; name: string; fullName: string
   primary: string; secondary: string; conf: number; confName: string
 }
-export type Payroll = { dead?: number; payroll: number; cap: number; taxLine: number; ceiling: number; room: number; taxBill: number; minSalary: number }
+export type Payroll = { budget?: number; dead?: number; payroll: number; cap: number; taxLine: number; ceiling: number; room: number; taxBill: number; minSalary: number }
 export type Injury = { name: string; gamesLeft: number; serious: boolean }
 export type InjuryLine = { photo?: boolean; ovrChange?: number; potChange?: number; playerId: number; name: string; team: Team; injury: string; gamesLeft: number; serious: boolean }
 export type Award = { playerId: number; name: string; team: Team; gp: number; ppg: number; rpg: number; apg: number } | null
@@ -40,6 +40,36 @@ export type GameState = {
   fa?: { day: number; days: number; daysLeft: number }
   pendingSheets?: number
   gm?: { count: number }
+  owner?: { trust: number; label: string; fired: boolean; alert: string | null }
+}
+export type OwnerPersonality = { key: 'win_now' | 'patient' | 'cheap' | ''; label: string; blurb: string }
+export type OwnerGoal = {
+  key: string; kind: 'results' | 'money' | 'building'; title: string; detail: string
+  weight: 'Low' | 'Medium' | 'High'; progress: string; status: 'on_track' | 'at_risk' | 'met' | 'missed'
+}
+export type OwnerLedgerRow = {
+  year: number; wins: number; losses: number; playoffs: string; revenue: number; costs: number; profit: number
+  trustStart: number; trustEnd: number; goals: { title: string; met: boolean }[]
+}
+export type OwnerTone = 'good' | 'warn' | 'bad' | 'info'
+export type OwnerMessage = { year: number; day: number; text: string; tone: OwnerTone }
+export type OwnerJob = {
+  team: Team; owner: { name: string; personality: OwnerPersonality }; marketSize: { key: string; label: string }
+  record: string; payroll: number; direction: { key: string; label: string }
+}
+export type Owner = {
+  active: boolean; firing: boolean
+  owner: { name: string; personality: OwnerPersonality }
+  trust: { score: number; label: 'Secure' | 'Steady' | 'Uneasy' | 'Hot seat' | ''; trend: 'up' | 'flat' | 'down'; lastChange: number }
+  goals: OwnerGoal[]
+  money: {
+    budget: number; payroll: number; overBudget: number; marketSize: { key: string; label: string }
+    revenue: { market: number; wins: number; playoffs: number; total: number }
+    costs: { salaries: number; deadMoney: number; tax: number; total: number }
+    profit: number; projected: boolean
+  }
+  ledger: OwnerLedgerRow[]; messages: OwnerMessage[]
+  fired: boolean; firedText: string; jobs: OwnerJob[]
 }
 export type Level = 'Low' | 'Medium' | 'High'
 export type Motivation = { money: Level; winning: Level; role: Level; loyalty: Level }
@@ -187,7 +217,7 @@ export type ExpiringPlayer = {
 export type ExtensionAsk = { ok: true; salary: number; maxSalary: number; maxYears: number; current: number } | { ok: false; reason: string }
 export type ReleasePreview = { allowed: boolean; reason: string; deadSalary: number; deadYears: number; refill: boolean; refillName: string; short?: boolean }
 export type Expiring = { players: ExpiringPlayer[]; payroll: Payroll; open: boolean }
-export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; noInSeasonDev: boolean; commissioner: boolean }
+export type Options = { noDeadlineStop: boolean; noOfferStop: boolean; noInjuries: boolean; noInSeasonDev: boolean; commissioner: boolean; noFiring: boolean }
 export type AdminEdit = { age?: number; potential?: number; ratings?: Record<string, number>; heal?: boolean }
 export type TxPick = { year: number; round: number; original: Team; label: string; from: Team; to: Team }
 export type TradeOfferIn = { team: number; give: number[]; get: number[] }
@@ -296,6 +326,8 @@ export const api = {
   state: () => get<GameState>('/api/state'),
   gm: () => get<GM>('/api/gm'),
   gmSettings: (b: { plan?: string; auto?: Partial<Record<GMAutoKey, boolean>> }) => post<GM>('/api/gm/settings', b),
+  owner: () => get<Owner>('/api/owner'),
+  ownerJob: (teamId: number) => post<{ message: string; owner: Owner; state: GameState }>('/api/owner/job', { teamId }),
   gmApply: (id: string) => post<{ message: string; gm: GM; state: GameState }>('/api/gm/apply', { id }),
   sim: (b: { days?: number; toEnd?: boolean; auto?: boolean }) => post<SimResult>('/api/sim', b),
   standings: () => get<Standings>('/api/standings'),

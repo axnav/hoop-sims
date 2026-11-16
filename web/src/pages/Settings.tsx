@@ -31,6 +31,7 @@ export default function Settings() {
     onSuccess: (o) => {
       qc.setQueryData(['options'], o)
       qc.invalidateQueries({ queryKey: ['player'] })
+      qc.invalidateQueries({ queryKey: ['owner'] })
     },
   })
   const set = (o: Partial<Options>) => save.mutate(o)
@@ -43,6 +44,7 @@ export default function Settings() {
             <Switch label="Pause the sim when a team makes you an offer" checked={!o.noOfferStop} disabled={save.isPending} onChange={(v) => set({ noOfferStop: !v })} />
             <Switch label="Injuries" note="Players who are already injured still heal when this is off." checked={!o.noInjuries} disabled={save.isPending} onChange={(v) => set({ noInjuries: !v })} />
             <Switch label="In-season progression" note="Ratings also move in small steps during the season. Off means they only change in the offseason." checked={!o.noInSeasonDev} disabled={save.isPending} onChange={(v) => set({ noInSeasonDev: !v })} />
+            <Switch label="Owner can let you go" note="When the owner's trust reaches zero you are let go at the start of the offseason and pick a new team. Off means you are never fired." checked={!o.noFiring} disabled={save.isPending} onChange={(v) => set({ noFiring: !v })} />
             <Switch label="Commissioner mode" note="Allows editing any player's ratings, age and potential." checked={o.commissioner} disabled={save.isPending} onChange={(v) => set({ commissioner: v })} />
           </Card>
         )}</Q>

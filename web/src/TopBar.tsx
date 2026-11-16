@@ -5,7 +5,7 @@ import { motion } from 'motion/react'
 import { Check, ChevronDown, Loader2, Play, Save } from 'lucide-react'
 import { api, type GameState } from './api'
 import { useFlow } from './flow'
-import { TeamBadge } from './ui'
+import { TeamBadge, trustTone } from './ui'
 import { PlayerSearch } from './PlayerSearch'
 
 const steps = ['Regular season', 'Playoffs', 'Draft', 'Free agency', 'New season']
@@ -143,6 +143,9 @@ export function TopBar() {
         {link('/history', 'History')}
         {link('/trade', 'Trades', s.offers)}
         {link('/assistant', 'Assistant', 0, false, 0, s.gm?.count ?? 0)}
+        <NavLink to="/owner" className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>
+          Owner{s.owner && s.owner.label !== '' && <span className={`ml-1.5 inline-block h-2 w-2 rounded-full align-middle ${{ good: 'bg-good', warn: 'bg-warn', bad: 'bg-bad', info: 'bg-info', violet: 'bg-violet', neutral: 'bg-muted', strong: 'bg-muted' }[trustTone(s.owner.label)]}`} title={`Owner trust: ${s.owner.label}`} aria-label={`Owner trust: ${s.owner.label}`} />}
+        </NavLink>
         {link('/settings', 'Settings')}
       </nav>
     </header>

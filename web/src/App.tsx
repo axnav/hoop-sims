@@ -26,6 +26,8 @@ import Coach from './pages/Coach'
 import Trade from './pages/Trade'
 import Settings from './pages/Settings'
 import Assistant from './pages/Assistant'
+import Owner from './pages/Owner'
+import { FiredDialog } from './FiredDialog'
 
 function Shell() {
   const { state, error, run, busy, actionError } = useFlow()
@@ -64,6 +66,7 @@ function Shell() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/team/:id" element={<TeamPage />} />
           <Route path="/assistant" element={<Assistant />} />
+          <Route path="/owner" element={<Owner />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/teams" element={<Teams />} />
@@ -82,6 +85,7 @@ function Shell() {
         </Routes>
       </main>
       <PlayerDrawer />
+      <FiredDialog />
     </>
   )
 }

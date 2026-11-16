@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type GM, type GMArea, type GMAutoKey, type GMSuggestion } from '../api'
 import { useFlow } from '../flow'
 import { useOpenPlayer } from '../Inline'
+import { ownerKey } from './Owner'
 import { Card, Chip, Page, Q } from '../ui'
 
 function Toggle({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
@@ -62,6 +63,19 @@ function AreaCard({ area, gm, busy, saving, onApply, onAuto }: {
   )
 }
 
+function OwnerLine() {
+  const { state } = useFlow()
+  const q = useQuery({ queryKey: ownerKey(state), queryFn: api.owner, enabled: !!state?.owner && state.owner.label !== '' })
+  const d = q.data
+  if (!d || !d.active) return null
+  return (
+    <div className="card px-3 py-2 text-[13px]">
+      <span className="text-muted">Owner's goals: </span>{d.goals.map((g) => g.title).join(' \u00b7 ')}
+      {' '}<Link className="link text-accent" to="/owner">Owner page</Link>
+    </div>
+  )
+}
+
 export default function Assistant() {
   const qc = useQueryClient()
   const { state } = useFlow()
@@ -90,6 +104,7 @@ export default function Assistant() {
   return (
     <Page title="Assistant">
       <div className="space-y-4">
+        <OwnerLine />
         <Q q={q} minH={240}>{(gm) => (
           <>
             <Card title="Plan">
