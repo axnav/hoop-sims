@@ -18,6 +18,8 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Documents (2026-11-16):** `ARCHITECTURE.md` was checked against the code and brought up to date, and keeping it current is now `RULES.md` hard limit 7 (owner's request). Folder structure reviewed: Go tests stay beside the code; no restructuring. Merged locally, not pushed.
 
+**Work in progress (2026-11-17): trade finder, branch `feat/trade-finder`.** Owner asked for a console-style trade finder: tick your own players and picks, see the best offer from each team. Owner's choices: players and picks may be combined (3 players, 4 picks); best offer per team with a filter (anything, players, picks, young players, cap relief); trades only, nothing for free agency; a panel on the Trade page plus a "See offers for him" button in the drawer. Contract: `engine/finder.go` `FindOffers(give, want)`, `POST /api/trade/find` `{players, picks, want}` returning `{possible, reason, want, wants, give, giveValue, offers:[{team, direction, receive, value, salaryIn, salaryOut, note, deal}], passed:[{team, reason}]}`, `FinderPanel` in `TradeAssistant.tsx`, URL `/trade?offer=<playerId>`. Read-only: no saved field, no random stream. Done: branch made, one Sonnet helper briefed and running (engine, API, screens, ARCHITECTURE.md). Left: review the helper's code, checks, browser pass on port 8097, handoff, merge.
+
 **Next:** ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small polish (two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams, tunable in `AdvisorTuning`).
 
 **Earlier (2026-11-14 to 2026-11-15):**
