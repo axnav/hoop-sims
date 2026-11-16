@@ -82,7 +82,7 @@ export function OfferList({ offers, compact = false, onChangeIt, onAccept, onRej
     </div>
   )
   const title = (o: Offer) => <span className="flex items-center gap-2"><TeamBadge team={o.team} size={18} />Offer from {o.team.fullName}<StatusChip status={o.status} /></span>
-  const expires = (o: Offer) => <span className="text-[11px] text-muted">expires in {o.daysLeft} {o.daysLeft === 1 ? 'day' : 'days'}</span>
+  const expires = (o: Offer) => o.draftPick ? <span className="text-[11px] text-muted">good while pick #{o.draftPick} is on the clock</span> : <span className="text-[11px] text-muted">expires in {o.daysLeft} {o.daysLeft === 1 ? 'day' : 'days'}</span>
   return (
     <div className="space-y-3">
       {offers.map((o) => compact ? (

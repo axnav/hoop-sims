@@ -46,7 +46,7 @@ func (lg *League) initPicks() {
 func (lg *League) PicksOwnedBy(teamID int) []DraftPick {
 	var out []DraftPick
 	for _, p := range lg.Picks {
-		if p.Owner == teamID {
+		if p.Owner == teamID && !lg.pickUsed(p.Year, p.Round, p.Original) {
 			out = append(out, p)
 		}
 	}
@@ -87,6 +87,9 @@ func (lg *League) TransferPick(year, round, original, fromTeam, toTeam int) erro
 	i := lg.findPick(year, round, original)
 	if i < 0 {
 		return fmt.Errorf("no such pick: year %d round %d original team %d", year, round, original)
+	}
+	if lg.pickUsed(year, round, original) {
+		return fmt.Errorf("that pick has already been used")
 	}
 	if lg.Picks[i].Owner != fromTeam {
 		return fmt.Errorf("team %d does not own that pick", fromTeam)

@@ -52,6 +52,9 @@ func (lg *League) PickTier(year, round, original int) string {
 	}
 	cf := lg.contendFactors()
 	slot := int(math.Round(cf[original] * float64(len(lg.Teams)-1))) // 0 = weakest
+	if k, ok := lg.draftSlotIndex(year, round, original); ok {
+		slot = k // draft night: the real slot
+	}
 	switch {
 	case slot < pickLotterySlots:
 		return "Lottery pick"
@@ -85,12 +88,13 @@ type Options struct {
 
 // Proposal is a trade offer from a computer team to the user.
 type Proposal struct {
-	ID      int
-	Team    int // the proposing team
-	Deal    Deal
-	Day     int // season day it was made (days played)
-	Expires int // dropped once this many days have been played
-	Message string
+	ID        int
+	DraftPick int `json:",omitempty"` // draft night trade-up offer: the overall pick (1-based) it is for
+	Team      int // the proposing team
+	Deal      Deal
+	Day       int // season day it was made (days played)
+	Expires   int // dropped once this many days have been played
+	Message   string
 }
 
 func (lg *League) userValue(a Asset, user int, cf []float64) float64 {
@@ -200,6 +204,9 @@ func (lg *League) dropBadProposals() {
 	day := lg.currentDay()
 	var kept []Proposal
 	for _, p := range lg.Proposals {
+		if p.DraftPick > 0 && (lg.Draft == nil || lg.DraftDone() || lg.Draft.Made+1 != p.DraftPick || lg.DraftOnClock() != lg.UserTeamID) {
+			continue // a trade-up offer lasts only while that pick is on the clock
+		}
 		if open && day < p.Expires && ValidateDeal(lg, p.Deal, lg.UserTeamID) == nil {
 			kept = append(kept, p)
 		}
@@ -404,6 +411,7 @@ func (lg *League) findPackage(tid int, target *Player, cf []float64, r *RNG) (De
 
 // PendingProposals lists the proposals waiting for the user, oldest first.
 func (lg *League) PendingProposals() []Proposal {
+	lg.dropBadProposals()
 	return append([]Proposal(nil), lg.Proposals...)
 }
 

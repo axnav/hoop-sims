@@ -114,6 +114,14 @@ func PickValueFor(round, yearsAway int, originalContend, valuerContend float64) 
 }
 
 func (lg *League) pickValue(a Asset, tid int, cf []float64) float64 {
+	if k, ok := lg.draftSlotIndex(a.Year, a.Round, a.Original); ok {
+		// This year's pick during the draft: the slot is known. A used pick is worth nothing.
+		if k < lg.Draft.Made {
+			return 0
+		}
+		n := len(lg.Teams)
+		return PickValueFor(a.Round, 0, float64(k%n)/float64(max(1, n-1)), cf[tid])
+	}
 	return PickValueFor(a.Round, a.Year-lg.Year, cf[a.Original], cf[tid])
 }
 
@@ -191,8 +199,12 @@ func ValidateDeal(lg *League, deal Deal, userTeam int) error {
 		sends[m.From], gets[m.To] = true, true
 		switch m.Kind {
 		case PlayerAsset:
-			if lg.findRosterPlayer(m.From, m.PlayerID) == nil {
+			pl := lg.findRosterPlayer(m.From, m.PlayerID)
+			if pl == nil {
 				return fmt.Errorf("A player in the deal is not on the team that is sending him.")
+			}
+			if err := lg.draftTradeProblem([]*Player{pl}); err != nil {
+				return err
 			}
 			players[m.From]++
 			net[m.From]--
@@ -201,6 +213,9 @@ func ValidateDeal(lg *League, deal Deal, userTeam int) error {
 			own, ok := lg.PickOwner(m.Year, m.Round, m.Original)
 			if !ok {
 				return fmt.Errorf("A draft pick in the deal does not exist.")
+			}
+			if lg.pickUsed(m.Year, m.Round, m.Original) {
+				return fmt.Errorf("That draft pick has already been used.")
 			}
 			if own != m.From {
 				return fmt.Errorf("A draft pick in the deal is not owned by the team that is sending it.")
@@ -241,7 +256,7 @@ func ValidateDeal(lg *League, deal Deal, userTeam int) error {
 			over += size - RosterSize
 		}
 	}
-	if short > len(lg.FreeAgents)+over {
+	if lg.Draft == nil && short > len(lg.FreeAgents)+over {
 		return fmt.Errorf("Not enough free agents to fill the short roster.")
 	}
 	if !inDeal {

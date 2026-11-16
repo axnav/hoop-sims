@@ -134,7 +134,7 @@ export type OffseasonReport =
       available: true; year: number; risers: Change[]; fallers: Change[]; trades?: Transaction[]
       retirements: { playerId: number; name: string; age: number; ovr: number; team: Team }[]
     }
-export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number }
+export type TradeStatus = { open: boolean; reason: string; reopens: string; deadlineDay: number; day: number; maxPlayers: number; maxPicks: number; maxTeams: number; rosterSize: number; draftNight?: boolean }
 export type TradeAssetRow = { morale?: MoraleBrief; tradeRequest?: boolean; id: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; untouchable: boolean; tier: string; injury?: Injury; salary: number; years: number; photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
 export type TradePickRow = { year: number; round: number; original: Team; own: boolean; label: string; value: number; tier: string }
 export type TradeBlockData = { status?: TeamStatus; team: Team; isUser: boolean; players: TradeAssetRow[]; picks: TradePickRow[]; payroll: Payroll }
@@ -154,7 +154,7 @@ export type AssetRow =
   | { kind: 'player'; playerId: number; name: string; pos: string; age: number; ovr: number; pot: number; value: number; tier: string; injury?: Injury; salary: number; years: number; photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number }
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number; tier: string }
 export type Offer = {
-  status?: TeamStatus; id: number; team: Team; message: string; day: number; expires: number; daysLeft: number
+  status?: TeamStatus; id: number; team: Team; message: string; day: number; expires: number; daysLeft: number; draftPick?: number
   give: AssetRow[]; get: AssetRow[]; moves: DealMove[]
 }
 export type SimPause = { reason: 'offer' | 'deadline'; text: string }

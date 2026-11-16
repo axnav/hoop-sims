@@ -35,12 +35,14 @@ type OffseasonReport struct {
 
 // Draft is a draft in progress. Picks are made one at a time.
 type Draft struct {
-	Pool    []*Player
-	Order   []int // round 1: original team IDs, first pick first (lottery applied; each pick's owner selects)
-	Order2  []int // round 2: original team IDs, worst record first (no lottery)
-	Made    int   // picks made so far
-	Total   int
-	Results []PickResult
+	Pool   []*Player
+	Order  []int // round 1: original team IDs, first pick first (lottery applied; each pick's owner selects)
+	Order2 []int // round 2: original team IDs, worst record first (no lottery)
+	Made   int   // picks made so far
+	// OfferChecked is the pick number (1-based) for which a trade-up offer was last considered (drafttrade.go).
+	OfferChecked int `json:",omitempty"`
+	Total        int
+	Results      []PickResult
 
 	// Lottery is the first-round lottery outcome, for the screens.
 	Lottery []LotteryRow
@@ -245,6 +247,7 @@ func (lg *League) DraftAutoUntilUser() {
 	for !lg.DraftDone() && lg.DraftOnClock() != lg.UserTeamID {
 		lg.DraftPick(-1)
 	}
+	lg.EnsureDraftOffer()
 }
 
 // DraftAutoAll lets the computer make all remaining picks, including the user's.

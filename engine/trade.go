@@ -76,7 +76,10 @@ type TradeAsset struct {
 // TradeWindowOpen says whether trades are allowed right now, and why not.
 func TradeWindowOpen(lg *League) (bool, string) {
 	if lg.Draft != nil {
-		return false, "The offseason draft is in progress; trades reopen when the offseason is done."
+		if !lg.DraftDone() {
+			return true, "Draft night: trades are open."
+		}
+		return false, "The draft is over; trades reopen when the offseason is done."
 	}
 	s := lg.Season
 	if s == nil || s.Year < lg.Year {
@@ -211,6 +214,9 @@ func TradeBlock(lg *League, teamID int) []TradeAsset {
 	un := lg.untouchables(teamID, cf)
 	var out []TradeAsset
 	for _, p := range lg.Teams[teamID].Roster {
+		if lg.Draft != nil && p.Contract.Years < 1 {
+			continue // an expiring contract cannot be traded on draft night
+		}
 		out = append(out, TradeAsset{p.ID, p.Name, p.PosLabel(), p.Age, p.Overall(), p.Potential,
 			lg.value(p, teamID, cf), un[p.ID]})
 	}
@@ -312,7 +318,10 @@ func EvaluateTrade(lg *League, offer TradeOffer) TradeVerdict {
 	if !ok1 || !ok2 {
 		return bad("A player in the offer is not on the team you named, or is listed twice.")
 	}
-	if d := len(offer.Get) - len(offer.Give); d > len(lg.FreeAgents) || -d > len(lg.FreeAgents) {
+	if err := lg.draftTradeProblem(give, get); err != nil {
+		return bad(err.Error())
+	}
+	if d := len(offer.Get) - len(offer.Give); lg.Draft == nil && (d > len(lg.FreeAgents) || -d > len(lg.FreeAgents)) {
 		return bad("Not enough free agents to fill the short roster.")
 	}
 	if err := lg.salaryProblem(offer.FromTeam, give, get); err != nil {
@@ -435,6 +444,9 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 // valuable players to free agency) and fills any below it from the free
 // agents, recording both in res.
 func (lg *League) fixRosters(tids []int, res *TradeResult) {
+	if lg.Draft != nil {
+		return // draft night: rosters may be over or under 13; FinishOffseason trims and fills
+	}
 	cf := lg.contendFactors()
 	// A player who just arrived in this trade is never the one released to
 	// make room: the team wanted him, so it cuts someone it already had.

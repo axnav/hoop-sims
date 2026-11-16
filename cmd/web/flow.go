@@ -137,6 +137,7 @@ func (s *server) offseasonFinish(r *http.Request) (any, error) {
 
 func (s *server) draftState(r *http.Request) (any, error) {
 	lg := s.lg
+	lg.EnsureDraftOffer()
 	d := lg.Draft
 	if d == nil {
 		return M{"active": false}, nil
@@ -223,6 +224,7 @@ func (s *server) draftStep(r *http.Request) (any, error) {
 		lg.DraftPick(-1)
 		picks = append(picks, s.pickDTO(lg.Draft.Results[len(lg.Draft.Results)-1]))
 	}
+	lg.EnsureDraftOffer()
 	return M{"picks": picks, "state": s.state()}, nil
 }
 

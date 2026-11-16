@@ -416,7 +416,7 @@ function TradeScreen() {
               {evalQ.isError && ready && <ErrorBox error={evalQ.error} />}
               {exec.isError && <ErrorBox error={exec.error} />}
               {counter.isError && <ErrorBox error={counter.error} />}
-              {!deal && !preview && open && <div className="text-muted">Pick players and picks on each side. Up to {max} players and {maxPicks} picks per team; rosters are topped back up to 13 automatically.</div>}
+              {!deal && !preview && open && <div className="text-muted">Pick players and picks on each side. Up to {max} players and {maxPicks} picks per team; {status.data?.draftNight ? 'on draft night rosters are left as they are until the offseason ends.' : 'rosters are topped back up to 13 automatically.'}</div>}
             </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
