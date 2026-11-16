@@ -102,6 +102,9 @@ type side struct {
 	teamAdd float64 // make-chance nudge: coach Offense and team fit, against the league mean
 	pace    float64 // possessions added by the system
 	threeWt float64 // weight of three-point shots in the shot-kind choice
+	// moraleAdd is each player's make-chance nudge from his mood, against the
+	// league mean (morale.go); zeros without a league.
+	moraleAdd []float64
 }
 
 // newSide precomputes a team's weights and badge effects for one game. lg may
@@ -121,7 +124,9 @@ func newSide(lg *League, t *Team, home bool) *side {
 	s.bd = newSideBadges(len(pms))
 	var totMin, def, reb float64
 	var means *badgeMeans
+	var mm float64
 	if lg != nil {
+		mm = lg.moraleMeansNow().mean
 		means = lg.badgeMeansNow()
 		for _, pm := range pms {
 			totMin += float64(pm.Min)
@@ -137,6 +142,7 @@ func newSide(lg *League, t *Team, home bool) *side {
 			s.bd.add(bs, means, i, float64(m), teamMin)
 		}
 		s.box.Lines = append(s.box.Lines, &StatLine{Player: p, Min: m})
+		s.moraleAdd = append(s.moraleAdd, moraleEffect(p, mm))
 		rt := p.Effective()
 		s.eff = append(s.eff, rt)
 		top := max(rt.Inside, rt.Mid, rt.Three)
@@ -285,7 +291,7 @@ func possession(r *RNG, off, def *side, clutch bool) {
 		if off.home {
 			p += homeEdge
 		}
-		p += off.bd.kind[si][kind] + off.bd.leader + off.teamAdd
+		p += off.bd.kind[si][kind] + off.bd.leader + off.teamAdd + off.moraleAdd[si]
 		if clutch {
 			p += off.bd.clutch[si]
 		}

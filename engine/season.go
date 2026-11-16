@@ -208,6 +208,9 @@ func (lg *League) SimDay() bool {
 	if c := &Progression; !lg.Options.NoInSeasonDev && s.Day%c.InSeasonEvery == 0 && s.Day/c.InSeasonEvery <= c.InSeasonSteps {
 		lg.inSeasonDev(s.Day / c.InSeasonEvery)
 	}
+	if s.Day%7 == 0 {
+		lg.moraleWeek()
+	}
 	if s.Done() {
 		s.computeAwards()
 		lg.awardPerfBadges()

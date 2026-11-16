@@ -62,7 +62,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
 
    | 110000 | Coaches (`engine/coach.go`: hashed per team at creation; 110001 + n offseason candidates; 110050 replacement chances; nothing random is saved except the results) |
 
-   Take the next free ten-thousand (120000) for a new feature and add it here and to
+   | 120000 | Morale and trade requests (`engine/morale.go`: 120000 hashed per player and week for a request starting, `(seed, 120000, 1, year*100+week)` for the weekly swap with a requester, `(seed, 120000, 2, year)` for the offseason swaps; the mood and request are saved on the player) |
+
+   Take the next free ten-thousand (130000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

@@ -411,6 +411,7 @@ func ExecuteDeal(lg *League, deal Deal, userTeam int) (TradeResult, error) {
 		lg.Teams[tid].Roster = keep
 	}
 	for _, x := range moving {
+		lg.moraleNewTeam(x.p, x.p.TeamID, true)
 		x.p.TeamID = x.to
 		x.p.TeamSince = lg.Year
 		lg.Teams[x.to].Roster = append(lg.Teams[x.to].Roster, x.p)

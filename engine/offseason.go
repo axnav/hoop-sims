@@ -297,7 +297,9 @@ func (lg *League) finishOffseason(matchUser bool) {
 
 	lg.autoFocusTeams()
 	lg.finishCoaches()
+	lg.moraleOffseason()
 	lg.clearOffseasonInjuries()
 	lg.Year++
 	lg.SimAITrades(NewRNG(lg.Seed*1000003 + uint64(lg.Year)*10007 + tradeOffset))
+	lg.moveRequestersOffseason()
 }

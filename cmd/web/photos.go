@@ -77,9 +77,10 @@ func (s *server) loadPhotos() {
 }
 
 // addPhoto marks a player row when a photo file exists for his RealID.
-// It also adds "badgeCount", since every roster-style row goes through here.
+// It also adds "badgeCount" and "morale", since every roster-style row goes through here.
 func (s *server) addPhoto(row M, p *engine.Player) {
 	s.addBadgeCount(row, p)
+	s.addMorale(row, p)
 	if p == nil || p.RealID == "" {
 		return
 	}

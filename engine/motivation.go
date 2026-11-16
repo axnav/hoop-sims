@@ -81,6 +81,57 @@ func (lg *League) MotivationOf(p *Player) Motivation {
 	return Motivation{Money: pick(), Winning: pick(), Role: pick(), Loyalty: pick()}
 }
 
+// rankOnTeam is the player's place on his roster by overall (0 = best; ties:
+// lower ID first).
+func rankOnTeam(tm *Team, p *Player) int {
+	order := append([]*Player(nil), tm.Roster...)
+	sort.SliceStable(order, func(i, j int) bool {
+		if a, b := order[i].Overall(), order[j].Overall(); a != b {
+			return a > b
+		}
+		return order[i].ID < order[j].ID
+	})
+	rank := 0
+	for i, q := range order {
+		if q == p {
+			rank = i
+		}
+	}
+	return rank
+}
+
+// rolePts is the role score of a player on a team: points for being a
+// starter, minus for a deep bench place or for fewer minutes than his rank
+// deserves (an injured player gets no minutes penalty). short says the
+// minutes shortfall applied. pms are the team's effective minutes (nil: they
+// are worked out here). The one copy of the logic, used by the stance and by
+// morale.
+func (lg *League) rolePts(tm *Team, p *Player, pms []PlayerMinutes) (pts float64, reason string, short bool) {
+	t := &MotivationTuning
+	rank := rankOnTeam(tm, p)
+	switch {
+	case rank < 5:
+		pts, reason = t.StarterPts, "Is a starter"
+	case rank >= 8:
+		pts, reason = t.BenchPts, "Wants a bigger role"
+	}
+	if rank < len(minutesByRank) && !p.Injured() {
+		if pms == nil {
+			pms = tm.EffectiveMinutes()
+		}
+		got := 0
+		for _, pm := range pms {
+			if pm.Player == p {
+				got = pm.Min
+			}
+		}
+		if minutesByRank[rank]-got >= t.ShortMin {
+			pts, reason, short = pts+t.ShortPts, "Wants a bigger role", true
+		}
+	}
+	return
+}
+
 // Stance is a player's attitude to re-signing with his team.
 type Stance struct {
 	Key, Label string
@@ -112,39 +163,8 @@ func (lg *League) StanceOf(p *Player) Stance {
 		}
 	}
 
-	// Role: rank by overall on the roster (ties: lower ID first), against the
-	// minutes he actually gets.
-	order := append([]*Player(nil), tm.Roster...)
-	sort.SliceStable(order, func(i, j int) bool {
-		if a, b := order[i].Overall(), order[j].Overall(); a != b {
-			return a > b
-		}
-		return order[i].ID < order[j].ID
-	})
-	rank := 0
-	for i, q := range order {
-		if q == p {
-			rank = i
-		}
-	}
-	pts, reason := 0.0, ""
-	switch {
-	case rank < 5:
-		pts, reason = t.StarterPts, "Is a starter"
-	case rank >= 8:
-		pts, reason = t.BenchPts, "Wants a bigger role"
-	}
-	if rank < len(minutesByRank) && !p.Injured() {
-		got := 0
-		for _, pm := range tm.EffectiveMinutes() {
-			if pm.Player == p {
-				got = pm.Min
-			}
-		}
-		if minutesByRank[rank]-got >= t.ShortMin {
-			pts, reason = pts+t.ShortPts, "Wants a bigger role"
-		}
-	}
+	// Role: rank by overall on the roster, against the minutes he gets.
+	pts, reason, _ := lg.rolePts(tm, p, nil)
 	add(pts*w(m.Role), reason)
 
 	// Team direction.
@@ -180,6 +200,11 @@ func (lg *League) StanceOf(p *Player) Stance {
 	// Money: can the team pay his market value?
 	if lg.Payroll(tm.ID)-p.Contract.counted()+MarketSalary(p) > Cap.TaxLine {
 		add(t.MoneyPts*w(m.Money), "The team may not be able to pay what he can get")
+	}
+
+	// Morale: an unhappy player leans toward leaving, a happy one toward staying.
+	if pts, reason := moraleStancePts(p); pts != 0 {
+		add(pts, reason)
 	}
 
 	score := t.Base
@@ -238,6 +263,9 @@ func (lg *League) ExtensionAsk(teamID, playerID int) (salary, maxYears int, err 
 		return 0, 0, errTestsFA
 	}
 	salary = MarketSalary(p)
+	if f := moraleAskFactor(p); f != 1 {
+		salary = min(Cap.MaxSalary, int(float64(salary)*f/100+0.5)*100)
+	}
 	if st.Key == "open" {
 		salary = min(Cap.MaxSalary, int(float64(salary)*Cap.ExtensionOpenMult/100+0.5)*100)
 	}
@@ -291,5 +319,6 @@ func (lg *League) Extend(teamID, playerID, salary, years int) error {
 		return fmt.Errorf("Next season's payroll would be %s, over the hard ceiling of %s.", fmtM(next), fmtM(Cap.HardCeiling))
 	}
 	p.Contract.NextSalary, p.Contract.NextYears = salary, years
+	lg.moraleReSigned(p)
 	return nil
 }

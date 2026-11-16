@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { api, type ExtensionAsk, type PlayerPage, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
-import { BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
+import { BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -216,6 +216,32 @@ function ExtensionForm({ id, ask, onDone }: { id: number; ask: Extract<Extension
   )
 }
 
+const trendText = { up: '\u2191 improving', down: '\u2193 falling', steady: '\u2192 steady' } as const
+
+function MoodBlock({ p }: { p: PlayerPage }) {
+  const m = p.morale
+  if (!m) return null
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-panel2/50 p-3">
+      <div className="h2 mb-2">Morale</div>
+      {m.tradeRequest && (
+        <div role="alert" className="mb-3 rounded-md border border-loss/60 bg-loss/15 p-2.5 text-[13px] font-semibold text-loss">
+          He has asked to be traded. Other teams know, so his trade value is lower. Keeping him hurts his mood and, a little, his teammates'.
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <MoraleChip morale={m} />
+        <span className="text-[13px] text-muted">{trendText[m.trend]}</span>
+        <span className="ml-auto text-xs text-muted tabular-nums">{m.score}/100</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded bg-panel2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={m.score} aria-label="Morale">
+        <div className="h-full rounded" style={{ width: `${Math.max(2, m.score)}%`, background: moraleColor[m.label] }} />
+      </div>
+      {m.reasons?.length > 0 && <ul className="mt-2 list-disc pl-5 text-[13px] text-muted">{m.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+    </div>
+  )
+}
+
 function Wants({ p }: { p: PlayerPage }) {
   const [ask, setAsk] = useState<ExtensionAsk | null>(null)
   const [done, setDone] = useState(false)
@@ -354,6 +380,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
           {p.team && p.team.id !== state?.user.team.id && ts.data?.open && (
             <button className="btn mt-3" onClick={() => { close(); nav(`/trade?team=${p.team!.id}&get=${p.id}`) }}>Trade for this player</button>
           )}
+          <MoodBlock p={p} />
           <Wants p={p} />
           {p.prospect && p.scout && <ScoutPanel id={p.id} level={p.scout.level} maxLevel={3} />}
           {p.editable && !editing && <button className="btn mt-3 ml-2" onClick={() => setEditing(true)}>Edit</button>}

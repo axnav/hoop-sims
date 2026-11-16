@@ -254,7 +254,7 @@ func (s *server) transactions(r *http.Request) (any, error) {
 	for i := len(tx) - 1; i >= 0 && len(rows) < limit; i-- {
 		rows = append(rows, s.txDTO(tx[i]))
 	}
-	return M{"transactions": rows, "userTeam": s.lg.UserTeamID}, nil
+	return M{"transactions": rows, "events": s.eventRows(limit), "userTeam": s.lg.UserTeamID}, nil
 }
 
 // offseasonTrades lists the computer-to-computer trades of the offseason that

@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, develop or resign")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, morale, develop or resign")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -63,6 +63,10 @@ func main() {
 	}
 	if *mode == "badges" {
 		runBadges(*seed)
+		return
+	}
+	if *mode == "morale" {
+		runMorale(*seed, *seasons)
 		return
 	}
 	if *mode == "coaches" {
@@ -549,4 +553,81 @@ func corr(x, y []float64) float64 {
 		syy += (y[i] - my) * (y[i] - my)
 	}
 	return sxy / math.Sqrt(sxx*syy)
+}
+
+// runMorale reports the mood spread by label at mid-season and at the end of
+// each season, and the trade requests (league wide and on the user's team
+// that does nothing: the offseason is the autopilot).
+func runMorale(seed uint64, seasons int) {
+	lg := engine.GenerateLeague(seed)
+	labels := []string{"Furious", "Unhappy", "Content", "Happy", "Thrilled"}
+	spread := func(when string) {
+		n := map[string]int{}
+		sum, tot, lo, hi := 0, 0, 0, 0
+		asking := 0
+		for _, t := range lg.Teams {
+			for _, p := range t.Roster {
+				n[engine.MoraleLabel(p.Morale)]++
+				sum += p.Morale
+				tot++
+				lo, hi = min(lo, p.Morale), max(hi, p.Morale)
+				if p.TradeRequest > 0 {
+					asking++
+				}
+			}
+		}
+		fmt.Printf("  %-11s mean %+.1f  min %+d  max %+d  asking %d |", when, float64(sum)/float64(tot), lo, hi, asking)
+		for _, l := range labels {
+			fmt.Printf(" %s %d", l, n[l])
+		}
+		fmt.Println()
+	}
+	var reqs, withdrawn, traded, userReqs []int
+	for y := 0; y < seasons; y++ {
+		lg.StartSeason()
+		year := lg.Year
+		before := len(lg.Events)
+		_ = before
+		seen := 0
+		for lg.SimDay() {
+			if lg.Season.Day == 41 {
+				fmt.Printf("Season %d\n", y+1)
+				spread("day 41")
+			}
+		}
+		spread("season end")
+		var r, w, t, u int
+		for _, e := range lg.Events {
+			if e.Year != year {
+				continue
+			}
+			switch e.Type {
+			case engine.EvTradeRequest:
+				r++
+				if e.TeamID == lg.UserTeamID {
+					u++
+				}
+			case engine.EvRequestWithdrawn:
+				w++
+			case engine.EvRequestTraded:
+				t++
+			}
+		}
+		_ = seen
+		reqs, withdrawn, traded, userReqs = append(reqs, r), append(withdrawn, w), append(traded, t), append(userReqs, u)
+		fmt.Printf("  requests %d (user team %d), withdrawn %d, traded %d\n", r, u, w, t)
+		if err := lg.SimPlayoffs(); err != nil {
+			fmt.Println("playoffs:", err)
+			return
+		}
+		lg.Offseason()
+	}
+	sum := func(v []int) (s int) {
+		for _, x := range v {
+			s += x
+		}
+		return
+	}
+	fmt.Printf("\nOver %d seasons: requests %d (%.1f a season), user team %d, withdrawn %d, traded %d\n",
+		seasons, sum(reqs), float64(sum(reqs))/float64(seasons), sum(userReqs), sum(withdrawn), sum(traded))
 }

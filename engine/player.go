@@ -76,6 +76,15 @@ type Player struct {
 	// progressed (or an old save).
 	Dev *DevChange `json:",omitempty"`
 
+	// Morale is the mood on a -50..+50 scale, zero = content (see morale.go);
+	// 0 = content, also in an old save. TradeRequest is year*100+week when he
+	// asked to be traded (0 = no request); MoraleStreak counts the weeks in a
+	// row below the request line (no request) or above the recovery line
+	// (request active).
+	Morale       int `json:",omitempty"`
+	TradeRequest int `json:",omitempty"`
+	MoraleStreak int `json:",omitempty"`
+
 	// SeasonDev is the in-season change so far this season (new minus
 	// season-start values, see inseason.go); nil = none yet (or an old save).
 	SeasonDev *DevChange `json:",omitempty"`

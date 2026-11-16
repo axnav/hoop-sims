@@ -165,7 +165,11 @@ func tradeValue(p *Player, contend float64, others []*Player) float64 {
 	if n <= 2 {
 		v *= 1.05 // fills a thin position
 	}
-	return v * contractAdjust(p, contend)
+	v *= contractAdjust(p, contend)
+	if p.TradeRequest > 0 {
+		v *= 1 - MoraleTuning.RequestDiscount // everyone knows he wants out
+	}
+	return v
 }
 
 // TradeValue is a player's worth to a team from visible data only, with the
@@ -413,10 +417,12 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 	lg.Teams[b].Roster = append(lg.Teams[b].Roster, give...)
 	lg.Teams[a].Roster = append(lg.Teams[a].Roster, get...)
 	for _, p := range give {
+		lg.moraleNewTeam(p, a, true)
 		p.TeamID = b
 		p.TeamSince = lg.Year
 	}
 	for _, p := range get {
+		lg.moraleNewTeam(p, b, true)
 		p.TeamID = a
 		p.TeamSince = lg.Year
 	}
@@ -510,64 +516,95 @@ func (lg *League) SimAITrades(r *RNG) []TradeResult {
 	usedTeam := map[int]bool{lg.UserTeamID: true}
 	usedPlayer := map[int]bool{}
 	for len(done) < want {
-		cf := lg.contendFactors()
-		un := make([]map[int]bool, len(lg.Teams))
-		for i := range lg.Teams {
-			un[i] = lg.untouchables(i, cf)
-		}
-		var cands []aiCand
-		for i := 0; i < len(lg.Teams); i++ {
-			for j := i + 1; j < len(lg.Teams); j++ {
-				if usedTeam[i] || usedTeam[j] {
-					continue
-				}
-				for _, p := range lg.Teams[i].Roster {
-					if un[i][p.ID] || usedPlayer[p.ID] {
-						continue
-					}
-					pa, pb := lg.value(p, i, cf), lg.value(p, j, cf)
-					for _, q := range lg.Teams[j].Roster {
-						if un[j][q.ID] || usedPlayer[q.ID] {
-							continue
-						}
-						qa, qb := lg.value(q, i, cf), lg.value(q, j, cf)
-						ga, gb := qa/pa, pb/qb
-						if ga >= 1+TradeMargin+0.05 && gb >= 1+TradeMargin+0.05 {
-							cands = append(cands, aiCand{p, q, i, j, (ga - 1) + (gb - 1)})
-						}
-					}
-				}
-			}
-		}
-		sort.SliceStable(cands, func(x, y int) bool {
-			if cands[x].surplus != cands[y].surplus {
-				return cands[x].surplus > cands[y].surplus
-			}
-			if cands[x].a.ID != cands[y].a.ID {
-				return cands[x].a.ID < cands[y].a.ID
-			}
-			return cands[x].b.ID < cands[y].b.ID
-		})
-		var valid []aiCand
-		for _, c := range cands {
-			ga, gt, na := lg.sideEval(c.ta, []*Player{c.a}, []*Player{c.b}, cf)
-			ha, ht, nb := lg.sideEval(c.tb, []*Player{c.b}, []*Player{c.a}, cf)
-			if gt >= ga*na && ht >= ha*nb &&
-				lg.salaryProblem(c.ta, []*Player{c.a}, []*Player{c.b}) == nil &&
-				lg.salaryProblem(c.tb, []*Player{c.b}, []*Player{c.a}) == nil {
-				valid = append(valid, c)
-				if len(valid) == 6 {
-					break
-				}
-			}
-		}
-		if len(valid) == 0 {
+		res, ok := lg.aiTradeOnce(r, usedTeam, usedPlayer, false)
+		if !ok {
 			break
 		}
-		c := valid[r.IntN(len(valid))]
-		done = append(done, lg.applyTrade(c.ta, c.tb, []*Player{c.a}, []*Player{c.b}))
-		usedTeam[c.ta], usedTeam[c.tb] = true, true
-		usedPlayer[c.a.ID], usedPlayer[c.b.ID] = true, true
+		done = append(done, res)
 	}
 	return done
+}
+
+// aiTradeOnce makes one one-for-one trade between two computer teams where
+// both sides gain by their own valuation, picking at random among the best
+// valid candidates, and marks the teams and players used. A player who asked
+// to be traded (morale.go) may be moved even if he is one of his team's top
+// two, and his own team takes less in return; with requestsOnly only swaps
+// with such a player are considered.
+func (lg *League) aiTradeOnce(r *RNG, usedTeam, usedPlayer map[int]bool, requestsOnly bool) (TradeResult, bool) {
+	cf := lg.contendFactors()
+	un := make([]map[int]bool, len(lg.Teams))
+	for i := range lg.Teams {
+		un[i] = lg.untouchables(i, cf)
+	}
+	need := 1 + TradeMargin + 0.05
+	askMargin := MoraleTuning.RequesterMargin
+	// side is the margin a team needs for giving up x for y: less for a
+	// requester, and no extra margin for taking one in a swap.
+	side := func(x, y *Player) float64 {
+		switch {
+		case x.TradeRequest > 0:
+			return askMargin
+		case y.TradeRequest > 0:
+			return 1
+		}
+		return need
+	}
+	var cands []aiCand
+	for i := 0; i < len(lg.Teams); i++ {
+		for j := i + 1; j < len(lg.Teams); j++ {
+			if usedTeam[i] || usedTeam[j] {
+				continue
+			}
+			for _, p := range lg.Teams[i].Roster {
+				if (un[i][p.ID] && p.TradeRequest == 0) || usedPlayer[p.ID] {
+					continue
+				}
+				pa, pb := lg.value(p, i, cf), lg.value(p, j, cf)
+				for _, q := range lg.Teams[j].Roster {
+					if (un[j][q.ID] && q.TradeRequest == 0) || usedPlayer[q.ID] {
+						continue
+					}
+					if requestsOnly && p.TradeRequest == 0 && q.TradeRequest == 0 {
+						continue
+					}
+					qa, qb := lg.value(q, i, cf), lg.value(q, j, cf)
+					ga, gb := qa/pa, pb/qb
+					if ga >= side(p, q) && gb >= side(q, p) {
+						cands = append(cands, aiCand{p, q, i, j, (ga - 1) + (gb - 1)})
+					}
+				}
+			}
+		}
+	}
+	sort.SliceStable(cands, func(x, y int) bool {
+		if cands[x].surplus != cands[y].surplus {
+			return cands[x].surplus > cands[y].surplus
+		}
+		if cands[x].a.ID != cands[y].a.ID {
+			return cands[x].a.ID < cands[y].a.ID
+		}
+		return cands[x].b.ID < cands[y].b.ID
+	})
+	var valid []aiCand
+	for _, c := range cands {
+		ga, gt, na := lg.sideEval(c.ta, []*Player{c.a}, []*Player{c.b}, cf)
+		ha, ht, nb := lg.sideEval(c.tb, []*Player{c.b}, []*Player{c.a}, cf)
+		if gt >= ga*na && ht >= ha*nb &&
+			lg.salaryProblem(c.ta, []*Player{c.a}, []*Player{c.b}) == nil &&
+			lg.salaryProblem(c.tb, []*Player{c.b}, []*Player{c.a}) == nil {
+			valid = append(valid, c)
+			if len(valid) == 6 {
+				break
+			}
+		}
+	}
+	if len(valid) == 0 {
+		return TradeResult{}, false
+	}
+	c := valid[r.IntN(len(valid))]
+	res := lg.applyTrade(c.ta, c.tb, []*Player{c.a}, []*Player{c.b})
+	usedTeam[c.ta], usedTeam[c.tb] = true, true
+	usedPlayer[c.a.ID], usedPlayer[c.b.ID] = true, true
+	return res, true
 }

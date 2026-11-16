@@ -2361,3 +2361,98 @@ func TestCoachHiringInOffseason(t *testing.T) {
 		t.Error("the hired coach must stay")
 	}
 }
+
+func TestMoraleAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 5, "team": 3}, 200)
+	lg := c.s.lg
+	other := lg.Teams[7].Roster[0]
+	mine := lg.Teams[3].Roster[0]
+	mine.Morale, mine.TradeRequest = -35, lg.Year*100+2
+	other.Morale = 22
+
+	pl := c.call("GET", "/api/player/"+strconv.Itoa(mine.ID), nil, 200)
+	mo, ok := pl["morale"].(map[string]any)
+	if !ok {
+		t.Fatalf("player page lacks morale: %v", pl)
+	}
+	for _, k := range []string{"score", "label", "trend", "reasons", "tradeRequest"} {
+		if _, ok := mo[k]; !ok {
+			t.Errorf("morale lacks %q: %v", k, mo)
+		}
+	}
+	if mo["score"] != 15.0 || mo["label"] != "Furious" || mo["tradeRequest"] != true {
+		t.Errorf("morale object %v", mo)
+	}
+	if rs, ok := mo["reasons"].([]any); !ok || len(rs) > 4 {
+		t.Errorf("reasons %v", mo["reasons"])
+	}
+	// A player on another team shows his mood too.
+	po := c.call("GET", "/api/player/"+strconv.Itoa(other.ID), nil, 200)
+	if m2, ok := po["morale"].(map[string]any); !ok || m2["score"] != 72.0 || m2["label"] != "Happy" || m2["tradeRequest"] != false {
+		t.Errorf("other player morale %v", po["morale"])
+	}
+
+	// Roster rows: brief morale, the flag only while a request is active.
+	team := c.call("GET", "/api/team/3", nil, 200)
+	tm, ok := team["teamMorale"].(map[string]any)
+	if !ok || tm["label"] == nil || tm["score"] == nil {
+		t.Fatalf("team page lacks teamMorale: %v", team["teamMorale"])
+	}
+	flagged := 0
+	for _, x := range team["roster"].([]any) {
+		row := x.(map[string]any)
+		m, ok := row["morale"].(map[string]any)
+		if !ok || len(m) != 2 || m["score"] == nil || m["label"] == nil {
+			t.Fatalf("roster row morale %v", row["morale"])
+		}
+		if row["id"] == float64(mine.ID) {
+			if row["tradeRequest"] != true {
+				t.Errorf("requester row lacks tradeRequest: %v", row)
+			}
+			flagged++
+		} else if _, has := row["tradeRequest"]; has {
+			t.Errorf("tradeRequest on a row without a request: %v", row)
+		}
+	}
+	if flagged != 1 {
+		t.Errorf("requester seen %d times in the roster", flagged)
+	}
+
+	// Trade screen rows.
+	blk := c.call("GET", "/api/trade/block/3", nil, 200)
+	seen := false
+	for _, x := range blk["players"].([]any) {
+		row := x.(map[string]any)
+		if row["id"] == float64(mine.ID) && row["tradeRequest"] == true {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Error("trade block row lacks tradeRequest")
+	}
+
+	// Events appear in the transactions list.
+	lg.Events = append(lg.Events, engine.LeagueEvent{Year: lg.Year, Day: 4, Type: engine.EvTradeRequest, PlayerID: mine.ID, Name: mine.Name, TeamID: 3})
+	tx := c.call("GET", "/api/transactions", nil, 200)
+	evs, ok := tx["events"].([]any)
+	if !ok || len(evs) != 1 {
+		t.Fatalf("events %v", tx["events"])
+	}
+	e := evs[0].(map[string]any)
+	if e["type"] != "trade_request" || e["day"] != 5.0 || e["playerId"] != float64(mine.ID) || e["text"] == "" {
+		t.Errorf("event %v", e)
+	}
+
+	// Free agents have no morale; prospects neither.
+	fa := lg.Teams[5].Roster[12]
+	lg.Teams[5].Roster = lg.Teams[5].Roster[:12]
+	fa.TeamID = -1
+	lg.FreeAgents = append(lg.FreeAgents, fa)
+	pf := c.call("GET", "/api/player/"+strconv.Itoa(fa.ID), nil, 200)
+	if _, has := pf["morale"]; has {
+		t.Errorf("free agent has morale: %v", pf["morale"])
+	}
+	// The mood is never taken from the browser: there is no way to set it.
+	c.call("POST", "/api/player/"+strconv.Itoa(mine.ID), M{"morale": 50}, 404)
+}
