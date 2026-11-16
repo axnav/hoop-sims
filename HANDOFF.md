@@ -14,7 +14,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 - Test changes the owner approved: `TestLongStability` drift 2.5, 90+ limit 20, FT% ceiling 81; `TestTeamBalance` allows one team-season outside 12-70 wins (hard limits 9-73).
 - Effects kept small for now (owner's choice): coach and fit, morale. Raise later in `CoachTuning`/`SystemTuning`/`MoraleTuning`.
 
-**Pushed:** `main` up to `2f8e965` (through coaches) on 2026-11-16. Later commits (morale, release, draft-night trades, search, trade assistant, documents) are local; push needs the owner's go-ahead.
+**Pushed:** `main` up to `88df2fd` (everything through the trade assistant) on 2026-11-16. Only the commit recording this push is local.
 
 **Next:** ask the owner. Open choices: owner goals and team finances, a fuller news feed (the league events list from morale is the start), the tuning batch (section 5 problems 1, 3 to 6, 15), small polish (two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams, tunable in `AdvisorTuning`).
 
@@ -305,6 +305,9 @@ Owner choices: (1) trades open during the draft, including this year's unused pi
 Pieces, in order (shared files): A. draft-night trades (`feat/draft-trades`); C. player search (owner asked 2026-11-16: no search existed; a search box in the top bar plus a Players page filtering every player in the league and free agency by name, team, position, age, overall, contract, badge, morale/trade request, sortable; `GET /api/players` with query parameters; prospects excluded, as their true values are secret); B. trade assistant (`feat/trade-assistant`), whose "What would it take?" can then start from a search result.
 
 ## Update log (newest first)
+
+### 2026-11-16, pushed again
+- Owner said "push it": `main` pushed to origin, 86655a4..88df2fd (morale, release, draft-night trades, search, trade assistant, handoff and rules). Checked first that no private folders are tracked.
 
 ### 2026-11-16, trade assistant (section 16 piece B)
 - Built by one Sonnet helper (engine, API, screens). `engine/assistant.go`: `NeedsOf` (direction, values: win-now veterans / young players / picks / cap relief over $160M; lacks: thin or weak positions and six skills ranked on top-3 rotation ratings and badges, at most 4), "What would it take?" (enumerates up to 3 user players plus 2 picks by cost to the user, the user's top two by value left out unless nothing else works, every package confirmed with the same evaluation `EvaluateDeal`/`ExecuteDeal` use; styles cheapest, players only, with picks, young, veterans; reasons when impossible), `AdvisorOf` (Keep/Shop/Sell from role, age vs direction, contract value, expiring and stance, morale/request, fit, minutes; young top-two cornerstone always Keep). Tunables `AssistTuning`, `AdvisorTuning`. Routes `GET /api/trade/needs/{teamId}`, `GET /api/trade/whatwouldittake/{playerId}` (each package carries a `deal` body for `/api/deal/evaluate|execute`), `GET /api/trade/advisor`. Screens: "What they want" panel and "What would it take?" on the Trade page with "Load this offer", Advisor tab, the action in the drawer and on Players rows (`/trade?team=&want=`), advice chip in the drawer.
