@@ -203,6 +203,7 @@ func (lg *League) SimPlayoffDay() bool {
 	if !s.PlayoffsActive() {
 		return false
 	}
+	lg.gmAutoLineup() // assistant GM: auto lineup (gm.go)
 	round := s.CurrentRound()
 	r := lg.dayRNG(s.Year, playoffOffset+s.PlayoffDay)
 	ir := lg.dayRNG(s.Year, injuryOffset+injuryPlayoffOffset+s.PlayoffDay)

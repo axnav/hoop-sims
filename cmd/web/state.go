@@ -60,6 +60,8 @@ func (s *server) state() M {
 			"label": fmt.Sprintf("%s, game %d", engine.RoundName(sr.Round), g+1), "seriesMe": myWins, "seriesThem": oppWins}
 	}
 	out["next"] = next
+	gmTotal, _ := lg.GMCounts()
+	out["gm"] = M{"count": gmTotal}
 	// last result
 	if b := lg.LastBox; b != nil {
 		me, opp := 0, 1
@@ -230,6 +232,10 @@ func (s *server) sim(r *http.Request) (any, error) {
 				text = s.team(ps[len(ps)-1].Team)["fullName"].(string) + " made you a trade offer."
 			}
 			pause = M{"reason": "offer", "text": text}
+			break
+		}
+		if a := lg.GMAlertLastDay(); multi && a != "" { // assistant GM: a new trade idea (only when the alert switch is on)
+			pause = M{"reason": "assistant", "text": a}
 			break
 		}
 	}

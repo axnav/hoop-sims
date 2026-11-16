@@ -86,6 +86,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	c := &Progression
 	s := lg.Season
 	rep := &OffseasonReport{Year: lg.Year}
+	lg.gmAutoExtend() // assistant GM: auto extensions before contracts tick down (gm.go)
 	r := lg.dayRNG(lg.Year, offseasonOffset)
 	lg.recordSeason()
 	lg.recordTax()
@@ -244,7 +245,13 @@ func (lg *League) DraftPick(playerID int) error {
 // DraftAutoUntilUser lets the computer pick until the user's team is on the
 // clock (or the draft ends).
 func (lg *League) DraftAutoUntilUser() {
-	for !lg.DraftDone() && lg.DraftOnClock() != lg.UserTeamID {
+	for !lg.DraftDone() {
+		if lg.DraftOnClock() == lg.UserTeamID {
+			if lg.GMAutoDraftIfOnClock() { // assistant GM: auto draft (gm.go)
+				continue
+			}
+			break
+		}
 		lg.DraftPick(-1)
 	}
 	lg.EnsureDraftOffer()
@@ -253,6 +260,9 @@ func (lg *League) DraftAutoUntilUser() {
 // DraftAutoAll lets the computer make all remaining picks, including the user's.
 func (lg *League) DraftAutoAll() {
 	for !lg.DraftDone() {
+		if lg.DraftOnClock() == lg.UserTeamID && lg.GMAutoDraftIfOnClock() { // assistant GM: auto draft (gm.go)
+			continue
+		}
 		lg.DraftPick(-1)
 	}
 }
@@ -300,6 +310,7 @@ func (lg *League) finishOffseason(matchUser bool) {
 	}
 
 	lg.autoFocusTeams()
+	lg.gmAutoTraining() // assistant GM: auto training focus for the user (gm.go)
 	lg.finishCoaches()
 	lg.moraleOffseason()
 	lg.clearOffseasonInjuries()

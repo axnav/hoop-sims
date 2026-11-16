@@ -220,8 +220,14 @@ func (s *server) draftStep(r *http.Request) (any, error) {
 	}
 	lg := s.lg
 	picks := []M{}
-	for i := 0; i < in.Max && !lg.DraftDone() && lg.DraftOnClock() != lg.UserTeamID; i++ {
-		lg.DraftPick(-1)
+	for i := 0; i < in.Max && !lg.DraftDone(); i++ {
+		if lg.DraftOnClock() == lg.UserTeamID {
+			if !lg.GMAutoDraftIfOnClock() { // assistant GM: auto draft keeps going
+				break
+			}
+		} else {
+			lg.DraftPick(-1)
+		}
 		picks = append(picks, s.pickDTO(lg.Draft.Results[len(lg.Draft.Results)-1]))
 	}
 	lg.EnsureDraftOffer()

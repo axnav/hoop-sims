@@ -129,6 +129,7 @@ func (lg *League) BeginFreeAgency() error {
 	if lg.Draft == nil || !lg.DraftDone() {
 		return errors.New("the draft is not finished")
 	}
+	lg.gmAutoResign() // assistant GM: auto re-sign before the expiring are released (gm.go)
 	lg.reSignComputerTeams()
 	// Restricted players: the old team keeps his rights (a computer team only
 	// if it would have kept him; the user always does).
@@ -450,6 +451,7 @@ func (lg *League) advanceDay(auto, matchUser bool) ([]FASigning, error) {
 	if fa.Day >= fa.Days {
 		return nil, errors.New("Free agency is over; start the new season.")
 	}
+	lg.gmAutoFreeAgency() // assistant GM: auto offers (gm.go)
 	cf := lg.contendFactors()
 	lg.computerOffers(cf)
 	signed := lg.playersDecide(cf, false)

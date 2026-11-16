@@ -180,6 +180,7 @@ func (lg *League) SimDay() bool {
 	if s.Done() {
 		return false
 	}
+	lg.gmDayStart() // assistant GM: clear the alert, auto lineup (gm.go)
 	lg.newProposals = 0
 	lg.newInjuries = nil
 	lg.newDev = nil
@@ -216,6 +217,7 @@ func (lg *League) SimDay() bool {
 		lg.awardPerfBadges()
 	}
 	lg.updateProposals()
+	lg.gmDayEnd() // assistant GM: trade alerts (gm.go)
 	return true
 }
 

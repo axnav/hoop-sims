@@ -236,6 +236,14 @@ type League struct {
 	// CoachPool holds the coach candidates while the offseason is in progress;
 	// empty the rest of the year (coach.go).
 	CoachPool []*Coach `json:",omitempty"`
+
+	// GM is the assistant GM's state (gm.go). A pointer so a league that never
+	// used it saves the same bytes as before; nil means everything off.
+	GM *GMState `json:",omitempty"`
+	// gmAlert is the trade idea found after the most recent SimDay (not saved).
+	gmAlert string
+	// gmCounts caches the suggestion counts for the state object (not saved).
+	gmCounts *gmCache
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

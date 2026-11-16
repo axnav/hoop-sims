@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, morale, develop or resign")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, morale, develop, resign or gm")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -55,6 +55,10 @@ func main() {
 	}
 	if *mode == "resign" {
 		runResign(*seed, *seasons)
+		return
+	}
+	if *mode == "gm" {
+		runGM()
 		return
 	}
 	if *mode == "ratings" {
