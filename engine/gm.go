@@ -57,6 +57,21 @@ var GMTuning = struct {
 	ReleaseMaxDead  int // release: most total dead money (salary x years, thousands)
 	ReleaseMinRank  int // release: his rank on the roster by overall (0 = best) must be at least this
 
+	// Stars and the tax line. A player among the StarRank best of the roster
+	// (by overall, 1 = best), aged StarMaxAge or younger, may be re-signed or
+	// extended up to the tax line plus StarTaxRoom (a star walking for nothing
+	// costs more than a little tax). Anyone else who would take the payroll
+	// within NearTaxRoom of the tax line must be worth NearTaxNeedMult times
+	// the usual minimum: near the line money goes to value per dollar.
+	StarRank        int
+	StarMaxAge      int
+	StarTaxRoom     int
+	NearTaxRoom     int
+	NearTaxNeedMult float64
+	// An extension for a player of OldYearsAge or older runs at most
+	// OldMaxYears (older players decline; a long deal blocks the roster).
+	OldYearsAge, OldMaxYears int
+
 	// Free agency: a target is worth at least FAMinValue (trade value to the
 	// user); each need he fills adds LackBonus (at most two count); a skill
 	// need is filled by a rating of SkillRating or a badge. Rebuild only
@@ -68,6 +83,18 @@ var GMTuning = struct {
 
 	// Draft: weight of the overall midpoint (the rest goes to potential) by plan.
 	DraftWinNowOvr, DraftRebuildOvr float64
+
+	// Upgrade trades ("trade:get"). Only for plan win_now, or balanced when the
+	// team is a contender or a buyer; never for rebuild nor for a seller or
+	// rebuilding team. The package may hold at most UpgradeMaxCore of the
+	// user's five best players by value and at most UpgradeMaxFirsts first-round
+	// picks (UpgradeWinNowMaxFirsts for win now); the target is at most
+	// UpgradeMaxAge years old (UpgradeWinNowMaxAge for win now).
+	UpgradeMaxCore         int
+	UpgradeMaxFirsts       int
+	UpgradeWinNowMaxFirsts int
+	UpgradeMaxAge          int
+	UpgradeWinNowMaxAge    int
 
 	// Trade alerts: look every this many days.
 	AlertEveryDays int
@@ -82,6 +109,9 @@ var GMTuning = struct {
 	WinNowVetAge: 28, WinNowVetBoost: 1.15, WinNowTaxRoom: 10000,
 	RebuildKeepAge: 25, RebuildStarMult: 2,
 	ReleaseMaxYears: 2, ReleaseMaxDead: 6000, ReleaseMinRank: 10,
+	StarRank: 3, StarMaxAge: 30, StarTaxRoom: 15000, NearTaxRoom: 15000, NearTaxNeedMult: 1.4,
+	OldYearsAge: 31, OldMaxYears: 2,
+	UpgradeMaxCore: 2, UpgradeMaxFirsts: 1, UpgradeWinNowMaxFirsts: 2, UpgradeMaxAge: 30, UpgradeWinNowMaxAge: 34,
 	FAMinValue: 3, LackBonus: 1, SkillRating: 70, RebuildFAMaxAge: 25,
 	DraftWinNowOvr: 0.7, DraftRebuildOvr: 0.2,
 	AlertEveryDays: 3,
@@ -477,9 +507,9 @@ func (lg *League) gmTraining() []gmCand {
 // gmWorth is the re-sign and extension rule: the computer teams' rule (trade
 // value to the user at least Cap.ReSignMinValue), tilted by the plan. The
 // string is the plan's part of the reasons ("" when the plan did not matter).
-func (lg *League) gmWorth(p *Player, plan string, cf []float64) (bool, string) {
+func (lg *League) gmWorth(p *Player, plan string, cf []float64, needMult float64) (bool, string) {
 	v := lg.value(p, lg.UserTeamID, cf)
-	need := Cap.ReSignMinValue
+	need := Cap.ReSignMinValue * needMult
 	note := ""
 	switch plan {
 	case GMPlanWinNow:
@@ -506,12 +536,70 @@ func gmPayLimit(plan string) int {
 	return Cap.TaxLine
 }
 
+// gmIsStar says whether p is one of the StarRank best players of the user's
+// roster (by overall) and young enough to be worth keeping at any price near
+// the tax line.
+func (lg *League) gmIsStar(p *Player) bool {
+	return p.Age <= GMTuning.StarMaxAge && rankOnTeam(lg.Teams[lg.UserTeamID], p) < GMTuning.StarRank
+}
+
+// gmResignLimit is the payroll limit for re-signing or extending p: the plan's
+// limit, lifted by StarTaxRoom for a star (never past the hard ceiling).
+func (lg *League) gmResignLimit(plan string, p *Player) int {
+	limit := gmPayLimit(plan)
+	if plan != GMPlanRebuild && lg.gmIsStar(p) {
+		limit = max(limit, min(Cap.HardCeiling, Cap.TaxLine+GMTuning.StarTaxRoom))
+	}
+	return limit
+}
+
+// gmNeedMult is the multiple of the usual minimum value a player must reach
+// when taking his salary would put the payroll within NearTaxRoom of the tax
+// line (1 for a star or when there is room).
+func (lg *League) gmNeedMult(p *Player, payAfter int) float64 {
+	if lg.gmIsStar(p) || payAfter <= Cap.TaxLine-GMTuning.NearTaxRoom {
+		return 1
+	}
+	return GMTuning.NearTaxNeedMult
+}
+
+// gmSellIDs is the set of the user's players the advisor says to sell. For
+// plans balanced and rebuild the assistant decides "sell" over "extend": such
+// a player gets no re-sign or extension suggestion. Under win now the plan
+// decides the other way round (see gmTrades, which then leaves out of its sell
+// ideas anybody the contract rules would keep).
+func (lg *League) gmSellIDs(plan string) map[int]bool {
+	out := map[int]bool{}
+	if plan == GMPlanWinNow {
+		return out
+	}
+	rows, _ := lg.AdvisorOf()
+	for _, r := range rows {
+		if r.Advice == AdviceSell {
+			out[r.Player.ID] = true
+		}
+	}
+	return out
+}
+
+// gmKeepIDs is the set of players the contract rules would re-sign or extend
+// right now (no release).
+func (lg *League) gmKeepIDs() map[int]bool {
+	out := map[int]bool{}
+	for _, c := range lg.gmContracts() {
+		if strings.HasPrefix(c.s.ID, "resign:") || strings.HasPrefix(c.s.ID, "extend:") {
+			out[c.s.PlayerID] = true
+		}
+	}
+	return out
+}
+
 func (lg *League) gmContracts() []gmCand {
 	user := lg.UserTeamID
 	t := lg.Teams[user]
 	plan := lg.GMPlan()
 	cf := lg.contendFactors()
-	limit := gmPayLimit(plan)
+	sells := lg.gmSellIDs(plan)
 	var out []gmCand
 	add := func(c gmCand) {
 		if len(out) < GMTuning.MaxContracts {
@@ -535,12 +623,12 @@ func (lg *League) gmContracts() []gmCand {
 		pay := lg.Payroll(user)
 		for _, p := range exp {
 			p := p
-			if lg.CanReSign(p) != nil {
+			if lg.CanReSign(p) != nil || sells[p.ID] {
 				continue
 			}
-			ok, note := lg.gmWorth(p, plan, cf)
 			salary, years := AskingContract(p)
-			if !ok || pay+salary > limit || lg.CanSign(user, salary, SignOwn) != nil {
+			ok, note := lg.gmWorth(p, plan, cf, lg.gmNeedMult(p, pay+salary))
+			if !ok || pay+salary > lg.gmResignLimit(plan, p) || lg.CanSign(user, salary, SignOwn) != nil {
 				continue
 			}
 			pay += salary
@@ -548,6 +636,9 @@ func (lg *League) gmContracts() []gmCand {
 				fmt.Sprintf("He says: %s.", lowerFirst(lg.StanceOf(p).Label))}
 			if note != "" {
 				reasons = append(reasons, note)
+			}
+			if pay+salary > gmPayLimit(plan) {
+				reasons = append(reasons, "He is one of your best players, so a little luxury tax is worth it.")
 			}
 			add(gmCand{
 				s: GMSuggestion{ID: fmt.Sprintf("resign:%d", p.ID), Area: GMAreaContracts,
@@ -576,10 +667,15 @@ func (lg *League) gmContracts() []gmCand {
 	byValue(last)
 	for _, p := range last {
 		p := p
+		if sells[p.ID] {
+			continue
+		}
 		salary, maxYears, _ := lg.ExtensionAsk(user, p.ID)
 		_, askYears := AskingContract(p)
 		years := min(askYears, maxYears)
-		ok, note := lg.gmWorth(p, plan, cf)
+		if p.Age >= GMTuning.OldYearsAge {
+			years = min(years, GMTuning.OldMaxYears)
+		}
 		next := salary
 		for _, q := range t.Roster {
 			switch {
@@ -590,13 +686,20 @@ func (lg *League) gmContracts() []gmCand {
 				next += q.Contract.NextSalary
 			}
 		}
-		if !ok || next > limit {
+		ok, note := lg.gmWorth(p, plan, cf, lg.gmNeedMult(p, next))
+		if !ok || next > lg.gmResignLimit(plan, p) {
 			continue
 		}
 		reasons := []string{fmt.Sprintf("He is in the last year of his deal, %d years old and rated %d.", p.Age, p.Overall()),
 			fmt.Sprintf("He says: %s.", lowerFirst(lg.StanceOf(p).Label))}
 		if note != "" {
 			reasons = append(reasons, note)
+		}
+		if next > gmPayLimit(plan) {
+			reasons = append(reasons, "He is one of your best players, so a little luxury tax is worth it.")
+		}
+		if years < min(askYears, maxYears) {
+			reasons = append(reasons, fmt.Sprintf("At %d the deal is kept to %s.", p.Age, yearsText(years)))
 		}
 		add(gmCand{
 			s: GMSuggestion{ID: fmt.Sprintf("extend:%d", p.ID), Area: GMAreaContracts,
@@ -790,30 +893,74 @@ func (lg *League) gmFATargets(plan string, cf []float64) []gmFAT {
 	return out
 }
 
+// gmCutFor is the player a full roster would give up for the free agent p, or
+// nil. It is exactly the engine's own rule for a full computer team that signs
+// an upgrade (signWithCut): p's keep score beats the worst player's by
+// FATuning.UpgradeMargin. On top of that the assistant stays conservative with
+// the user's money: the worst player must be outside the top ten, on a short,
+// cheap deal with no extension agreed, and his release must be allowed.
+func (lg *League) gmCutFor(t *Team, p *Player) *Player {
+	w := lg.worstKeep(t)
+	if w == nil || keepScore(p) < keepScore(w)+FATuning.UpgradeMargin {
+		return nil
+	}
+	if rankOnTeam(t, w) < GMTuning.ReleaseMinRank || w.Contract.Years > GMTuning.ReleaseMaxYears ||
+		w.Contract.NextYears != 0 || w.Contract.Salary*max(1, w.Contract.Years) > GMTuning.ReleaseMaxDead ||
+		!lg.ReleasePreview(t.ID, w.ID).Allowed {
+		return nil
+	}
+	return w
+}
+
 func (lg *League) gmFreeAgency() []gmCand {
 	if lg.FA == nil || lg.FA.Day >= lg.FA.Days {
 		return nil
 	}
 	user := lg.UserTeamID
 	t := lg.Teams[user]
-	spots := RosterSize - len(t.Roster) - len(lg.OffersBy(user))
-	if len(t.Roster) >= RosterSize || spots <= 0 {
+	offers := len(lg.OffersBy(user))
+	spots := RosterSize - len(t.Roster) - offers
+	// A full roster: the engine lets a full computer team bid for a clear
+	// upgrade and cut its worst player when he signs. The user's roster is not
+	// cut by the engine, so the assistant releases that same player first and
+	// makes the offer in one step, once at a time (never past 13).
+	cutting := spots <= 0 && len(t.Roster) == RosterSize && offers == 0
+	if spots <= 0 && !cutting {
 		return nil
 	}
 	plan := lg.GMPlan()
 	cf := lg.contendFactors()
 	var out []gmCand
 	for _, tg := range lg.gmFATargets(plan, cf) {
-		if len(out) >= min(GMTuning.MaxFA, spots) {
+		if len(out) >= min(GMTuning.MaxFA, max(spots, 1)) {
 			break
 		}
 		tg := tg
 		p := tg.p
+		var cut *Player
+		if cutting {
+			if cut = lg.gmCutFor(t, p); cut == nil {
+				continue
+			}
+		}
 		var reasons []string
+		if cut != nil {
+			dead := 0
+			if cut.Contract.Years >= 1 {
+				dead = cut.Contract.Salary
+			}
+			reasons = append(reasons, fmt.Sprintf("Your roster is full. %s (%d, age %d) is your weakest player and %s (%d) is a clear step up; this is the cut a computer team makes.",
+				cut.Name, cut.Overall(), cut.Age, p.Name, p.Overall()))
+			if dead > 0 {
+				reasons = append(reasons, fmt.Sprintf("You still pay %s of his contract this season as dead money.", fmtM(dead)))
+			}
+		}
 		if len(tg.fills) > 0 {
 			reasons = append(reasons, "Fills a need: "+lowerFirst(tg.fills[0])+".")
 		}
-		reasons = append(reasons, fmt.Sprintf("He is %d years old, rated %d with %d potential.", p.Age, p.Overall(), p.Potential))
+		if cut == nil {
+			reasons = append(reasons, fmt.Sprintf("He is %d years old, rated %d with %d potential.", p.Age, p.Overall(), p.Potential))
+		}
 		switch tg.kind {
 		case SignException:
 			reasons = append(reasons, "It uses your once-a-year exception, so no cap room is needed.")
@@ -831,17 +978,49 @@ func (lg *League) gmFreeAgency() []gmCand {
 		if len(reasons) > 3 {
 			reasons = reasons[:3]
 		}
+		title := fmt.Sprintf("Offer %s %s a year for %s.", p.Name, fmtM(tg.salary), yearsText(tg.years))
+		action := "Make the offer"
+		if cut != nil {
+			title = fmt.Sprintf("Offer %s %s a year for %s and release %s to make room.", p.Name, fmtM(tg.salary), yearsText(tg.years), cut.Name)
+			action = "Release and offer"
+		}
+		cutID := -1
+		if cut != nil {
+			cutID = cut.ID
+		}
 		out = append(out, gmCand{
 			s: GMSuggestion{ID: fmt.Sprintf("fa:%d", p.ID), Area: GMAreaFreeAgency,
-				Title:   fmt.Sprintf("Offer %s %s a year for %s.", p.Name, fmtM(tg.salary), yearsText(tg.years)),
-				Reasons: reasons, Action: "Make the offer", PlayerID: p.ID, Link: "/free-agency"},
+				Title: title, Reasons: reasons, Action: action, PlayerID: p.ID, Link: "/free-agency"},
 			do: func() (string, error) {
-				if _, err := lg.MakeOffer(user, p.ID, tg.salary, tg.years); err != nil {
+				if cutID < 0 {
+					if _, err := lg.MakeOffer(user, p.ID, tg.salary, tg.years); err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("Offered %s %s a year for %s. He answers as the days pass.", p.Name, fmtM(tg.salary), yearsText(tg.years)), nil
+				}
+				w := lg.findRosterPlayer(user, cutID)
+				if w == nil || len(lg.Teams[user].Roster) != RosterSize || lg.gmCutFor(lg.Teams[user], p) != w {
+					return "", errors.New("That suggestion no longer applies.")
+				}
+				// Check the money first so a failed offer never follows a release
+				// (the release keeps the payroll the same: dead money takes the
+				// salary's place).
+				if _, err := lg.offerKind(user, p.ID, tg.salary, tg.years); err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("Offered %s %s a year for %s. He answers as the days pass.", p.Name, fmtM(tg.salary), yearsText(tg.years)), nil
+				if err := lg.Release(user, w.ID); err != nil {
+					return "", err
+				}
+				if _, err := lg.MakeOffer(user, p.ID, tg.salary, tg.years); err != nil {
+					lg.gmLog(GMAreaFreeAgency, fmt.Sprintf("Released %s but the offer to %s failed: %v", w.Name, p.Name, err), true)
+					return "", err
+				}
+				return fmt.Sprintf("Released %s and offered %s %s a year for %s. He answers as the days pass.", w.Name, p.Name, fmtM(tg.salary), yearsText(tg.years)), nil
 			},
 		})
+		if cutting {
+			break
+		}
 	}
 	return out
 }
@@ -963,17 +1142,31 @@ func (lg *League) gmTrades() []gmCand {
 	var out []gmCand
 
 	// (a) sell: players the advisor would move, with the best offer for each.
+	// A player the contract rules would re-sign or extend is not sold (and a
+	// player sold is not extended: see gmSellIDs); a valuable player in his last
+	// year who refuses an extension and will test free agency is sold before he
+	// walks for nothing (except under win now, which keeps him for the run).
 	rows, _ := lg.AdvisorOf()
+	keep := lg.gmKeepIDs()
 	want := "any"
 	if plan == GMPlanRebuild {
 		want = "young"
 	}
+	cf := lg.contendFactors()
 	tried := 0
 	for _, r := range rows {
 		if len(out) >= GMTuning.MaxSells || tried >= GMTuning.SellCandidates {
 			break
 		}
-		if r.Advice != AdviceSell && !(r.Advice == AdviceShop && plan == GMPlanRebuild) {
+		walks := false
+		if plan != GMPlanWinNow && r.Advice != AdviceSell && r.Player.Contract.Years == 1 && r.Player.Contract.NextYears == 0 &&
+			lg.StanceOf(r.Player).Key == "test" && lg.value(r.Player, user, cf) >= Cap.ReSignMinValue {
+			walks = true
+		}
+		if r.Advice != AdviceSell && !(r.Advice == AdviceShop && plan == GMPlanRebuild) && !walks {
+			continue
+		}
+		if keep[r.Player.ID] {
 			continue
 		}
 		tried++
@@ -994,12 +1187,16 @@ func (lg *League) gmTrades() []gmCand {
 		tid := o.Team
 		recv := lg.gmAssetsText(o.Receive, tid)
 		reasons := append([]string(nil), r.Reasons...)
+		if walks {
+			reasons = []string{"He will test free agency and cannot be extended, so he would leave for nothing."}
+		}
 		if o.Note != "" {
 			reasons = append(reasons, o.Note)
 		}
-		if len(reasons) > 3 {
-			reasons = reasons[:3]
+		if len(reasons) > 2 {
+			reasons = reasons[:2]
 		}
+		reasons = append(reasons, "So he is sold, not extended or re-signed.")
 		wantNow := want
 		out = append(out, gmCand{
 			s: GMSuggestion{ID: fmt.Sprintf("trade:sell:%d:%d:%s", p.ID, tid, hash), Area: GMAreaTrades,
@@ -1028,8 +1225,8 @@ func (lg *League) gmTrades() []gmCand {
 	}
 
 	// (b) upgrade at the biggest weak spot, from a team that is selling.
-	if plan != GMPlanRebuild && len(out) < GMTuning.MaxTrades {
-		if c, ok := lg.gmUpgrade(); ok {
+	if lg.gmUpgradeAllowed(plan) && len(out) < GMTuning.MaxTrades {
+		if c, ok := lg.gmUpgrade(plan); ok {
 			out = append(out, c)
 		}
 	}
@@ -1039,9 +1236,24 @@ func (lg *League) gmTrades() []gmCand {
 	return out
 }
 
+// gmUpgradeAllowed says whether the assistant may propose a trade that adds a
+// better player at the cost of assets: only for plan win now, or for balanced
+// when the team is a contender or a buyer; never for rebuild, and never for a
+// seller or a rebuilding team whatever the plan.
+func (lg *League) gmUpgradeAllowed(plan string) bool {
+	dir := lg.TeamStatusOf(lg.UserTeamID).Key
+	if dir != "contender" && dir != "buyer" {
+		return false
+	}
+	return plan == GMPlanWinNow || plan == GMPlanBalanced
+}
+
 // gmUpgrade looks for one player at the user's biggest weak spot on a selling
-// or rebuilding team and a package the real rules accept.
-func (lg *League) gmUpgrade() (gmCand, bool) {
+// or rebuilding team and a package the real rules accept. The package may not
+// hold a player the contract rules would re-sign or extend, more than
+// UpgradeMaxCore of the user's five best players by value, or more first-round
+// picks than the plan allows; the target's age must fit the plan.
+func (lg *League) gmUpgrade(plan string) (gmCand, bool) {
 	user := lg.UserTeamID
 	need := lg.NeedsOf(user)
 	lacks := gmParseLacks(need.Lacks)
@@ -1055,13 +1267,33 @@ func (lg *League) gmUpgrade() (gmCand, bool) {
 		floor = rot[5].Overall()
 	}
 	sts := lg.TeamStatuses()
+	maxAge, maxFirsts := GMTuning.UpgradeMaxAge, GMTuning.UpgradeMaxFirsts
+	if plan == GMPlanWinNow {
+		maxAge, maxFirsts = GMTuning.UpgradeWinNowMaxAge, GMTuning.UpgradeWinNowMaxFirsts
+	}
+	keep := lg.gmKeepIDs()
+	cf := lg.contendFactors()
+	byVal := append([]*Player(nil), mine...)
+	sort.SliceStable(byVal, func(i, j int) bool {
+		vi, vj := lg.value(byVal[i], user, cf), lg.value(byVal[j], user, cf)
+		if vi != vj {
+			return vi > vj
+		}
+		return byVal[i].ID < byVal[j].ID
+	})
+	core := map[int]bool{}
+	for i, p := range byVal {
+		if i < 5 {
+			core[p.ID] = true
+		}
+	}
 	var cands []*Player
 	for tid, t := range lg.Teams {
 		if tid == user || (sts[tid].Key != "seller" && sts[tid].Key != "rebuilding") {
 			continue
 		}
 		for _, p := range t.Roster {
-			if p.Overall() >= floor && lg.gmFills(p, lack) {
+			if p.Overall() >= floor && p.Age <= maxAge && lg.gmFills(p, lack) {
 				cands = append(cands, p)
 			}
 		}
@@ -1081,12 +1313,30 @@ func (lg *League) gmUpgrade() (gmCand, bool) {
 		if err != nil || !res.Possible || len(res.Packages) == 0 {
 			continue
 		}
-		pk := res.Packages[0]
-		for _, x := range res.Packages {
-			if x.Cheapest {
-				pk = x
+		// the cheapest package first, then the others, whichever obeys the limits
+		ordered := append([]TakePackage(nil), res.Packages...)
+		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Cheapest && !ordered[j].Cheapest })
+		var pk TakePackage
+		found := false
+		for _, x := range ordered {
+			nCore, firsts, kept := 0, 0, false
+			for _, a := range x.Give {
+				switch {
+				case a.Kind == PlayerAsset && keep[a.PlayerID]:
+					kept = true
+				case a.Kind == PlayerAsset && core[a.PlayerID]:
+					nCore++
+				case a.Kind != PlayerAsset && a.Round == 1:
+					firsts++
+				}
+			}
+			if !kept && nCore <= GMTuning.UpgradeMaxCore && firsts <= maxFirsts {
+				pk, found = x, true
 				break
 			}
+		}
+		if !found {
+			continue
 		}
 		gone := map[int]bool{}
 		for _, a := range pk.Give {
