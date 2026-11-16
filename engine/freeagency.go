@@ -549,9 +549,10 @@ func offerSignKind(o FAOffer) SignKind {
 func (lg *League) signWithCut(teamID int, p *Player, salary, years int, kind SignKind) error {
 	var cut *Player
 	var cutContract Contract
+	var cutDead []DeadContract
 	if tm := lg.Teams[teamID]; len(tm.Roster) >= RosterSize && teamID != lg.UserTeamID {
 		if w := lg.worstKeep(tm); keepScore(p) >= keepScore(w)+FATuning.UpgradeMargin {
-			cut, cutContract = w, w.Contract
+			cut, cutContract, cutDead = w, w.Contract, tm.DeadMoney
 			for i, q := range tm.Roster {
 				if q == w {
 					tm.Roster = append(tm.Roster[:i], tm.Roster[i+1:]...)
@@ -565,6 +566,7 @@ func (lg *League) signWithCut(teamID int, p *Player, salary, years int, kind Sig
 		if cut != nil { // undo the cut
 			lg.FreeAgents = lg.FreeAgents[:len(lg.FreeAgents)-1]
 			cut.Contract, cut.TeamID = cutContract, teamID
+			lg.Teams[teamID].DeadMoney = cutDead
 			lg.Teams[teamID].Roster = append(lg.Teams[teamID].Roster, cut)
 		}
 		return err

@@ -456,7 +456,6 @@ func (lg *League) fixRosters(tids []int, res *TradeResult) {
 				return t.Roster[i].ID < t.Roster[j].ID
 			})
 			for _, p := range t.Roster[RosterSize:] {
-				// Simplification: a released player's contract just ends (no dead money).
 				lg.releaseToFA(p)
 				res.Released = append(res.Released, TxPlayer{p.ID, p.Name, tid, -1})
 			}
@@ -468,14 +467,7 @@ func (lg *League) fixRosters(tids []int, res *TradeResult) {
 	for _, tid := range tids {
 		t := lg.Teams[tid]
 		for len(t.Roster) < RosterSize && len(lg.FreeAgents) > 0 {
-			bi := 0
-			for i, p := range lg.FreeAgents {
-				q := lg.FreeAgents[bi]
-				if p.Overall() > q.Overall() || (p.Overall() == q.Overall() && p.ID < q.ID) {
-					bi = i
-				}
-			}
-			p := lg.FreeAgents[bi]
+			p := lg.bestFreeAgent(-1)
 			// A free agent signed to fill a roster gets a one-year minimum deal
 			// (even past the hard ceiling, so a roster can always be filled).
 			lg.forceSign(tid, p, Cap.MinSalary, 1)
