@@ -2585,3 +2585,206 @@ func TestDraftNightAPI(t *testing.T) {
 		t.Fatal("no trade-up offer in 12 seeds")
 	}
 }
+
+func TestPlayersSearch(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 5, "team": 3}, 200)
+	lg := c.s.lg
+	// Make one free agent so team=fa has a result.
+	t0 := lg.Teams[0]
+	fa := t0.Roster[len(t0.Roster)-1]
+	t0.Roster = t0.Roster[:len(t0.Roster)-1]
+	fa.TeamID = -1
+	lg.FreeAgents = append(lg.FreeAgents, fa)
+	onTeams := 0
+	for _, tm := range lg.Teams {
+		onTeams += len(tm.Roster)
+	}
+	rows := func(m M) []M {
+		out := []M{}
+		for _, x := range m["players"].([]any) {
+			out = append(out, x.(M))
+		}
+		return out
+	}
+
+	all := c.call("GET", "/api/players?limit=200", nil, 200)
+	if num(all["total"]) != onTeams+len(lg.FreeAgents) || len(rows(all)) != 200 {
+		t.Fatalf("total %v, want %d, got %d rows", all["total"], onTeams+len(lg.FreeAgents), len(rows(all)))
+	}
+	first := rows(all)[0]
+	for _, k := range []string{"id", "name", "pos", "age", "ovr", "pot", "team", "salary", "years", "badgeCount", "morale"} {
+		if _, ok := first[k]; !ok {
+			t.Fatalf("row without %s: %v", k, first)
+		}
+	}
+	b, _ := json.Marshal(first)
+	t.Logf("example row: %s", b)
+	// Default sort: overall, high to low.
+	prev := 1000
+	for _, r := range rows(all) {
+		if num(r["ovr"]) > prev {
+			t.Fatal("not sorted by overall")
+		}
+		prev = num(r["ovr"])
+	}
+
+	// Name match, case-insensitive.
+	target := lg.Teams[5].Roster[0]
+	part := strings.ToUpper(target.Name[1 : len(target.Name)-1])
+	m := c.call("GET", "/api/players?q="+strings.ReplaceAll(part, " ", "%20"), nil, 200)
+	found := false
+	for _, r := range rows(m) {
+		if !strings.Contains(strings.ToLower(r["name"].(string)), strings.ToLower(part)) {
+			t.Fatalf("name %v does not contain %q", r["name"], part)
+		}
+		found = found || num(r["id"]) == target.ID
+	}
+	if !found {
+		t.Fatalf("%q not found", target.Name)
+	}
+	if foldName("Dončić") != "doncic" {
+		t.Fatal("accent folding")
+	}
+
+	// Team filter.
+	tm := c.call("GET", "/api/players?team=5", nil, 200)
+	if num(tm["total"]) != len(lg.Teams[5].Roster) {
+		t.Fatalf("team total %v", tm["total"])
+	}
+	for _, r := range rows(tm) {
+		if num(r["team"].(M)["id"]) != 5 {
+			t.Fatalf("wrong team: %v", r)
+		}
+	}
+	c.call("GET", "/api/players?team=999", nil, 400)
+
+	// Free agents.
+	fas := c.call("GET", "/api/players?team=fa", nil, 200)
+	if num(fas["total"]) != len(lg.FreeAgents) {
+		t.Fatalf("fa total %v", fas["total"])
+	}
+	for _, r := range rows(fas) {
+		if r["team"] != nil {
+			t.Fatalf("free agent with a team: %v", r)
+		}
+	}
+
+	// Position (primary or alternate), overall range.
+	pg := c.call("GET", "/api/players?pos=PG&limit=200", nil, 200)
+	for _, r := range rows(pg) {
+		if !strings.Contains(r["pos"].(string), "PG") {
+			t.Fatalf("pos %v", r["pos"])
+		}
+	}
+	c.call("GET", "/api/players?pos=XX", nil, 400)
+	rg := c.call("GET", "/api/players?minOvr=60&maxOvr=70&limit=200", nil, 200)
+	if num(rg["total"]) == 0 {
+		t.Fatal("no players 60-70")
+	}
+	for _, r := range rows(rg) {
+		if o := num(r["ovr"]); o < 60 || o > 70 {
+			t.Fatalf("ovr %d outside range", o)
+		}
+	}
+	ag := c.call("GET", "/api/players?minAge=30&maxAge=33&limit=200", nil, 200)
+	for _, r := range rows(ag) {
+		if a := num(r["age"]); a < 30 || a > 33 {
+			t.Fatalf("age %d", a)
+		}
+	}
+	yl := c.call("GET", "/api/players?yearsLeft=2&maxSalary=5000&limit=200", nil, 200)
+	for _, r := range rows(yl) {
+		if num(r["years"]) != 2 || num(r["salary"]) > 5000 {
+			t.Fatalf("contract filter: %v", r)
+		}
+	}
+
+	// Badge filter and unknown badge.
+	c.call("GET", "/api/players?badge=nonsense", nil, 400)
+	bd := c.call("GET", "/api/players?badge=star&limit=200", nil, 200)
+	if num(bd["total"]) == 0 {
+		t.Fatal("nobody has the star badge")
+	}
+	for _, r := range rows(bd) {
+		if p := lg.FindPlayer(num(r["id"])); p == nil || !lg.HasBadge(p, "star") {
+			t.Fatalf("row without the badge: %v", r)
+		}
+	}
+	// Morale and trade request.
+	c.call("GET", "/api/players?morale=nonsense", nil, 400)
+	mo := c.call("GET", "/api/players?morale=content&limit=200", nil, 200)
+	for _, r := range rows(mo) {
+		if r["morale"].(M)["label"] != "Content" {
+			t.Fatalf("morale %v", r["morale"])
+		}
+	}
+	rq := lg.Teams[7].Roster[0]
+	rq.TradeRequest = lg.Year*100 + 3
+	tr := c.call("GET", "/api/players?tradeRequest=1", nil, 200)
+	if num(tr["total"]) != 1 || num(rows(tr)[0]["id"]) != rq.ID || rows(tr)[0]["tradeRequest"] != true {
+		t.Fatalf("tradeRequest: %v", tr)
+	}
+
+	// Sort and paging.
+	var names []string
+	for off := 0; ; off += 100 {
+		pgm := c.call("GET", "/api/players?sort=name&dir=asc&limit=100&offset="+itoa(off), nil, 200)
+		if num(pgm["total"]) != onTeams+len(lg.FreeAgents) {
+			t.Fatalf("paged total %v", pgm["total"])
+		}
+		for _, r := range rows(pgm) {
+			names = append(names, foldName(r["name"].(string)))
+		}
+		if len(rows(pgm)) < 100 {
+			break
+		}
+	}
+	if len(names) != onTeams+len(lg.FreeAgents) || !sort.StringsAreSorted(names) {
+		t.Fatalf("paging: %d names, sorted %v", len(names), sort.StringsAreSorted(names))
+	}
+	ages := c.call("GET", "/api/players?sort=age&limit=5", nil, 200)
+	if len(rows(ages)) != 5 || num(rows(ages)[0]["age"]) > num(rows(ages)[4]["age"]) {
+		t.Fatalf("age sort: %v", ages)
+	}
+	c.call("GET", "/api/players?sort=impact", nil, 400)
+	c.call("GET", "/api/players?sort=badges&dir=desc&limit=3", nil, 200)
+	c.call("GET", "/api/players?sort=salary&limit=3", nil, 200)
+	far := c.call("GET", "/api/players?offset=100000", nil, 200)
+	if len(rows(far)) != 0 || num(far["total"]) != onTeams+len(lg.FreeAgents) {
+		t.Fatalf("offset past the end: %v", far)
+	}
+
+	// Draft prospects are never listed.
+	toDraftStart(c, 11)
+	pool := c.s.lg.Draft.Pool
+	if len(pool) == 0 {
+		t.Fatal("no prospects")
+	}
+	want := 0
+	for _, tm := range c.s.lg.Teams {
+		want += len(tm.Roster)
+	}
+	want += len(c.s.lg.FreeAgents)
+	ids := map[int]bool{}
+	for _, p := range pool {
+		ids[p.ID] = true
+	}
+	for off := 0; off < want; off += 200 {
+		pr := c.call("GET", "/api/players?limit=200&offset="+itoa(off), nil, 200)
+		if num(pr["total"]) != want {
+			t.Fatalf("draft-time total %v, want %d", pr["total"], want)
+		}
+		for _, r := range rows(pr) {
+			if ids[num(r["id"])] {
+				t.Fatalf("prospect listed: %v", r)
+			}
+		}
+	}
+	byName := c.call("GET", "/api/players?q="+strings.ReplaceAll(pool[0].Name, " ", "%20"), nil, 200)
+	for _, r := range rows(byName) {
+		if ids[num(r["id"])] {
+			t.Fatalf("prospect found by name: %v", r)
+		}
+	}
+}

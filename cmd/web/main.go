@@ -245,6 +245,7 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/standings", true, s.standings)
 	g("/api/leaders", true, s.leaders)
 	g("/api/badges", true, s.badgeCatalogue)
+	g("/api/players", true, s.players)
 	g("/api/teams", true, s.teamsList)
 	g("/api/team/{id}", true, s.teamPage)
 	g("/api/player/{id}", true, s.player)

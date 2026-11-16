@@ -88,6 +88,12 @@ export type RosterRow = {
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
   stance?: Stance; extended?: boolean; focus?: string; badgeCount?: number
 }
+export type SearchRow = {
+  id: number; name: string; pos: string; age: number; ovr: number; pot: number; team: Team | null
+  salary: number; years: number; injury?: Injury; photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number
+  badgeCount?: number; morale?: MoraleBrief; tradeRequest?: boolean
+}
+export type PlayerSearch = { total: number; players: SearchRow[] }
 export type TeamStatus = { key: 'contender' | 'buyer' | 'seller' | 'rebuilding'; label: string; wants: string }
 export type TeamRow = {
   team: Team; w: number; l: number; confRank: number; payroll: number; capRoom: number; rosterSize: number; top8: number
@@ -267,6 +273,7 @@ export const api = {
   standings: () => get<Standings>('/api/standings'),
   leaders: (badge = '') => get<Leaders>('/api/leaders' + (badge ? `?badge=${encodeURIComponent(badge)}` : '')),
   badges: () => get<{ badges: BadgeDef[] }>('/api/badges'),
+  players: (qs: string) => get<PlayerSearch>('/api/players' + (qs ? `?${qs}` : '')),
   teams: () => get<{ teams: TeamRow[] }>('/api/teams'),
   team: (id: number) => get<TeamPage>(`/api/team/${id}`),
   player: (id: number) => get<PlayerPage>(`/api/player/${id}`),

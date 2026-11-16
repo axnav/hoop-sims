@@ -400,6 +400,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/standings` | Conference standings | `standings` (league.go) |
 | GET | `/api/leaders` | Top 10 in points, rebounds, assists; optional `?badge=<key>` keeps only players with that badge (unknown key: 400) | `leaders` (league.go) |
 | GET | `/api/badges` | Badge catalogue `{badges:[{key,name,group,kind,rule,effect}]}` | `badgeCatalogue` (badges.go) |
+| GET | `/api/players` | Player search over every team and free agency (not prospects): `q`, `team` (id or `fa`), `pos`, `minOvr`/`maxOvr`, `minAge`/`maxAge`, `maxSalary`, `yearsLeft`, `badge`, `tradeRequest=1`, `morale`, `sort`/`dir`, `limit`/`offset` → `{total, players:[rows]}` | `players` (players.go) |
 | GET | `/api/teams` | All 30 teams: record, rank, payroll, cap room, top-8 average, best player, status, pending offers | `teamsList` (teams.go) |
 | GET | `/api/team/{id}` | A team's roster, record, payroll, `coach` (name, system in use) and `teamFit` | `teamPage` (league.go) |
 | GET | `/api/player/{id}` | A player's page (prospects get ranges only; others get `badges`) | `player` (league.go) |

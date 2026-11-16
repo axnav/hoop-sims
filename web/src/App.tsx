@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import TeamPage from './pages/TeamPage'
 import Standings from './pages/Standings'
 import Teams from './pages/Teams'
+import Players from './pages/Players'
 import Leaders from './pages/Leaders'
 import Schedule from './pages/Schedule'
 import BoxScore from './pages/BoxScore'
@@ -64,6 +65,7 @@ function Shell() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/teams" element={<Teams />} />
+          <Route path="/players" element={<Players />} />
           <Route path="/leaders" element={<Leaders />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/schedule/:id" element={<Schedule />} />
