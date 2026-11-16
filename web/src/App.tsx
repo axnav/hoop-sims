@@ -25,6 +25,7 @@ import Lineup from './pages/Lineup'
 import Coach from './pages/Coach'
 import Trade from './pages/Trade'
 import Settings from './pages/Settings'
+import Assistant from './pages/Assistant'
 
 function Shell() {
   const { state, error, run, busy, actionError } = useFlow()
@@ -62,6 +63,7 @@ function Shell() {
           <Route path="/coach/:teamId" element={<Coach />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/team/:id" element={<TeamPage />} />
+          <Route path="/assistant" element={<Assistant />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/teams" element={<Teams />} />

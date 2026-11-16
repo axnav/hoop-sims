@@ -95,8 +95,8 @@ export function TopBar() {
   if (!s) return null
   const u = s.user
   const offseason = s.phase === 'offseason' || s.phase === 'draft' || s.phase === 'draft_done'
-  const link = (to: string, label: string, badge = 0, red = false, expiring = 0) => (
-    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}{badge > 0 && <span className={`ml-1.5 rounded-full ${red ? 'bg-loss text-white' : 'bg-accent text-black'} px-1.5 py-px text-[10px] font-bold tabular-nums`} aria-label={`${badge} ${red ? 'injured' : 'offers'}`}>{badge}</span>}{expiring > 0 && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 py-px text-[10px] font-bold tabular-nums text-black" aria-label={`${expiring} contracts ending`} title="Contracts ending">{expiring}</span>}</NavLink>
+  const link = (to: string, label: string, badge = 0, red = false, expiring = 0, tips = 0) => (
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `rounded-md px-3 py-1.5 font-semibold ${isActive ? 'bg-white/10 text-ink' : 'text-muted hover:text-ink'}`}>{label}{badge > 0 && <span className={`ml-1.5 rounded-full ${red ? 'bg-loss text-white' : 'bg-accent text-black'} px-1.5 py-px text-[10px] font-bold tabular-nums`} aria-label={`${badge} ${red ? 'injured' : 'offers'}`}>{badge}</span>}{tips > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 py-px text-[10px] font-bold tabular-nums text-black" aria-label={`${tips} suggestions`}>{tips}</span>}{expiring > 0 && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 py-px text-[10px] font-bold tabular-nums text-black" aria-label={`${expiring} contracts ending`} title="Contracts ending">{expiring}</span>}</NavLink>
   )
   return (
     <header
@@ -142,6 +142,7 @@ export function TopBar() {
         {s.phase === 'free_agency' && link('/free-agency', 'Free agency')}
         {link('/history', 'History')}
         {link('/trade', 'Trades', s.offers)}
+        {link('/assistant', 'Assistant', 0, false, 0, s.gm?.count ?? 0)}
         {link('/settings', 'Settings')}
       </nav>
     </header>

@@ -9,7 +9,7 @@ import { OffersCard } from '../OffersCard'
 import { InjuriesCard } from '../InjuriesCard'
 import { ExpiringCard } from '../ExpiringCard'
 import { TradeRequestCard } from '../TradeRequestCard'
-import { Card, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1 } from '../ui'
+import { Card, Chip, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1 } from '../ui'
 
 function Hero({ children, tone = 'accent' }: { children: React.ReactNode; tone?: 'accent' | 'gold' }) {
   return (
@@ -27,6 +27,24 @@ function AwardLine({ label, a }: { label: string; a: Award }) {
   if (!a) return null
   return (
     <div className="text-muted">{label}: <PlayerLink id={a.playerId} name={a.name} /> <span className="tabular-nums">({f1(a.ppg)} / {f1(a.rpg)} / {f1(a.apg)})</span></div>
+  )
+}
+
+function AssistantCard() {
+  const { state: s } = useFlow()
+  const q = useQuery({ queryKey: ['gm', s?.year, s?.phase, s?.day], queryFn: api.gm, enabled: (s?.gm?.count ?? 0) > 0 })
+  const g = q.data
+  if (!g || g.suggestions.length === 0) return null
+  const label = (k: string) => g.areas.find((a) => a.key === k)?.label ?? k
+  return (
+    <Card title="Assistant" className="mb-4">
+      <ul className="space-y-1 px-2 py-1">
+        {g.suggestions.slice(0, 3).map((x) => (
+          <li key={x.id} className="flex flex-wrap items-baseline gap-x-2"><Chip>{label(x.area)}</Chip><span className="min-w-0">{x.title}</span></li>
+        ))}
+      </ul>
+      <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/assistant">Open the assistant ({g.suggestions.length})</Link></div>
+    </Card>
   )
 }
 
@@ -142,6 +160,7 @@ export default function Dashboard() {
       )}
       <Interlude />
       <OffseasonTrades />
+      <AssistantCard />
       <OffersCard />
       <ExpiringCard />
       <InjuriesCard />

@@ -552,7 +552,7 @@ func (lg *League) gmContracts() []gmCand {
 			add(gmCand{
 				s: GMSuggestion{ID: fmt.Sprintf("resign:%d", p.ID), Area: GMAreaContracts,
 					Title:   fmt.Sprintf("Re-sign %s for %s over %s.", p.Name, fmtM(salary), yearsText(years)),
-					Reasons: reasons, Action: "Re-sign him", PlayerID: p.ID, Link: "/contracts"},
+					Reasons: reasons, Action: "Re-sign him", PlayerID: p.ID, Link: ""},
 				do: func() (string, error) {
 					salary, years := AskingContract(p)
 					if err := lg.ReSign(user, p.ID); err != nil {
@@ -601,7 +601,7 @@ func (lg *League) gmContracts() []gmCand {
 		add(gmCand{
 			s: GMSuggestion{ID: fmt.Sprintf("extend:%d", p.ID), Area: GMAreaContracts,
 				Title:   fmt.Sprintf("Extend %s for %s over %s.", p.Name, fmtM(salary), yearsText(years)),
-				Reasons: reasons, Action: "Extend him", PlayerID: p.ID, Link: "/contracts"},
+				Reasons: reasons, Action: "Extend him", PlayerID: p.ID, Link: ""},
 			do: func() (string, error) {
 				if err := lg.Extend(user, p.ID, salary, years); err != nil {
 					return "", err
@@ -834,7 +834,7 @@ func (lg *League) gmFreeAgency() []gmCand {
 		out = append(out, gmCand{
 			s: GMSuggestion{ID: fmt.Sprintf("fa:%d", p.ID), Area: GMAreaFreeAgency,
 				Title:   fmt.Sprintf("Offer %s %s a year for %s.", p.Name, fmtM(tg.salary), yearsText(tg.years)),
-				Reasons: reasons, Action: "Make the offer", PlayerID: p.ID, Link: "/freeagents"},
+				Reasons: reasons, Action: "Make the offer", PlayerID: p.ID, Link: "/free-agency"},
 			do: func() (string, error) {
 				if _, err := lg.MakeOffer(user, p.ID, tg.salary, tg.years); err != nil {
 					return "", err

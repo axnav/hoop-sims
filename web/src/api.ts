@@ -39,6 +39,7 @@ export type GameState = {
   payroll: Payroll
   fa?: { day: number; days: number; daysLeft: number }
   pendingSheets?: number
+  gm?: { count: number }
 }
 export type Level = 'Low' | 'Medium' | 'High'
 export type Motivation = { money: Level; winning: Level; role: Level; loyalty: Level }
@@ -163,7 +164,16 @@ export type Offer = {
   status?: TeamStatus; id: number; team: Team; message: string; day: number; expires: number; daysLeft: number; draftPick?: number
   give: AssetRow[]; get: AssetRow[]; moves: DealMove[]
 }
-export type SimPause = { reason: 'offer' | 'deadline'; text: string }
+export type GMAutoKey = 'lineup' | 'training' | 'contracts' | 'freeAgency' | 'draft' | 'tradeAlerts'
+export type GMArea = { key: string; label: string; blurb: string; canAuto: boolean; autoKey: GMAutoKey; autoLabel: string }
+export type GMSuggestion = { id: string; area: string; title: string; reasons: string[]; action: string; playerId: number | null; link: string | null }
+export type GMLogEntry = { year: number; day: number; area: string; text: string; auto: boolean }
+export type GM = {
+  plan: string; plans: { key: string; label: string; blurb: string }[]
+  auto: Record<GMAutoKey, boolean>; areas: GMArea[]; suggestions: GMSuggestion[]
+  counts: Record<string, number>; log: GMLogEntry[]
+}
+export type SimPause = { reason: 'offer' | 'deadline' | 'assistant'; text: string }
 export type SimResult = {
   days: DayResult[]; strip: { rank: number; team: Team; w: number; l: number }[]; state: GameState
   newOffers: number; pause?: SimPause; injuries: InjuryLine[]; development?: DevLine[]
@@ -284,6 +294,9 @@ export const api = {
   load: () => post<GameState>('/api/load'),
   save: () => post<{ ok: boolean }>('/api/save'),
   state: () => get<GameState>('/api/state'),
+  gm: () => get<GM>('/api/gm'),
+  gmSettings: (b: { plan?: string; auto?: Partial<Record<GMAutoKey, boolean>> }) => post<GM>('/api/gm/settings', b),
+  gmApply: (id: string) => post<{ message: string; gm: GM; state: GameState }>('/api/gm/apply', { id }),
   sim: (b: { days?: number; toEnd?: boolean; auto?: boolean }) => post<SimResult>('/api/sim', b),
   standings: () => get<Standings>('/api/standings'),
   leaders: (badge = '') => get<Leaders>('/api/leaders' + (badge ? `?badge=${encodeURIComponent(badge)}` : '')),

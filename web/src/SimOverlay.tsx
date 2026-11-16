@@ -105,9 +105,9 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
 
   const answer = (go: boolean) => {
     if (!pause) return
-    if (noStop) api.setOptions(pause.reason === 'offer' ? { noOfferStop: true } : { noDeadlineStop: true }).catch(() => {})
+    if (noStop && pause.reason !== 'assistant') api.setOptions(pause.reason === 'offer' ? { noOfferStop: true } : { noDeadlineStop: true }).catch(() => {})
     setNoStop(false)
-    if (go) { remaining.current = 0; setPause(null); onClose(); nav('/trade') }
+    if (go) { remaining.current = 0; setPause(null); onClose(); nav(pause.reason === 'assistant' ? '/assistant' : '/trade') }
     else loop()
   }
   const changeOffer = (id: number) => {
@@ -186,13 +186,13 @@ export function SimOverlay({ plan, onClose }: { plan: SimPlan; onClose: () => vo
             {pause && (
               <div className="mt-2 rounded-lg border border-accent/60 bg-panel2 p-3" role="alertdialog" aria-label="Sim paused">
                 <div className="font-semibold">{pause.text}</div>
-                <label className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+                {pause.reason !== 'assistant' && <label className="mt-2 flex items-center gap-2 text-[13px] text-muted">
                   <input type="checkbox" checked={noStop} onChange={(e) => setNoStop(e.target.checked)} />
                   {pause.reason === 'offer' ? "Don't stop for offers" : "Don't stop before the deadline"}
-                </label>
+                </label>}
                 {pause.reason === 'offer' && <OfferPause onChangeIt={changeOffer} />}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {pause.reason !== 'offer' && <button className="btn btn-accent" onClick={() => answer(true)}>Go to trades</button>}
+                  {pause.reason !== 'offer' && <button className="btn btn-accent" onClick={() => answer(true)}>{pause.reason === 'assistant' ? 'Open the assistant' : 'Go to trades'}</button>}
                   <button className={`btn ${pause.reason === 'offer' ? 'btn-accent' : ''}`} onClick={() => answer(false)}>Keep simming</button>
                   {pause.reason === 'offer' && <button className="btn" onClick={closeNow}>Close</button>}
                 </div>

@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { api, type Options } from '../api'
 import { Card, ErrorBox, Page, Q } from '../ui'
 
@@ -45,6 +46,7 @@ export default function Settings() {
             <Switch label="Commissioner mode" note="Allows editing any player's ratings, age and potential." checked={o.commissioner} disabled={save.isPending} onChange={(v) => set({ commissioner: v })} />
           </Card>
         )}</Q>
+        <p className="mt-3 text-sm text-muted">The assistant GM has its own switches. <Link className="link text-accent" to="/assistant">Assistant settings</Link></p>
         {save.isError && <div className="mt-2"><ErrorBox error={save.error} /></div>}
       </div>
     </Page>
