@@ -94,7 +94,7 @@ function MoneyCard({ m }: { m: OwnerData['money'] }) {
         <div className={`mt-3 flex items-baseline justify-between gap-3 border-t border-line/50 pt-2 font-bold ${m.profit < 0 ? 'text-loss' : 'text-win'}`}>
           <span>{m.profit < 0 ? 'Loss' : 'Profit'}</span><span className="tabular-nums">{money(m.profit)}</span>
         </div>
-        <div className="mt-1 text-xs text-muted">{m.marketSize.label} market{m.projected ? ' · Projected for this season' : ''}</div>
+        <div className="mt-1 text-xs text-muted">{m.marketSize.label}{m.projected ? ' · Projected for this season' : ''}</div>
       </div>
     </Card>
   )
@@ -173,7 +173,7 @@ export default function Owner() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1">
                   <span className="text-lg font-extrabold">{d.owner.name}</span>
                   <Chip>{d.owner.personality.label}</Chip>
-                  <Chip>{d.money.marketSize.label} market</Chip>
+                  <Chip>{d.money.marketSize.label}</Chip>
                 </div>
                 <div className="px-2 pb-2 text-[13px] text-muted">{d.owner.personality.blurb}</div>
               </Card>

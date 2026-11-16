@@ -13,7 +13,7 @@ function JobCard({ j, busy, onTake }: { j: OwnerJob; busy: boolean; onTake: () =
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
         <span className="tabular-nums">Record {j.record}</span>
         <span className="tabular-nums">Payroll {money(j.payroll)}</span>
-        <span>{j.marketSize.label} market</span>
+        <span>{j.marketSize.label}</span>
         <Chip tone="violet">{j.direction.label}</Chip>
       </div>
       <div className="text-[13px]">
