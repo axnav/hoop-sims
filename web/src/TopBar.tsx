@@ -6,6 +6,7 @@ import { Check, ChevronDown, Loader2, Play, Save } from 'lucide-react'
 import { api, type GameState } from './api'
 import { useFlow } from './flow'
 import { TeamBadge } from './ui'
+import { PlayerSearch } from './PlayerSearch'
 
 const steps = ['Regular season', 'Playoffs', 'Draft', 'Free agency', 'New season']
 const stepOf = (s: GameState) =>
@@ -100,7 +101,7 @@ export function TopBar() {
       className="sticky top-0 z-20 border-b backdrop-blur"
       style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${u.team.primary} 38%, #090c12), #090c12 70%)`, borderColor: u.team.primary }}
     >
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 pt-2.5 min-[1000px]:gap-4 min-[1000px]:px-5">
+      <div className="relative mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 pt-2.5 min-[1000px]:gap-4 min-[1000px]:px-5">
         <div className="flex min-w-0 items-center gap-6">
           <div className="min-w-0">
             <div className="whitespace-nowrap text-lg font-black tracking-tight">HOOP<span className="text-accent">SIM</span> <span className="ml-1 text-sm font-semibold text-muted tabular-nums">{s.year}</span></div>
@@ -109,13 +110,14 @@ export function TopBar() {
           <div className="max-[999px]:hidden"><Stepper s={s} /></div>
         </div>
         <div className="flex shrink-0 items-center gap-2 min-[1000px]:gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-[699px]:hidden">
             <TeamBadge team={u.team} size={26} />
-            <div className="leading-tight">
+            <div className="leading-tight max-[699px]:hidden">
               <div className="font-bold tabular-nums">{u.w}-{u.l}</div>
               <div className="text-[11px] text-muted">#{u.confRank} {u.confName}</div>
             </div>
           </div>
+          <PlayerSearch />
           <SaveButton />
           <ContinueMenu />
         </div>
@@ -127,6 +129,7 @@ export function TopBar() {
         {link('/coach', 'Coach')}
         {link('/standings', 'Standings')}
         {link('/teams', 'Teams')}
+        {link('/players', 'Players')}
         {link('/leaders', 'Leaders')}
         {link('/schedule', 'Schedule')}
         {link('/playoffs', 'Playoffs')}
