@@ -34,7 +34,9 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Small fixes batch, 2026-11-17 (new session), merged and pushed on the owner's word:** the Dashboard "League news" card moved to the bottom of the page (below the Next game grid); `cmd/web/web` untracked and ignored (owner said yes; the file stays on disk); the last status uses of orange are now blue (Lineup "Custom" chip and "Starter" label, Draft scouting dots and POT bar); duplicated paragraphs removed from this section; on the Lineup court the out-of-position message is now inside the circle (amber "PG, not SG" in place of the position line, also in the spot's aria-label) so a neighbouring spot cannot cover it; the blue in-the-five label in the Rotation table reads "Starting 5" so it no longer repeats the grey tier chip "Starter". **Work in progress: none.**
 
-**Next:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
+**Work in progress (2026-11-17): real-league start year, branch `feat/start-year`, plan in section 20.** Done so far: plan written, helpers briefed. Left: engine + API, screens, the owner's `SeasonLabel` function, checks, `realcheck` for several seasons, browser pass, merge. After it: real coaches (download; ask about the source), then "Find an upgrade". The owner asked how free agency compares with the NBA and was given a plain summary; whether to make it easier or explain it on the page was asked and not answered.
+
+**Older next list:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
 **News feed and awards (section 19), built 2026-11-17 on `feat/news-awards`, merged and pushed:** a News page (`/news`) with filters and a "League news" card on the Dashboard; the engine writes each story when it happens (trades, signings, injuries, big scoring nights, streaks, playoffs, draft, awards, retirements, coach changes); new awards (Rookie, Defensive Player, Sixth Man, Most Improved, Coach of the Year, three All-League teams, All-Rookie team) on the History page and in the player drawer. No new random stream (next free is still 150000), no save version bump. **Work in progress: none.**
   Decisions the main session made for the brief: no new league stage; when fired at the start of the offseason the engine sets `Owner.Fired` and the guards that move the offseason on refuse until `TakeJob(teamId)`; the switch is `Options.NoFiring` (firing is on by default, also for an old save once its owner state is created at the next season start); stream 140000 for owners and market sizes.
@@ -423,6 +425,32 @@ Owner's choices: the full award set; news about the whole league with the user's
 - **API contract** (additive): `GET /api/news?filter=<key>&limit=<n>` returns `{items:[{id, year, day, stage, kind, text, big, mine, teams:[team], players:[{id, name}]}], filters:[{key, label, count}], total}` (day is 1-based, 0 outside the season; filters all, mine, trades, signings, injuries, games, awards, draft). `/api/history` season rows gain `awards:{roy, dpoy, sixthMan, mip, coach:{name, team, w, l}, allLeague:[[award]], allRookie:[award]}` and the response gains `current:{year, awards}|null` for a season whose awards are decided but not yet archived. The player page gains `awards:[{year, title}]`. Every new response goes through `checkNoImpact`.
 - **Screens**: `web/src/pages/News.tsx` at `/news` (top menu link), a News card on the Dashboard, the new awards on the History page, an awards list on the player page.
 - **Measuring**: `cmd/sim -mode news` prints stories per kind per season, to keep the volume sane.
+
+## 20. Build plan for the real-league start year (owner asked 2026-11-17)
+
+Owner's words: "the ability to start the league from 2010 to 2026". The CSVs in `data/real/` already hold every season through 2025-26 (plus a few games of 2026-27, not usable); only the code fixed the start at 2010-11. No download. Order agreed with the owner: 1 start year (this section), 2 real head coaches in real mode (owner chose "download it"; ask about the exact source before fetching), 3 "Find an upgrade" for one of your players (better players at his position, who is being shopped, a package for each; rules, no AI).
+
+A "season" is named by its ending year, as in the data: 2011 = 2010-11. Allowed start seasons: 2011 to 2026.
+
+Engine (`engine/realdata.go`, `engine/realteams.go`, `engine/realseason.go`):
+- `NewRealLeagueSeason(dataDir, seed, season)`; `NewRealLeague(dataDir, seed)` stays and means season 2011, with identical results to before (same seed, same league).
+- Teams per season: the 30 franchises with that season's abbreviation, city and name (NJN to BRK from 2013, NOH to NOP from 2014, CHA Bobcats to CHO Hornets from 2015). Team index order is fixed by franchise (the 2011 order: West 0-14, East 15-29), so a franchise keeps its id whatever the season. `RealTeamAbbrevsFor(season)`; `RealTeamAbbrevs()` stays (2011).
+- `RealSeasons(dataDir) ([]RealSeasonInfo, error)`: `{Season int, Label string, Teams []RealTeamInfo{Abbr, City, Name}}` for 2011..2026 without building leagues (cheap).
+- `SeasonLabel(season) string` ("2010-11") lives in `engine/realseason.go`; the OWNER writes its body (Learn by Doing). Helpers call it and do not edit that file.
+- Only draft classes of the start season's year and later are stored. Later drafts with no data are generated rookies, as today.
+- Ceilings: a young player's potential comes from his best later real season ("hindsight"). Near the end of the data there are no later seasons, so the ceiling is a blend: weight w = (full seasons of data after the start season) / (seasons until he turns `Progression.PotentialEqualAge`), capped at 1; potential = w x hindsight + (1 - w) x a projection from age and current overall taken from the same growth numbers the fictional generator uses. For 2011 w is 1 for everyone, so nothing changes. Same rule for draft prospects.
+- Saved field `League.RealSeason int` (`omitempty`; 0 in an old save or a fictional league; an old real save means 2011). No `SaveVersion` bump (zero value = old behaviour). No new random stream.
+- `cmd/realcheck -season N` (default 2011) so each start year can be compared with its real results.
+
+API contract (exact):
+- `GET /api/meta` gains `realSeasons: [{season: 2026, label: "2025-26", teams: Team[]}, ...]`, newest first, all sixteen; `Team` is the existing team object (`id, abbr, city, name, fullName, primary, secondary, conf, confName`). `realTeams` stays (the 2011 list). `realAvailable` unchanged.
+- `POST /api/new {mode, seed, team, season?}`: `season` only read when `mode` is `real`; missing or 0 means 2011; outside 2011..2026 is a 400 with a sentence. Returns the state as now.
+- `GET /api/state` gains `realSeason` (number, 0 for fictional).
+- Team abbreviation and colours of a loaded real league come from `League.RealSeason` (0 = 2011), not from the 2011 table; colours for BRK, NOP and CHO are added.
+
+Screens (`web/src/pages/Start.tsx`, `web/src/api.ts`, `web/src/pages/Trade.tsx`): the "Real 2010-11 league" button becomes "Real league" with a season picker (default the newest, 2025-26) and the team grid shows that season's teams; `Trade.tsx` takes its team list from the loaded league (`/api/teams`), not from `meta.realTeams`.
+
+Known limits to state in the report: a player drafted before the start season who first played after it is missing; photos exist only for players who had one downloaded; the salary cap is the game's fixed cap in every year; coaches stay fictional until piece 2.
 
 ## Update log (newest first)
 
