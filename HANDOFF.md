@@ -14,7 +14,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 - Test changes the owner approved: `TestLongStability` drift 2.5, 90+ limit 20, FT% ceiling 81; `TestTeamBalance` allows one team-season outside 12-70 wins (hard limits 9-73).
 - Effects kept small for now (owner's choice): coach and fit, morale. Raise later in `CoachTuning`/`SystemTuning`/`MoraleTuning`.
 
-**Pushed:** `main` up to `8ac4a0a` (everything through owner goals and finances and the trade finder speed fix), pushed by the main session on the owner's word on 2026-11-17.
+**Pushed:** everything, including the news feed and awards (`17b5a34`) and the handoff commit made right after it; pushed by the main session on the owner's word on 2026-11-17. Confirm with `git status -sb` (it should show `main` level with `origin/main`).
 
 **Documents (2026-11-16):** `ARCHITECTURE.md` was checked against the code and brought up to date, and keeping it current is now `RULES.md` hard limit 7 (owner's request). Folder structure reviewed: Go tests stay beside the code; no restructuring. Merged locally, not pushed.
 
@@ -30,15 +30,15 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 - Owner goals and finances (section 18), merged locally 2026-11-17, not pushed: every team has an owner with a personality (win-now, patient, cheap) and a market size; the user's team gets a payroll budget, a revenue/costs/profit statement (luxury tax and dead money now cost profit), three goals a season (results, money, building), a trust meter, and is let go at zero at the start of the offseason, choosing one of three teams that are hiring. Owner page (`/owner`), `FiredDialog`, Dashboard card, budget mark on the payroll bar, Settings switch "Owner can let you go". Computer teams and game results unchanged. `engine/owner.go`, stream 140000 (next free 150000), `Options.NoFiring`, `cmd/sim -mode owner`.
 
-**Not pushed:** nothing; `main` and `origin/main` are both `8ac4a0a`. (Lines above that say "not pushed" for the assistant tuning and owner goals are older: those are pushed now.)
+**Not pushed:** nothing. (Lines above that say "not pushed" for the assistant tuning and owner goals are older: those are pushed now.)
 
-**Next:** ask the owner. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
+**Next:** the owner is moving to a new session; ask what to build. Choices left from the owner's list: several save slots; the code walk-through (only when asked). Small open items: move the Dashboard news card below the Next game cards; untrack `cmd/web/web` (awaits a yes/no). Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
 **Owner, 2026-11-17: wants HoopSim on a CV and a detailed walk-through of the code; said "finish and merge both first, then start the walk-through".** Later the same day the owner said "walk-through later": it waits until the owner asks for it; session 1 text was shown once but not answered. Advice given: describe it truthfully (designed and directed, built with AI assistants) and learn it well enough to explain and change it. Six short sessions, each ending with a few lines the owner writes (use the Learning output style's "Learn by Doing" requests): 1 big picture and request flow; 2 Go basics through `player.go` and `rng.go`; 3 one game in `game.go` and determinism; 4 release with dead money end to end; 5 tests and tuning; 6 trades and the assistant. Then CV bullets and a README in the owner's words. Style (sessions with typing, or a written guide first) not yet answered. Sessions done so far: none.
 
 - Assistant GM tuned 2026-11-17 (merged locally, not pushed): saner trade ideas, a star may be kept slightly over the tax line, "offer X and release Y" when the roster is full (click only). See the log.
 
-**News feed and awards (section 19), built 2026-11-17 on `feat/news-awards`, merged locally, NOT pushed:** a News page (`/news`) with filters and a "League news" card on the Dashboard; the engine writes each story when it happens (trades, signings, injuries, big scoring nights, streaks, playoffs, draft, awards, retirements, coach changes); new awards (Rookie, Defensive Player, Sixth Man, Most Improved, Coach of the Year, three All-League teams, All-Rookie team) on the History page and in the player drawer. No new random stream (next free is still 150000), no save version bump. **Work in progress: none.**
+**News feed and awards (section 19), built 2026-11-17 on `feat/news-awards`, merged and pushed:** a News page (`/news`) with filters and a "League news" card on the Dashboard; the engine writes each story when it happens (trades, signings, injuries, big scoring nights, streaks, playoffs, draft, awards, retirements, coach changes); new awards (Rookie, Defensive Player, Sixth Man, Most Improved, Coach of the Year, three All-League teams, All-Rookie team) on the History page and in the player drawer. No new random stream (next free is still 150000), no save version bump. **Work in progress: none.**
   Decisions the main session made for the brief: no new league stage; when fired at the start of the offseason the engine sets `Owner.Fired` and the guards that move the offseason on refuse until `TakeJob(teamId)`; the switch is `Options.NoFiring` (firing is on by default, also for an old save once its owner state is created at the next season start); stream 140000 for owners and market sizes.
   Contract: `GET /api/owner` returns `{active, owner:{name, personality:{key,label,blurb}}, trust:{score,label,trend,lastChange}, goals:[{key, kind, title, detail, weight, progress, status}], money:{budget, payroll, overBudget, marketSize:{key,label}, revenue:{market,wins,playoffs,total}, costs:{salaries,deadMoney,tax,total}, profit}, ledger:[{year, wins, losses, playoffs, revenue, costs, profit, trustStart, trustEnd, goals:[{title, met}]}], messages:[{year, day, text, tone}], fired, firedText, jobs:[{team, owner, record, payroll, direction}], firing}`; `POST /api/owner/job {teamId}` returns `{message, owner, state}`; `/api/state` gains `owner:{trust, label, fired, alert}`; `/api/options` gains `noFiring`; the user's team page `payrollObj` gains `budget`. Note for it: the assistant may now take payroll up to $15M over the tax line to keep a star (`GMTuning.StarTaxRoom`); the budget must be allowed to overrule that. The walk-through waits until the owner asks for it. Assistant GM follow-ups worth doing: tune it (seed 2 falls to 17 to 29 wins late; one trade idea offered three starters and two firsts for one star; see `GMTuning`), check why auto free agency made no offers in the browser run, see the lineup suggestion fire. Other open choices: owner goals and finances, news feed and awards, save slots, tuning batch. Remaining polish: orange still used for the Lineup "Custom"/"Starter" labels, Draft scouting dots and POT bar; the finder's best offer can be several low-rated players (raise `FinderTuning.PieceCost`); two clear buttons in the phone search box; advisor marks many players Sell on rebuilding teams.
 
@@ -232,8 +232,8 @@ finder (your players and picks in, each team's best offer out). The trade finder
 interface colour/overlap fixes and the assistant GM (Assistant page, suggestions, auto mode per
 area, trades and releases never automatic), the assistant tuning and owner goals and finances
 (Owner page, budget, three goals a season, trust, let go at zero with three jobs to choose
-from) are all pushed. Merged locally but NOT pushed: the news feed and awards (News page,
-Dashboard card, seven new awards and All-League teams; section 19). The owner also
+from) and the news feed and awards (News page, Dashboard card, seven new awards and
+All-League teams; section 19) are all pushed. Nothing is in progress. The owner also
 wants a code walk-through (HANDOFF section 0) but said to do it later: wait until asked.
 
 How we work (RULES.md sections 9 to 11):
@@ -427,6 +427,9 @@ Owner's choices: the full award set; news about the whole league with the user's
 - **Measuring**: `cmd/sim -mode news` prints stories per kind per season, to keep the volume sane.
 
 ## Update log (newest first)
+
+### 2026-11-17, news feed and awards pushed; owner moving to a new session
+- Owner said "push this and we will move on to a new session". `main` pushed to origin with the news feed and awards and this handoff update. No work in progress, no server running on 8097, port 8080 and `saves/league.json` untouched. To play the new screens the owner runs `cd web && npm run build` and restarts their own server.
 
 ### 2026-11-17, news feed and awards built
 - Two Sonnet helpers in parallel against the contract in section 19: one engine + API (`engine/awards.go`, `engine/news.go`, `cmd/web/news.go`, `cmd/sim/news.go`, one-line hooks in twelve engine files), one screens (`pages/News.tsx`, `NewsCard.tsx`, Dashboard card, History awards, drawer Awards block).
