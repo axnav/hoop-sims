@@ -301,6 +301,7 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/contracts/extension/{id}", true, s.extensionAsk)
 	p("/api/contracts/extend", true, s.extend)
 	p("/api/training", true, s.setTraining)
+	g("/api/news", true, s.news)
 	g("/api/owner", true, s.ownerGet)
 	p("/api/owner/job", true, s.ownerJob)
 	g("/api/gm", true, s.gmGet)

@@ -282,6 +282,7 @@ func (lg *League) HireCoach(candidateID int) error {
 			t := lg.Teams[lg.UserTeamID]
 			hired := *c
 			hired.ID = 0
+			lg.newsCoach(t.ID, t.Coach, &hired) // news.go
 			t.Coach = &hired
 			t.System = ""
 			lg.CoachPool = append(lg.CoachPool[:i:i], lg.CoachPool[i+1:]...)
@@ -370,6 +371,7 @@ func (lg *League) finishCoaches() {
 		}
 		hired := *lg.CoachPool[bi]
 		hired.ID = 0
+		lg.newsCoach(tm.ID, tm.Coach, &hired) // news.go
 		tm.Coach = &hired
 		tm.System = ""
 		lg.CoachPool = append(lg.CoachPool[:bi:bi], lg.CoachPool[bi+1:]...)

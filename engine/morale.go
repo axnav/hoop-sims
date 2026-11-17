@@ -124,6 +124,7 @@ type LeagueEvent struct {
 
 func (lg *League) logEvent(typ string, p *Player, teamID int) {
 	lg.Events = append(lg.Events, LeagueEvent{Year: lg.Year, Day: lg.currentDay(), Type: typ, PlayerID: p.ID, Name: p.Name, TeamID: teamID})
+	lg.newsRequest(typ, p, teamID) // news.go
 	if n := len(lg.Events); n > MoraleTuning.EventsKept {
 		lg.Events = append([]LeagueEvent(nil), lg.Events[n-MoraleTuning.EventsKept:]...)
 	}

@@ -128,6 +128,7 @@ export function TopBar() {
       <div className="mx-auto max-w-[1400px] px-3 pt-1 min-[1000px]:hidden"><PhaseLine s={s} /></div>
       <nav className="mx-auto flex max-w-[1400px] items-center gap-1 overflow-x-auto px-2 py-1.5 whitespace-nowrap min-[1000px]:px-4 [&>a]:shrink-0">
         {link('/', 'Dashboard')}
+        {link('/news', 'News')}
         {link(`/team/${u.team.id}`, 'Roster', s.injured, true, s.expiring)}
         {link('/lineup', 'Lineup')}
         {link('/coach', 'Coach')}

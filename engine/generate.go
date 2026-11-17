@@ -248,6 +248,10 @@ type League struct {
 	// Owner is the user's owner: goals, trust and the season budget (owner.go).
 	// nil = not started (an old save before its next season start).
 	Owner *OwnerState `json:",omitempty"`
+
+	// News is the league news feed, oldest first, newest NewsTuning.Kept
+	// stories kept (news.go); nil in an old save.
+	News []NewsItem `json:",omitempty"`
 }
 
 // GenerateLeague builds 30 teams of 13 players. Each roster gets a balanced

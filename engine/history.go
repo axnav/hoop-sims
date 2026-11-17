@@ -14,6 +14,13 @@ type SeasonRecord struct {
 	ScoringLeader Award
 	FinalsMVP     Award
 	Series        []Series
+	// Added with the full award set (awards.go); zero in an old save.
+	ROY, DPOY, SixthMan, MIP Award
+	Coach                    CoachAward
+	AllLeague                [][]Award
+	AllRookie                []Award
+	// Wins is each team's regular-season win total (for Coach of the Year); nil in an old save.
+	Wins []int `json:",omitempty"`
 }
 
 // BoxLine is one player's line in a stored box score.
@@ -106,5 +113,7 @@ func (lg *League) recordSeason() {
 		}
 	}
 	lg.Records = append(lg.Records, &SeasonRecord{Year: s.Year, Champion: s.Champion,
-		MVP: s.Awards.MVP, ScoringLeader: s.Awards.ScoringLeader, FinalsMVP: s.Awards.FinalsMVP, Series: s.Series})
+		MVP: s.Awards.MVP, ScoringLeader: s.Awards.ScoringLeader, FinalsMVP: s.Awards.FinalsMVP, Series: s.Series,
+		ROY: s.Awards.ROY, DPOY: s.Awards.DPOY, SixthMan: s.Awards.SixthMan, MIP: s.Awards.MIP, Coach: s.Awards.Coach,
+		AllLeague: s.Awards.AllLeague, AllRookie: s.Awards.AllRookie, Wins: append([]int(nil), s.Wins...)})
 }

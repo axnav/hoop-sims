@@ -1,6 +1,9 @@
 package engine
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 const (
 	NumTeams     = 30
@@ -54,6 +57,12 @@ type Awards struct {
 	MVP           Award
 	ScoringLeader Award
 	FinalsMVP     Award
+	// The awards below are decided with the others at the end of the regular
+	// season (awards.go). Zero value = none; an old save has none of them.
+	ROY, DPOY, SixthMan, MIP Award
+	Coach                    CoachAward
+	AllLeague                [][]Award // three teams of five: G, G, F, F, C
+	AllRookie                []Award
 }
 
 type Season struct {
@@ -142,7 +151,8 @@ func (lg *League) StartSeason() *Season {
 		}
 	}
 	lg.Season = s
-	lg.ownerStartSeason(prevRev) // owner.go: budget and goals
+	lg.newsLeague(fmt.Sprintf("The %d season is under way.", lg.Year), false) // news.go
+	lg.ownerStartSeason(prevRev)                                              // owner.go: budget and goals
 	return s
 }
 
@@ -202,11 +212,13 @@ func (lg *League) SimDay() bool {
 			s.Losses[g.Home]++
 		}
 		lg.recordBox(s.Day, res)
+		lg.newsGame(res) // news.go: big scoring nights
 		s.PointDiff[g.Home] += g.HomeScore - g.AwayScore
 		s.PointDiff[g.Away] += g.AwayScore - g.HomeScore
 		addStats(s.Stats, res)
 		lg.afterGame(ir, res)
 	}
+	lg.newsStreaks() // news.go: winning and losing streaks reached today
 	s.Day++
 	if c := &Progression; !lg.Options.NoInSeasonDev && s.Day%c.InSeasonEvery == 0 && s.Day/c.InSeasonEvery <= c.InSeasonSteps {
 		lg.inSeasonDev(s.Day / c.InSeasonEvery)
@@ -217,6 +229,7 @@ func (lg *League) SimDay() bool {
 	}
 	if s.Done() {
 		s.computeAwards()
+		lg.computeLeagueAwards() // awards.go: the other awards, then their news
 		lg.awardPerfBadges()
 	}
 	lg.updateProposals()

@@ -1041,6 +1041,7 @@ func (lg *League) ownerSeasonEnd() {
 		o.Fired = true
 		o.FiredText = fmt.Sprintf("%s has lost faith in you after the %d season and has let you go. Choose another team that is hiring.", info.Name, lg.Year)
 		lg.ownerSay("bad", o.FiredText)
+		lg.newsLeague(fmt.Sprintf("The %s have let their general manager go after the %d season.", lg.teamName(lg.UserTeamID), lg.Year), true, lg.UserTeamID) // news.go
 	}
 }
 
@@ -1103,6 +1104,7 @@ func (lg *League) TakeJob(teamID int) (string, error) {
 	o.Goals, o.OverWeeks = nil, 0
 	t := lg.Teams[teamID]
 	info := lg.OwnerOf(teamID)
+	lg.newsLeague(fmt.Sprintf("The %s have a new general manager.", t.FullName()), true, teamID) // news.go
 	msg := fmt.Sprintf("You are now the GM of the %s. Your new owner is %s.", t.FullName(), info.Name)
 	lg.ownerSay("info", msg)
 	return msg, nil

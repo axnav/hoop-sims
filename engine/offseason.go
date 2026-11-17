@@ -110,6 +110,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 		for _, p := range ps {
 			if r.Chance(p.RetireChance()) {
 				rep.Retirements = append(rep.Retirements, Retiree{p.ID, p.Name, p.Age, p.Overall(), p.TeamID})
+				lg.newsRetire(p) // news.go
 				lg.Retired = append(lg.Retired, p)
 				continue
 			}
@@ -170,6 +171,7 @@ func (lg *League) BeginOffseason() *OffseasonReport {
 	o1, lot := lg.lotteryOrder(lg.dayRNG(lg.Year, lotteryOffset), order, s.MadePlayoffs)
 	lg.Draft = &Draft{Pool: pool, Order: o1, Order2: order, Lottery: lot, Total: c.DraftSize}
 	lg.initScouting(lg.Draft)
+	lg.newsLottery() // news.go
 	lg.Report = rep
 	lg.openCoachPool()
 	return rep
@@ -242,6 +244,7 @@ func (lg *League) DraftPick(playerID int) error {
 	pr := PickResult{d.Made, round, tid, p.ID, p.Name, p.Age, p.Overall(), p.Potential}
 	d.Results = append(d.Results, pr)
 	lg.Report.Draft = append(lg.Report.Draft, pr)
+	lg.newsPick(pr) // news.go
 	return nil
 }
 

@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, morale, develop, resign, gm or owner")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, badges, coaches, morale, develop, resign, gm, owner or news")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -59,6 +59,16 @@ func main() {
 	}
 	if *mode == "gm" {
 		runGM()
+		return
+	}
+	if *mode == "news" {
+		n := *seasons
+		set := false
+		flag.Visit(func(f *flag.Flag) { set = set || f.Name == "seasons" })
+		if !set {
+			n = 3
+		}
+		runNews(*seed, n)
 		return
 	}
 	if *mode == "owner" {

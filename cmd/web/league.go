@@ -187,6 +187,7 @@ func (s *server) player(r *http.Request) (any, error) {
 		"status": status, "team": team, "role": p.ScoringRole(), "usage": p.ShotUsage(),
 		"ratings": ratings, "experience": p.Experience, "draftYear": p.DraftYear, "draftPick": p.DraftPick,
 		"season": statLine(lg.Season.Stats[p.ID]), "playoffs": statLine(lg.Season.PlayoffStats[p.ID]), "career": career,
+		"awards":   s.playerAwardRows(p.ID),
 		"editable": lg.Options.Commissioner,
 		"limits":   M{"minRating": engine.MinRating, "maxRating": engine.MaxRating, "minAge": engine.MinAge, "maxAge": engine.MaxAge}}
 	if s.inPool(p.ID) && !s.prospectPlayer(p, out) {
@@ -342,7 +343,8 @@ func (s *server) history(r *http.Request) (any, error) {
 	for i := len(s.lg.Records) - 1; i >= 0; i-- {
 		rec := s.lg.Records[i]
 		row := M{"year": rec.Year, "champion": s.team(rec.Champion), "mvp": s.award(rec.MVP),
-			"finalsMvp": s.award(rec.FinalsMVP), "scoringLeader": s.award(rec.ScoringLeader), "finals": nil}
+			"finalsMvp": s.award(rec.FinalsMVP), "scoringLeader": s.award(rec.ScoringLeader), "finals": nil,
+			"awards": s.awardsFrom(rec.ROY, rec.DPOY, rec.SixthMan, rec.MIP, rec.Coach, rec.AllLeague, rec.AllRookie)}
 		for _, sr := range rec.Series {
 			if sr.Round == 4 && sr.Done {
 				row["finals"] = M{"winner": s.team(sr.Winner), "loser": s.team(sr.High + sr.Low - sr.Winner),
@@ -351,7 +353,11 @@ func (s *server) history(r *http.Request) (any, error) {
 		}
 		rows = append(rows, row)
 	}
-	return M{"seasons": rows}, nil
+	var current any
+	if y, a, ok := s.lg.CurrentAwards(); ok {
+		current = M{"year": y, "mvp": s.award(a.MVP), "scoringLeader": s.award(a.ScoringLeader), "awards": s.awardsObj(a)}
+	}
+	return M{"seasons": rows, "current": current}, nil
 }
 
 // sortedSeries returns series ordered by round, conference, slot.

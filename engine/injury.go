@@ -138,6 +138,7 @@ func (lg *League) afterGame(r *RNG, res *GameResult) {
 			}
 			p.Injury = rollInjury(r, p)
 			lg.newInjuries = append(lg.newInjuries, injuryLine(p))
+			lg.newsInjury(p) // news.go
 		}
 	}
 }

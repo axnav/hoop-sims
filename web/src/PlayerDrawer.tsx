@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Search, Sparkles, X } from 'lucide-react'
 import { api, type ExtensionAsk, type PlayerPage, type ReleasePreview, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
-import { AdviceChip, BadgeChip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
+import { AdviceChip, BadgeChip, Chip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
 import { useScout } from './scout'
 
 function Stats({ title, s }: { title: string; s: StatLine }) {
@@ -24,6 +24,21 @@ function Stats({ title, s }: { title: string; s: StatLine }) {
             <div className="font-bold tabular-nums">{v}</div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+// Awards grouped by title: "MVP 2027, 2029". Hidden when empty or missing.
+function AwardsSection({ awards }: { awards?: { year: number; title: string }[] | null }) {
+  if (!awards || awards.length === 0) return null
+  const groups = new Map<string, number[]>()
+  for (const a of awards) groups.set(a.title, [...(groups.get(a.title) ?? []), a.year])
+  return (
+    <div className="mt-3">
+      <div className="h2 mb-1">Awards</div>
+      <div className="flex flex-wrap gap-1.5">
+        {[...groups].map(([t, ys]) => <Chip key={t} tone="good" className="whitespace-normal normal-case">{t} {[...ys].sort((a, b) => b - a).join(', ')}</Chip>)}
       </div>
     </div>
   )
@@ -464,6 +479,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
               </div>
             ))}
           </div>
+          {!p.prospect && <AwardsSection awards={p.awards} />}
           {p.badges && !p.prospect && <BadgesSection badges={p.badges} />}
           {p.training && <TrainingPanel id={p.id} ratings={p.ratings} t={p.training} />}
           <div className="mt-3 text-muted">

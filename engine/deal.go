@@ -433,5 +433,6 @@ func ExecuteDeal(lg *League, deal Deal, userTeam int) (TradeResult, error) {
 	}
 	lg.fixRosters(teams, &res)
 	lg.Transactions = append(lg.Transactions, res)
+	lg.newsTrade(res) // news.go
 	return res, nil
 }

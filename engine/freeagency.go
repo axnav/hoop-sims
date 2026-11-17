@@ -562,6 +562,7 @@ func (lg *League) signWithCut(teamID int, p *Player, salary, years int, kind Sig
 				}
 			}
 			lg.releaseToFA(w)
+			lg.newsRelease(teamID, w) // news.go
 		}
 	}
 	if err := lg.Sign(teamID, p, salary, years, kind); err != nil {

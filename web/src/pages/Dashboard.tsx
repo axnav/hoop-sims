@@ -9,6 +9,7 @@ import { OffersCard } from '../OffersCard'
 import { InjuriesCard } from '../InjuriesCard'
 import { ExpiringCard } from '../ExpiringCard'
 import { TradeRequestCard } from '../TradeRequestCard'
+import { NewsStory } from '../NewsCard'
 import { ownerKey } from './Owner'
 import { Card, Chip, GoalStatusChip, Page, PlayerLink, Q, TeamBadge, TeamLink, WL, f1, trustTone } from '../ui'
 
@@ -71,6 +72,18 @@ function OwnerCard() {
         {s?.owner?.alert && <div className="rounded border border-warn/50 bg-warn/10 px-2 py-1 text-[13px] text-warn" role="status">{s.owner.alert}</div>}
       </div>
       <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/owner">Open the Owner page</Link></div>
+    </Card>
+  )
+}
+
+function NewsCard() {
+  const q = useQuery({ queryKey: ['news', 'all', 5], queryFn: () => api.news('all', 5) })
+  const items = q.data?.items ?? []
+  if (items.length === 0) return null
+  return (
+    <Card title="League news" className="mb-4">
+      <div>{items.map((n) => <NewsStory key={n.id} n={n} compact />)}</div>
+      <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/news">All news</Link></div>
     </Card>
   )
 }
@@ -189,6 +202,7 @@ export default function Dashboard() {
       <OffseasonTrades />
       <OwnerCard />
       <AssistantCard />
+      <NewsCard />
       <OffersCard />
       <ExpiringCard />
       <InjuriesCard />

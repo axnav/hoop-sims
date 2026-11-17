@@ -193,6 +193,7 @@ func (lg *League) finishPlayoffs() {
 	}
 	if mvp != nil {
 		s.Awards.FinalsMVP = awardOf(mvp)
+		lg.newsFinalsMVP() // news.go
 	}
 }
 
@@ -244,6 +245,7 @@ func (lg *League) SimPlayoffDay() bool {
 			lg.LastBox = &lb
 		}
 		addStats(s.PlayoffStats, res)
+		lg.newsGame(res) // news.go: big scoring nights
 		lg.afterGame(ir, res)
 		if sr.HighWins == 4 || sr.LowWins == 4 {
 			sr.Done = true
@@ -251,6 +253,7 @@ func (lg *League) SimPlayoffDay() bool {
 			if sr.LowWins == 4 {
 				sr.Winner = sr.Low
 			}
+			lg.newsSeries(sr) // news.go
 		}
 	}
 	s.PlayoffDay++

@@ -437,6 +437,7 @@ func (lg *League) applyTrade(a, b int, give, get []*Player) TradeResult {
 	}
 	lg.fixRosters([]int{a, b}, &res)
 	lg.Transactions = append(lg.Transactions, res)
+	lg.newsTrade(res) // news.go
 	return res
 }
 

@@ -133,6 +133,7 @@ export type TeamRow = {
 export type TeamPage = { teamMorale?: MoraleBrief; status?: TeamStatus; team: Team; w: number; l: number; pd: number; confRank: number; isUser: boolean; roster: RosterRow[]; payroll: Payroll; deadMoney?: { name: string; salary: number; years: number }[]; coach?: { name: string; system: string; systemName: string }; teamFit?: Fit }
 export type StatLine = { gp: number; mpg: number; ppg: number; rpg: number; apg: number; tpg: number; fg: number | null; tp: number | null; ft: number | null } | null
 export type PlayerPage = {
+  awards?: PlayerAward[] | null
   morale?: Morale
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number; ratingChanges?: Record<string, number>
@@ -256,7 +257,24 @@ export type DraftData =
       lottery: LotteryRow[]
       onClock?: Team; userOnClock?: boolean
     }
+export type CoachAward = { name: string; team: Team; w: number; l: number } | null
+export type SeasonAwards = {
+  roy?: Award; dpoy?: Award; sixthMan?: Award; mip?: Award
+  coach?: CoachAward; allLeague?: Award[][] | null; allRookie?: Award[] | null
+}
+export type CurrentAwards = { year: number; mvp?: Award; scoringLeader?: Award; awards?: SeasonAwards | null }
+export type HistoryResponse = { seasons: HistoryRow[]; current?: CurrentAwards | null }
+export type NewsKind = 'trade' | 'signing' | 'release' | 'injury' | 'request' | 'game' | 'streak' | 'playoffs' | 'draft' | 'award' | 'retire' | 'coach' | 'league'
+export type NewsItem = {
+  id: number; year: number; day: number; stage: 'season' | 'playoffs' | 'draft' | 'free_agency' | 'offseason'
+  kind: NewsKind; text: string; big: boolean; mine: boolean
+  teams?: Team[] | null; players?: { id: number; name: string }[] | null
+}
+export type NewsFilter = { key: string; label: string; count: number }
+export type NewsResponse = { items: NewsItem[] | null; filters?: NewsFilter[] | null; total: number }
+export type PlayerAward = { year: number; title: string }
 export type HistoryRow = {
+  awards?: SeasonAwards | null
   year: number; champion: Team; mvp: Award; finalsMvp: Award; scoringLeader: Award
   finals: { winner: Team; loser: Team; winnerWins: number; loserWins: number } | null
 }
@@ -341,7 +359,8 @@ export const api = {
   schedule: (team?: number) => get<Schedule>('/api/schedule' + (team === undefined ? '' : `?team=${team}`)),
   box: (id: string) => get<Box>(`/api/box/${id}`),
   events: (id: string) => get<GameEvents>(`/api/game/${id}/events`),
-  history: () => get<{ seasons: HistoryRow[] }>('/api/history'),
+  history: () => get<HistoryResponse>('/api/history'),
+  news: (filter = 'all', limit = 100) => get<NewsResponse>(`/api/news?filter=${encodeURIComponent(filter)}&limit=${limit}`),
   playoffs: () => get<PlayoffsData>('/api/playoffs'),
   playoffAction: (a: string) => post<{ state: GameState; boxId?: number }>(`/api/playoffs/${a}`),
   offseason: () => get<OffseasonReport>('/api/offseason'),

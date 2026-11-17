@@ -362,6 +362,14 @@ func (lg *League) forceSign(teamID int, p *Player, salary, years int) {
 		}
 	}
 	p.Contract = Contract{Salary: salary, Years: years}
+	re := lg.findRosterPlayer(teamID, p.ID) != nil
+	defer func() { // news.go
+		if re {
+			lg.newsSigning(teamID, p, salary, years, "re-signs")
+		} else {
+			lg.newsSigning(teamID, p, salary, years, "signs")
+		}
+	}()
 	if lg.findRosterPlayer(teamID, p.ID) != nil {
 		lg.moraleReSigned(p) // re-signed with his own team
 	}
@@ -518,6 +526,7 @@ func (lg *League) Release(teamID, playerID int) error {
 		if p.ID == playerID {
 			t.Roster = append(t.Roster[:i], t.Roster[i+1:]...)
 			lg.releaseToFA(p)
+			lg.newsRelease(teamID, p) // news.go
 			res.Released = append(res.Released, TxPlayer{p.ID, p.Name, teamID, -1})
 			break
 		}

@@ -319,6 +319,7 @@ func (lg *League) Extend(teamID, playerID, salary, years int) error {
 		return fmt.Errorf("Next season's payroll would be %s, over the hard ceiling of %s.", fmtM(next), fmtM(Cap.HardCeiling))
 	}
 	p.Contract.NextSalary, p.Contract.NextYears = salary, years
+	lg.newsSigning(teamID, p, salary, years, "extends") // news.go
 	lg.moraleReSigned(p)
 	return nil
 }

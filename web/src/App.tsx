@@ -27,6 +27,7 @@ import Trade from './pages/Trade'
 import Settings from './pages/Settings'
 import Assistant from './pages/Assistant'
 import Owner from './pages/Owner'
+import News from './pages/News'
 import { FiredDialog } from './FiredDialog'
 
 function Shell() {
@@ -66,6 +67,7 @@ function Shell() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/team/:id" element={<TeamPage />} />
           <Route path="/assistant" element={<Assistant />} />
+          <Route path="/news" element={<News />} />
           <Route path="/owner" element={<Owner />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/standings" element={<Standings />} />
