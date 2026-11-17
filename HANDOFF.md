@@ -36,6 +36,8 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Real-league start year (section 20), built 2026-11-17, merged and pushed on the owner's word:** the Start page offers "Real league" with a season picker, 2010-11 to 2025-26 (data was already in `data/real/`); that season's rosters, ratings and team names; young players' ceilings near the end of the data are projected. `NewRealLeagueSeason`, `League.RealSeason`, `/api/meta` `realSeasons`, `/api/new` `season`, `realcheck -season`. **Work in progress: none.**
 
+**Work in progress (2026-11-17): real head coaches, branch `feat/real-coaches`, plan in section 21.** Done: `data/real/coaches.csv` written (480 rows, checked against `Team Abbrev.csv`), helper briefed. Left: engine code and test, checks, browser look at the Coach page, merge.
+
 **Next, in the owner's order:** 1 real head coaches in real mode (owner first chose download, then on being shown the source chose "no download, write from memory": the main session writes private `data/real/coaches.csv`, the owner may correct it by hand); 2 "Find an upgrade" for one of your players (section 20 intro). Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Follow-ups from the start-year work are in the log entry (generous ratings for low-minute big men in recent seasons, 2011 `realcheck` error 6.9 vs 5.1 earlier, things not tried).
 
 **Older next list:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
@@ -453,6 +455,17 @@ API contract (exact):
 Screens (`web/src/pages/Start.tsx`, `web/src/api.ts`, `web/src/pages/Trade.tsx`): the "Real 2010-11 league" button becomes "Real league" with a season picker (default the newest, 2025-26) and the team grid shows that season's teams; `Trade.tsx` takes its team list from the loaded league (`/api/teams`), not from `meta.realTeams`.
 
 Known limits to state in the report: a player drafted before the start season who first played after it is missing; photos exist only for players who had one downloaded; the salary cap is the game's fixed cap in every year; coaches stay fictional until piece 2.
+
+## 21. Build plan for real head coaches (owner asked 2026-11-17)
+
+Real-data leagues get the real head coach of each team for the chosen start season. Data: private `data/real/coaches.csv` (`season,abbreviation,coach,birth_year`; 480 rows, the opening-day head coach of each team for seasons 2011 to 2026), written from memory by the main session on 2026-11-17 because the owner chose "no download". It may hold a few mistakes; the owner can correct it by hand. Never committed (inside `data/real/`).
+
+- New `engine/realcoaches.go` (+ test). The file is optional: without it, or for a team with no row, the coach stays the generated one, exactly as before.
+- After `initCoaches` in `NewRealLeagueSeason`: name from the file; age = season - birth_year (kept generated if the year is missing).
+- Ratings from results, with hindsight like the players: over all of the coach's rows in the file, the average of his teams' offensive and defensive rating against that season's league average (`Team Summaries.csv` `o_rtg`, `d_rtg`, in league standard deviations), shrunk towards zero by seasons / (seasons + `RealCoachShrink`) because players explain most of a team's rating, then mapped onto the generated coaches' scale (`CoachTuning.RatingMean`, `RatingSD`, min, max). Development stays the generated draw.
+- Favourite system from the same teams' average pace and three-point rate (`pace`, `x3p_ar`) and the offence/defence split, mapped to one of the six system keys; "balanced" when nothing stands out.
+- No new random stream, no saved field (a coach is already saved as `Team.Coach`), no API or screen change. The coach pool and later hirings stay generated coaches.
+- Follow-up idea, not in this piece: real out-of-work coaches in the hiring pool.
 
 ## Update log (newest first)
 
