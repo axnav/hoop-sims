@@ -38,7 +38,9 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Real head coaches (section 21), built 2026-11-17, merged locally, NOT pushed:** a real-data league shows each team's real head coach for its start season (name, age, offence and defence ratings from his teams' real results, favourite system from their pace and three-point rate; development rating stays generated). Data: private `data/real/coaches.csv`, written from memory by the main session (owner's choice, no download; may hold a few mistakes, the owner can edit it). Without the file nothing changes. `engine/realcoaches.go`. The hiring pool and later coach changes are still generated coaches. **Work in progress: none.**
 
-**Next:** "Find an upgrade" for one of your players: better players at his position around the league, the ones their team is shopping marked, a package for each (rules, no AI; owner chose the per-player version). Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Possible follow-ups: real out-of-work coaches in the hiring pool; generous ratings for low-minute big men in recent seasons; 2011 `realcheck` error 6.9 vs 5.1 earlier; several seasons from a late start, photo coverage for recent players and an old real save are not tried. The owner prefers the main session to write code rather than fill in "Learn by Doing" blanks (said so once, 2026-11-17, about `SeasonLabel`).
+**Work in progress (2026-11-17): "Find an upgrade", branch `feat/upgrade-finder`, plan in section 22.** Done: plan written, two helpers briefed (engine + API; screens). Left: their work, review, checks, browser pass, merge.
+
+**Next (now in progress, see above):** "Find an upgrade" for one of your players: better players at his position around the league, the ones their team is shopping marked, a package for each (rules, no AI; owner chose the per-player version). Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Possible follow-ups: real out-of-work coaches in the hiring pool; generous ratings for low-minute big men in recent seasons; 2011 `realcheck` error 6.9 vs 5.1 earlier; several seasons from a late start, photo coverage for recent players and an old real save are not tried. The owner prefers the main session to write code rather than fill in "Learn by Doing" blanks (said so once, 2026-11-17, about `SeasonLabel`).
 
 **Older next list:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
@@ -466,6 +468,24 @@ Real-data leagues get the real head coach of each team for the chosen start seas
 - Favourite system from the same teams' average pace and three-point rate (`pace`, `x3p_ar`) and the offence/defence split, mapped to one of the six system keys; "balanced" when nothing stands out.
 - No new random stream, no saved field (a coach is already saved as `Team.Coach`), no API or screen change. The coach pool and later hirings stay generated coaches.
 - Follow-up idea, not in this piece: real out-of-work coaches in the hiring pool.
+
+## 22. Build plan for "Find an upgrade" (owner asked 2026-11-17)
+
+Owner's words: "if I want to upgrade for this player, and trade blocks and everything". Chosen version: per player. On one of your players you press "Find an upgrade"; the game lists better players at his position on computer teams, marks the ones their team is shopping, and shows a package that includes your player and that the other team would accept. Rules only, no AI, read-only: no saved field, no random stream, never reads `Impact`.
+
+Engine (`engine/upgrade.go` + test; small refactors in `engine/assistant.go` allowed if `WhatWouldItTake` and `AdvisorOf` keep returning exactly what they return now):
+- `FindUpgrades(playerID) (UpgradeResult, error)`: error if the player is not on the user's team. Not possible (with a sentence) when trades are closed.
+- Candidates: players on computer teams who can play his position (main or alternative position matches his main position), visible overall at least `UpgradeTuning.MinGain` (2) above his, not out injured for more than `UpgradeTuning.MaxInjuryDays`. Keep the best `UpgradeTuning.MaxCandidates` (12) by a score of gain, with shopped players favoured.
+- Shopped: the Keep / Shop / Sell rule of the advisor applied to the other team (advice shop or sell), with its first reason as `shopReason`.
+- Package: the cheapest package (same search and acceptance test as `WhatWouldItTake`) that MUST include the selected player; candidates with none are returned as not possible with the reason.
+- Order of the list: possible first; then shopped first; then larger gain; ties by player id.
+- Speed: a full league answer in about 2 seconds or less on a quiet machine; a test guards a generous limit.
+
+API contract (exact): `GET /api/trade/upgrade/{playerId}` returns
+`{player: TradeAssetRow, possible: boolean, reason: string, upgrades: [{player: TradeAssetRow, team: Team, direction: TeamStatus, gain: number, shopped: boolean, shopReason: string, possible: boolean, reason: string, package?: TakePackage}]}`.
+`TradeAssetRow`, `Team`, `TeamStatus` and `TakePackage` (`{label, give, receive, note, cost, cheapest, deal:{moves}}`) are the existing objects, built by the same functions `/api/trade/whatwouldittake/{id}` and `/api/trade/find` use. `package` is absent when `possible` is false. `upgrades` is `[]`, never null. 400 with a sentence for a player who is not on the user's team or does not exist.
+
+Screens (`web/src/api.ts`, `web/src/PlayerDrawer.tsx`, `web/src/pages/Trade.tsx`, new `web/src/UpgradeFinder.tsx`): a "Find an upgrade" button in the drawer of one of your players, beside "See offers for him" (`/trade?upgrade=<playerId>`); the Trade page then shows an "Upgrades for <name>" panel: one row per candidate (name link, team, position, age, OVR with the gain, a "Shopped" chip with the reason as its title, what you give and get, the note) and "Load this offer", which fills the trade builder the way the finder's button does. Not-possible candidates are listed below, greyed, with the reason. Colour rule: orange for the action button only; chips through `Chip`.
 
 ## Update log (newest first)
 
