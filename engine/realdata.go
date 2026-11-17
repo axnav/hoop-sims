@@ -48,6 +48,21 @@ type RealTuningT struct {
 	// per player and per league seed (own stream, independent of everything
 	// else). 0 gives the exact hindsight peaks.
 	PotentialBlurSD float64
+
+	// Real head coaches (realcoaches.go). A coach's Offense and Defense come
+	// from his teams' o_rtg and d_rtg in league standard deviations, averaged
+	// over every season he coached in coaches.csv and shrunk by
+	// n/(n+RealCoachShrink) (players explain most of a team's rating).
+	// RealCoachSpread scales the result onto CoachTuning.RatingSD.
+	RealCoachShrink, RealCoachSpread float64
+	// Favourite system rule (z values after the same shrink): defence ahead of
+	// offence by CoachDefLead and above CoachDefMin gives defense_first; three
+	// rate at or above CoachThreeHigh is pace_space, or run_gun when pace is
+	// also at or above CoachPaceHigh and defence is below average; pace at or
+	// below CoachPaceLow with three rate at or below CoachThreeLow is
+	// inside_out; offence at or above CoachStarOff is star_led; else balanced.
+	CoachDefLead, CoachDefMin, CoachThreeHigh, CoachPaceHigh float64
+	CoachPaceLow, CoachThreeLow, CoachStarOff                float64
 }
 
 var RealTuning = RealTuningT{
@@ -58,6 +73,9 @@ var RealTuning = RealTuningT{
 	UsageInside: 30, UsageMid: 22, UsageThree: 22, UsagePlay: 8,
 	RookieDrop: 4, PotentialBlurSD: 4.0,
 	ProjectEndAge: 28, ProjectRoomPerYear: 1.5,
+	RealCoachShrink: 3, RealCoachSpread: 1.0,
+	CoachDefLead: 0.2, CoachDefMin: 0, CoachThreeHigh: 0.2, CoachPaceHigh: 0.1,
+	CoachPaceLow: -0.1, CoachThreeLow: -0.1, CoachStarOff: 0.25,
 }
 
 // ---------------------------------------------------------------- loading
@@ -866,6 +884,7 @@ func NewRealLeagueSeason(dataDir string, seed uint64, season int) (*League, erro
 	lg.initPicks()
 	lg.assignInitialContracts()
 	lg.initCoaches()
+	applyRealCoaches(lg, dataDir, season)
 	return lg, nil
 }
 
