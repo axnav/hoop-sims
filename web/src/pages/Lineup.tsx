@@ -88,7 +88,7 @@ function LineupView({ d }: { d: LineupData }) {
   const startIds = cur.starters.filter((s) => byId.has(s))
   const rows: LineupPlayer[] = [...startIds.map((s) => byId.get(s)!), ...d.players.filter((p) => !startIds.includes(p.id))]
   const chip = dirty ? ['Unsaved changes', 'bg-amber-400/20 text-amber-400 ring-amber-400/50']
-    : d.custom ? ['Custom', 'bg-accent/25 text-accent ring-accent/60'] : ['Automatic', 'bg-panel2 text-muted ring-line']
+    : d.custom ? ['Custom', 'bg-info/20 text-info ring-info/50'] : ['Automatic', 'bg-panel2 text-muted ring-line']
   const off = sum !== d.total
   const left = d.total - sum
 
@@ -165,7 +165,7 @@ function LineupView({ d }: { d: LineupData }) {
                     <td>
                       <button className="link font-medium" onClick={() => open(p.id)}>{p.name}</button>
                       <TierChip tier={p.tier} /><InjuryTag injury={p.injury} />
-                      {isStarter && <span className="ml-1.5 text-[10px] font-semibold uppercase text-accent">Starter</span>}
+                      {isStarter && <span className="ml-1.5 text-[10px] font-semibold uppercase text-info" title="In your starting five">Starting 5</span>}
                       {young && <span className={`ml-1.5 rounded px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide ring-1 ${tone}`}>Developing</span>}
                       {isStarter && v < 1 && <span className="ml-1.5 text-xs text-amber-400">needs minutes</span>}
                     </td>

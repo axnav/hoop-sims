@@ -81,7 +81,7 @@ function NewsCard() {
   const items = q.data?.items ?? []
   if (items.length === 0) return null
   return (
-    <Card title="League news" className="mb-4">
+    <Card title="League news" className="mt-4">
       <div>{items.map((n) => <NewsStory key={n.id} n={n} compact />)}</div>
       <div className="px-2 pb-1 pt-1"><Link className="link text-accent" to="/news">All news</Link></div>
     </Card>
@@ -202,7 +202,6 @@ export default function Dashboard() {
       <OffseasonTrades />
       <OwnerCard />
       <AssistantCard />
-      <NewsCard />
       <OffersCard />
       <ExpiringCard />
       <InjuriesCard />
@@ -274,6 +273,7 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+      <NewsCard />
     </Page>
   )
 }

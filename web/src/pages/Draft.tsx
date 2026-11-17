@@ -25,7 +25,7 @@ function RangeCell({ lo, hi, color }: { lo: number; hi: number; color?: string }
 function Dots({ level, max }: { level: number; max: number }) {
   return (
     <span title={`Scouting level ${level}/${max}`} aria-label={`Scouting level ${level} of ${max}`} className="inline-flex items-center gap-1">
-      {Array.from({ length: max }, (_, i) => <span key={i} className={`h-2 w-2 rounded-full ${i < level ? 'bg-accent' : 'bg-panel2 ring-1 ring-line'}`} />)}
+      {Array.from({ length: max }, (_, i) => <span key={i} className={`h-2 w-2 rounded-full ${i < level ? 'bg-info' : 'bg-panel2 ring-1 ring-line'}`} />)}
       <span className="ml-1 text-[11px] text-muted tabular-nums">{level}/{max}</span>
     </span>
   )
@@ -196,7 +196,7 @@ export default function Draft() {
                               <td>{p.pos}</td>
                               <td className="r">{p.age}</td>
                               <td className="r"><RangeCell lo={p.ovrLo} hi={p.ovrHi} /></td>
-                              <td className="r"><RangeCell lo={p.potLo} hi={p.potHi} color="var(--color-accent)" /></td>
+                              <td className="r"><RangeCell lo={p.potLo} hi={p.potHi} color="var(--color-info)" /></td>
                               <td><Dots level={p.scoutLevel} max={sc.maxLevel} /></td>
                               <td className="whitespace-nowrap">
                                 <button className="btn py-0.5" disabled={full || none || scout.isPending}

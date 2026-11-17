@@ -12,3 +12,6 @@
 
 # Helper worktrees.
 /.claude/worktrees/
+
+# Compiled server binary (build with -o outside the repo instead).
+/cmd/web/web

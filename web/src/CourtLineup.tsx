@@ -94,11 +94,11 @@ export default function CourtLineup({ slots, starters, players, minutes, onSet }
           const [x, y] = SPOTS[slot] ?? FALLBACK
           const picked = sel?.kind === 'slot' && sel.i === i
           const off = p ? outOfPos(slot, p.pos) : false
-          const ring = picked ? 'ring-2 ring-accent bg-accent/20' : over === i ? 'ring-2 ring-accent' : off ? 'ring-2 ring-amber-400' : p ? 'ring-1 ring-line' : 'ring-1 ring-dashed ring-line'
+          const ring = picked ? 'ring-2 ring-accent bg-accent/20' : over === i ? 'ring-2 ring-accent' : off ? 'ring-2 ring-warn' : p ? 'ring-1 ring-line' : 'ring-1 ring-dashed ring-line'
           return (
             <div key={slot} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: `${y}%`, width: '19%', minWidth: 52 }}>
               <div className="relative">
-                <button type="button" aria-pressed={picked} aria-label={`${slot} spot: ${p ? p.name : 'empty'}`}
+                <button type="button" aria-pressed={picked} aria-label={`${slot} spot: ${p ? p.name : 'empty'}${off ? ', out of position' : ''}`}
                   draggable={!!p} onDragStart={(e) => p && startDrag(e, p.id)} onDragEnd={endDrag}
                   onDragOver={(e) => { e.preventDefault(); setOver(i) }} onDragLeave={() => setOver((o) => (o === i ? null : o))}
                   onDrop={(e) => dropSpot(e, i)} onClick={() => clickSpot(i)}
@@ -107,7 +107,9 @@ export default function CourtLineup({ slots, starters, players, minutes, onSet }
                     <>
                       <span className="max-w-full truncate text-[10px] font-semibold sm:text-[11px]">{lastName(p.name)}</span>
                       <b className="text-sm tabular-nums sm:text-base" style={{ color: ovrColor(p.ovr) }}>{p.ovr}</b>
-                      <span className="text-[9px] text-muted">{p.pos}</span>
+                      {off
+                        ? <span className="text-[9px] font-semibold text-warn" title="Out of position">{p.pos}, not {slot}</span>
+                        : <span className="text-[9px] text-muted">{p.pos}</span>}
                     </>
                   ) : (
                     <span className="text-xs font-bold text-muted">{slot}</span>
@@ -121,7 +123,6 @@ export default function CourtLineup({ slots, starters, players, minutes, onSet }
                     className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-panel text-xs text-muted ring-1 ring-line hover:text-loss">&times;</button>
                 )}
               </div>
-              {off && <div className="mt-0.5 text-center text-[9px] font-semibold text-amber-400">out of position</div>}
             </div>
           )
         })}

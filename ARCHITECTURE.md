@@ -52,7 +52,7 @@ data/real/, saves/ private, git-ignored
 - In Go a test file must be in the same folder as the code it tests: a folder is a package, `go test` looks for `*_test.go` there, and only a file in the same package can call the unexported functions (the engine tests call many, for example `reweightGrowth`, `aiTradeOnce`). Test files are never compiled into the game. So `engine/trade.go` next to `engine/trade_test.go` is the standard Go layout; a separate `tests/` folder would be the unusual choice and would force the engine to export its internals.
 - The engine is one flat package on purpose: the features share `League`, `Player` and `Team` and call each other freely, and Go forbids two packages importing each other. Splitting it into sub-packages is a large refactor with no gain at this size (about 19,000 lines with tests).
 - Engine files with no test file of their own (`generate.go`, `player.go`, `offseason.go`, `rng.go`, `system.go`, `names.go`, `realteams.go`, generated `badge_thresholds.go`) are exercised through other tests (`season_test.go`, `phase_test.go`, `coach_test.go`).
-- Known untidy spots: `cmd/web/api_test.go` is one very large file (newer features add their own, as `assistant_test.go` does); the tracked binary `cmd/web/web` (section 15); `web/src/` keeps shared cards at the top level instead of a `components/` folder.
+- Known untidy spots: `cmd/web/api_test.go` is one very large file (newer features add their own, as `assistant_test.go` does); `web/src/` keeps shared cards at the top level instead of a `components/` folder.
 
 ## 3. How to run, build and test
 
@@ -536,9 +536,9 @@ The app is React 19 with TypeScript, built with Vite, styled with Tailwind v4, u
 
 | Path | Page file | Purpose |
 |---|---|---|
-| `/` | `pages/Dashboard.tsx` | Home: next game, last result, standings snapshot, offers, injuries, the continue button |
+| `/` | `pages/Dashboard.tsx` | Home: next game, last result, standings snapshot, offers, injuries, the continue button; the "League news" card is last, below the Next game grid |
 | `/team/:id` | `pages/TeamPage.tsx` | A team's roster and contracts (`/roster` redirects to the user's team) |
-| `/lineup` | `pages/Lineup.tsx` | Starters and minutes, with a half-court picture (`CourtLineup.tsx`) to place starters |
+| `/lineup` | `pages/Lineup.tsx` | Starters and minutes, with a half-court picture (`CourtLineup.tsx`) to place starters; a starter out of position gets an amber ring and "PG, not SG" inside the circle; the Rotation table marks the five with a blue "Starting 5" label (the grey chip is the talent tier) |
 | `/trade` | `pages/Trade.tsx` | Build and evaluate deals, trade block, transactions; "What they want" panel per partner, "What would it take?" on each partner player (`?team=<id>&want=<playerId>` opens it), Players/Advisor tab on your roster, a "Find offers" button on your roster (opens the finder for the players and picks you ticked, works before a partner is chosen; `?find=<playerId>` ticks that player of yours and opens it; "Load this offer" sets the partner and loads the moves like a package) (panels in `TradeAssistant.tsx`) |
 | `/coach`, `/coach/:teamId` | `pages/Coach.tsx` | A team's coach, the system it runs, roster fit; hiring and system choice for the user's team |
 | `/players` | `pages/Players.tsx` | Player search over the whole league with filters in the URL |
@@ -650,7 +650,7 @@ Not covered: the front end (no tests; the type check in `npm run build` is the o
 - **`reportSeen` is not saved.** The phase also depends on a server-side flag outside the league. Loading always sets it to true, so a game saved on the unseen offseason report resumes at the draft.
 - **Positions are not used in the game sim or in who starts; they only decide which slot each automatic starter is shown in.** `newSide` in `game.go` weighs players by minutes and effective ratings only. `Team.Rotation` picks the five best by overall, `StarterSlots` and `AutoLineup` only seat them in PG..C, and the overall formula is position-based, so position matters to how good a player looks, not to who plays or how a lineup plays together.
 - **Engine trade tests halve salaries.** `tradeLeague` in `engine/trade_test.go` halves every salary so all teams have cap room; salary matching is covered separately in `contract_test.go` and `deal_test.go`, but the trade value tests do not run under realistic payrolls.
-- **A compiled binary is tracked in git.** `cmd/web/web` (about 11 MB) is committed. `.gitignore` does not exclude it, and a plain `go build` inside `cmd/web` produces exactly that file, which is why `RULES.md` says to build with `-o` outside the repository.
+- **The compiled binary is no longer tracked (2026-11-17).** `cmd/web/web` (about 11 MB) was committed until then; it is now in `.gitignore`. A plain `go build` inside `cmd/web` still produces that file, which is why `RULES.md` says to build with `-o` outside the repository. Older commits still contain it.
 - **Real data is detected indirectly.** `server.isReal()` looks at the first player on the first roster for a `RealID`; the mode is not stored on the league.
 - **Prospect secrecy depends on each handler.** The draft pool is saved with true values and the API hides them handler by handler (`prospectRows`, `prospectPlayer`, `ScoutView`). A new screen that reads `Draft.Pool` directly would leak them; `RULES.md` rule 1.2 and `TestProspectSecrecy` exist for this.
 - **Scattered phase logic.** Which trades, signings and releases are allowed is decided in several places by looking at `Draft`, `FA` and `Season` (`TradeWindowOpen`, `inOffseason`, `offseasonOpen` in `cmd/web`), not only through `Phase`. A new stage has to be checked against all of them.
