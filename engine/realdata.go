@@ -35,6 +35,13 @@ type RealTuningT struct {
 	UsageInside, UsageMid, UsageThree, UsagePlay float64
 	RookieDrop                                   float64
 
+	// Ceiling projection for starts near the end of the data (see
+	// projectedPotential). The fictional generator gives a player of age a a
+	// ceiling room drawn uniformly from 0 to 3 x (28 - a), mean 1.5 x (28 - a);
+	// ProjectEndAge is that 28 and ProjectRoomPerYear that 1.5.
+	ProjectEndAge      int
+	ProjectRoomPerYear float64
+
 	// PotentialBlurSD is the standard deviation (rating points) of a normal
 	// draw added to a young real player's or prospect's hindsight ceiling, so
 	// the same real players do not become stars in every league. The draw is
@@ -50,6 +57,7 @@ var RealTuning = RealTuningT{
 	ValBPM: 0.6, ValWS48: 0.3, ValPER: 0.1,
 	UsageInside: 30, UsageMid: 22, UsageThree: 22, UsagePlay: 8,
 	RookieDrop: 4, PotentialBlurSD: 4.0,
+	ProjectEndAge: 28, ProjectRoomPerYear: 1.5,
 }
 
 // ---------------------------------------------------------------- loading
@@ -80,6 +88,7 @@ type draftPick struct {
 }
 
 type realData struct {
+	start  int                           // first season of the league being built (draft classes before it are not stored)
 	all    map[int]map[string]*statRow   // season -> pid -> combined (or only) row
 	teams  map[int]map[string][]*statRow // season -> pid -> per-team rows
 	career map[string]careerInfo
@@ -130,9 +139,21 @@ func isCombinedTeam(t string) bool {
 	return t == "TOT" || (len(t) == 3 && t[1:] == "TM")
 }
 
-const firstRealSeason = 2011
+// Real seasons are named by their ending year (2011 = 2010-11). A league can
+// start in any season from firstRealSeason to lastRealSeason; lastDataSeason is
+// the last season that has any rows in the CSVs (a few games of 2026-27, used
+// only as extra evidence for ceilings).
+const (
+	firstRealSeason = 2011
+	lastRealSeason  = 2026
+	lastDataSeason  = 2027
+)
 
-func loadRealData(dir string) (*realData, error) {
+func loadRealData(dir string) (*realData, error) { return loadRealDataFrom(dir, firstRealSeason) }
+
+// loadRealDataFrom loads the CSVs; stat rows from season `start` on, draft
+// classes of year `start` on (older picks stay reachable through pickBy).
+func loadRealDataFrom(dir string, start int) (*realData, error) {
 	tot, err := readCSV(filepath.Join(dir, "Player Totals.csv"))
 	if err != nil {
 		return nil, err
@@ -153,7 +174,8 @@ func loadRealData(dir string) (*realData, error) {
 		advBy[key{int(num(m["season"])), m["player_id"], m["team"]}] = m
 	}
 	d := &realData{
-		all: map[int]map[string]*statRow{}, teams: map[int]map[string][]*statRow{},
+		start: start,
+		all:   map[int]map[string]*statRow{}, teams: map[int]map[string][]*statRow{},
 		career: map[string]careerInfo{}, pickBy: map[string]draftPick{},
 		models: map[int]*seasonModel{}, rated: map[int]map[string]*ratedPlayer{},
 	}
@@ -217,7 +239,7 @@ func loadRealData(dir string) (*realData, error) {
 			continue
 		}
 		y := int(num(m["season"]))
-		if y < firstRealSeason || m["player_id"] == "" || m["player_id"] == "NA" {
+		if y < d.start || m["player_id"] == "" || m["player_id"] == "NA" {
 			continue
 		}
 		pk := draftPick{y, int(num(m["overall_pick"])), m["player_id"], m["player"]}
@@ -625,7 +647,7 @@ func RatingsFromStats(dir string, season int, playerID string) (Ratings, Positio
 // seasons only), at least cur.
 func (d *realData) hindsightPeak(pid string, from int, cur int) int {
 	best := cur
-	for s := from; s <= 2027; s++ {
+	for s := from; s <= lastDataSeason; s++ {
 		r := d.all[s][pid]
 		if r == nil || r.mp < RealTuning.MinQual {
 			continue
@@ -637,22 +659,77 @@ func (d *realData) hindsightPeak(pid string, from int, cur int) int {
 	return best
 }
 
+// ceilingFor is the stored ceiling of a young player (age below
+// PotentialEqualAge): the blurred hindsight peak, blended with a projection
+// when too few later seasons exist to show what he became. `from` is the first
+// season to look at for the hindsight peak: the league's start season for a
+// player, his first real season for a draft prospect. Later full seasons are
+// counted from there, so a prospect drafted near the end of the data gets a
+// projected ceiling even in a league that started in 2011.
+func (d *realData) ceilingFor(seed uint64, pid string, from, age, ovr int) int {
+	hind := clamp(blurPotential(seed, pid, d.hindsightPeak(pid, from, ovr)), ovr, 99)
+	w := ceilingWeight(max(d.start, from), age)
+	if w >= 1 {
+		return hind
+	}
+	proj := projectedPotential(age, ovr)
+	return clamp(round(w*float64(hind)+(1-w)*float64(proj)), ovr, 99)
+}
+
+// ceilingWeight is the share of the hindsight ceiling that can be trusted:
+// full seasons of data after `after` (up to lastRealSeason) divided by the
+// seasons until the player turns Progression.PotentialEqualAge, capped at 1.
+func ceilingWeight(after, age int) float64 {
+	need := PotentialEqual() - age
+	if need <= 0 {
+		return 1
+	}
+	have := lastRealSeason - after
+	if have < 0 {
+		have = 0
+	}
+	return math.Min(1, float64(have)/float64(need))
+}
+
+// projectedPotential is the ceiling expected from age and overall alone: the
+// mean ceiling room of the fictional generator (GeneratePlayer), which is
+// ProjectRoomPerYear points for every year below ProjectEndAge.
+func projectedPotential(age, ovr int) int {
+	c := &RealTuning
+	room := c.ProjectRoomPerYear * float64(c.ProjectEndAge-age)
+	if room < 0 {
+		room = 0
+	}
+	return clamp(ovr+round(room), ovr, 99)
+}
+
 // ---------------------------------------------------------------- league
 
 // NewRealLeague builds the league as it stood at the start of 2010-11, with
 // the real draft classes of 2011 onward stored for the offseasons.
 func NewRealLeague(dataDir string, seed uint64) (*League, error) {
-	d, err := loadRealData(dataDir)
+	return NewRealLeagueSeason(dataDir, seed, firstRealSeason)
+}
+
+// NewRealLeagueSeason builds the league as it stood at the start of a real
+// season (named by its ending year, 2011 to 2026), with the real draft
+// classes of that year onward stored for the offseasons.
+func NewRealLeagueSeason(dataDir string, seed uint64, season int) (*League, error) {
+	if season < firstRealSeason || season > lastRealSeason {
+		return nil, fmt.Errorf("real seasons run from %d to %d, not %d", firstRealSeason, lastRealSeason, season)
+	}
+	d, err := loadRealDataFrom(dataDir, season)
 	if err != nil {
 		return nil, err
 	}
-	if len(d.all[firstRealSeason]) == 0 {
-		return nil, fmt.Errorf("no %d NBA data in %s", firstRealSeason, dataDir)
+	if len(d.all[season]) == 0 {
+		return nil, fmt.Errorf("no %d NBA data in %s", season, dataDir)
 	}
 	r := NewRNG(seed)
-	lg := &League{Seed: seed, Year: firstRealSeason, Careers: map[int][]CareerRow{}, DraftClasses: map[int][]*Player{}}
+	lg := &League{Seed: seed, Year: season, RealSeason: season, Careers: map[int][]CareerRow{}, DraftClasses: map[int][]*Player{}}
+	table := realTeamsFor(season)
 	teamIdx := map[string]int{}
-	for i, t := range realTeamTable {
+	for i, t := range table {
 		teamIdx[t.Abbr] = i
 		lg.Teams = append(lg.Teams, &Team{ID: i, City: t.City, Name: t.Name})
 	}
@@ -660,19 +737,19 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 	// Home team: where the player logged the most minutes.
 	home := map[string]string{}
 	var pids []string
-	for pid := range d.all[firstRealSeason] {
+	for pid := range d.all[season] {
 		pids = append(pids, pid)
 	}
 	sort.Strings(pids)
 	for _, pid := range pids {
 		best := -1.0
-		for _, tr := range d.teams[firstRealSeason][pid] {
+		for _, tr := range d.teams[season][pid] {
 			if _, ok := teamIdx[tr.team]; ok && tr.mp > best {
 				best, home[pid] = tr.mp, tr.team
 			}
 		}
 		if _, ok := home[pid]; !ok {
-			if rr := d.all[firstRealSeason][pid]; !rr.combined {
+			if rr := d.all[season][pid]; !rr.combined {
 				if _, ok := teamIdx[rr.team]; ok {
 					home[pid] = rr.team
 				}
@@ -681,12 +758,12 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 	}
 	// minutes for the player on his home team.
 	minHome := func(pid string) float64 {
-		for _, tr := range d.teams[firstRealSeason][pid] {
+		for _, tr := range d.teams[season][pid] {
 			if tr.team == home[pid] {
 				return tr.mp
 			}
 		}
-		return d.all[firstRealSeason][pid].mp
+		return d.all[season][pid].mp
 	}
 	byTeam := map[string][]string{}
 	for _, pid := range pids {
@@ -716,11 +793,11 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 		}
 		p.Potential = rp.Overall
 		if p.Age < PotentialEqual() {
-			p.Potential = clamp(blurPotential(seed, pid, d.hindsightPeak(pid, season, rp.Overall)), rp.Overall, 99)
+			p.Potential = d.ceilingFor(seed, pid, season, p.Age, rp.Overall)
 		}
 		return p
 	}
-	for _, t := range realTeamTable {
+	for _, t := range table {
 		ids := byTeam[t.Abbr]
 		sort.SliceStable(ids, func(i, j int) bool {
 			if a, b := minHome(ids[i]), minHome(ids[j]); a != b {
@@ -733,7 +810,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 			if len(tm.Roster) >= RosterSize {
 				break
 			}
-			p := mk(pid, firstRealSeason)
+			p := mk(pid, season)
 			p.TeamID = tm.ID
 			tm.Roster = append(tm.Roster, p)
 			used[pid] = true
@@ -743,7 +820,7 @@ func NewRealLeague(dataDir string, seed uint64) (*League, error) {
 	var fas []*Player
 	for _, pid := range pids {
 		if !used[pid] {
-			fas = append(fas, mk(pid, firstRealSeason))
+			fas = append(fas, mk(pid, season))
 		}
 	}
 	sort.SliceStable(fas, func(i, j int) bool {
@@ -823,7 +900,7 @@ func (d *realData) prospect(r *RNG, seed uint64, pk draftPick, year int) *Player
 	}
 	var row *statRow
 	first := 0
-	for s := year + 1; s <= 2027; s++ {
+	for s := year + 1; s <= lastDataSeason; s++ {
 		if x := d.all[s][pk.pid]; x != nil && x.mp > 0 {
 			row, first = x, s
 			break
@@ -840,7 +917,7 @@ func (d *realData) prospect(r *RNG, seed uint64, pk draftPick, year int) *Player
 	rp := d.rate(row, RealTuning.RookieDrop)
 	p.Pos, p.AltPos, p.Ratings, p.Impact = rp.Pos, rp.Alt, rp.Ratings, rp.Impact
 	p.UsageTendency = usageFromPercentile(d.model(first).usg.pct(row.usg))
-	p.Potential = clamp(blurPotential(seed, pk.pid, d.hindsightPeak(pk.pid, first, p.Overall())), p.Overall(), 99)
+	p.Potential = d.ceilingFor(seed, pk.pid, first, p.Age, p.Overall())
 	return p
 }
 

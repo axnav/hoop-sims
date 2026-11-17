@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// realColors holds each 2010-11 franchise's primary and secondary colour (values only).
+// realColors holds each real franchise's primary and secondary colour (values only).
 var realColors = map[string][2]string{
 	"DAL": {"#00538C", "#B8C4CA"}, "DEN": {"#4D90CD", "#FDB927"}, "GSW": {"#1D428A", "#FFC72C"},
 	"HOU": {"#CE1141", "#C4CED4"}, "LAC": {"#C8102E", "#1D428A"}, "LAL": {"#552583", "#FDB927"},
@@ -18,6 +18,8 @@ var realColors = map[string][2]string{
 	"IND": {"#2B5FA8", "#FDBB30"}, "MIA": {"#98002E", "#F9A01B"}, "MIL": {"#00A04A", "#EEE1C6"},
 	"NJN": {"#2A5FA8", "#CD1041"}, "NYK": {"#006BB6", "#F58426"}, "ORL": {"#0077C0", "#C4CED4"},
 	"PHI": {"#006BB6", "#ED174C"}, "TOR": {"#753BBD", "#BEC0C2"}, "WAS": {"#2A5FA8", "#E31837"},
+	// Renamed franchises (see engine/realteams.go): Brooklyn from 2013, New Orleans Pelicans from 2014, Charlotte Hornets from 2015.
+	"BRK": {"#000000", "#FFFFFF"}, "NOP": {"#0C2340", "#C8102E"}, "CHO": {"#1D1160", "#00788C"},
 }
 
 func hslHex(h, s, l float64) string {

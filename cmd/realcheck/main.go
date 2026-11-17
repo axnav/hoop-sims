@@ -1,5 +1,5 @@
-// Command realcheck validates the real-data league: it sims the 2010-11
-// regular season many times and compares against the real results.
+// Command realcheck validates the real-data league: it sims a real start
+// season (flag -season, default 2011 = 2010-11) many times and compares against the real results.
 package main
 
 import (
@@ -15,15 +15,16 @@ import (
 func main() {
 	runs := flag.Int("runs", 30, "number of simulated seasons")
 	dir := flag.String("data", "data/real", "real data directory")
+	season := flag.Int("season", 2011, "real start season, ending year (2011 = 2010-11, up to 2026)")
 	flag.Parse()
 
-	realW, err := engine.RealTeamWins(*dir, 2011)
+	realW, err := engine.RealTeamWins(*dir, *season)
 	check(err)
-	realPG, err := engine.RealPerGameStats(*dir, 2011)
+	realPG, err := engine.RealPerGameStats(*dir, *season)
 	check(err)
-	realPPG, err := engine.RealLeaguePPG(*dir, 2011)
+	realPPG, err := engine.RealLeaguePPG(*dir, *season)
 	check(err)
-	abbr := engine.RealTeamAbbrevs()
+	abbr := engine.RealTeamAbbrevsFor(*season)
 
 	simW := make([]float64, engine.NumTeams)
 	type acc struct {
@@ -34,7 +35,7 @@ func main() {
 	simPts := 0.0
 	var first *engine.League
 	for run := 0; run < *runs; run++ {
-		lg, err := engine.NewRealLeague(*dir, uint64(1000+run))
+		lg, err := engine.NewRealLeagueSeason(*dir, uint64(1000+run), *season)
 		check(err)
 		if run == 0 {
 			first = lg

@@ -175,8 +175,12 @@ type League struct {
 	// Version is the save format version, stamped by Save (see SaveVersion).
 	Version int `json:"version"`
 
-	Seed       uint64
-	Year       int
+	Seed uint64
+	Year int
+	// RealSeason is the real season (ending year, 2011 to 2026) a real-data
+	// league started from; 0 in a fictional league or an old real save, which
+	// means 2011.
+	RealSeason int `json:",omitempty"`
 	NextID     int // next unused player ID
 	Teams      []*Team
 	FreeAgents []*Player

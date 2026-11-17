@@ -124,8 +124,8 @@ function TradeScreen() {
   const [sp, setSp] = useSearchParams()
   const me = state!.user.team.id
   const status = useQuery({ queryKey: ['trade-status', state?.phase, state?.day], queryFn: api.tradeStatus })
-  const meta = useQuery({ queryKey: ['meta'], queryFn: api.meta })
-  const teams: Team[] = useMemo(() => (meta.data ? (state!.mode === 'real' ? meta.data.realTeams : meta.data.fictionalTeams) : []), [meta.data, state])
+  const teamsQ = useQuery({ queryKey: ['teams-list', state?.mode, state?.realSeason], queryFn: api.teams, staleTime: 60000 })
+  const teams: Team[] = useMemo(() => (teamsQ.data?.teams ?? []).map((r) => r.team), [teamsQ.data])
   // the computer teams in the deal: one, or two when a third team is added
   const [partners, setPartners] = useState<number[]>(() => {
     const t = Number(sp.get('team'))

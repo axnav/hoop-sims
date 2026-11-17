@@ -34,9 +34,10 @@ type server struct {
 	credits    map[string][3]string // file name -> artist, licence, source
 	webDir     string
 
-	metaOnce sync.Once
-	fictTeam []M
-	realTeam []M
+	metaOnce    sync.Once
+	fictTeam    []M
+	realTeam    []M
+	realSeasons []M // newest first
 }
 
 type apiErr struct {
@@ -115,37 +116,71 @@ func (s *server) isReal() bool {
 	return false
 }
 
-func teamRef(t *engine.Team, real bool) M {
-	abbr, col := fictionalAbbr(t.City), fictionalColors(t.ID)
-	if real {
-		if a := engine.RealTeamAbbrevs(); t.ID < len(a) {
-			abbr = a[t.ID]
-			if c, ok := realColors[abbr]; ok {
-				col = c
-			}
+// realSeason is the real season of the loaded league: 0 for a fictional
+// league, otherwise League.RealSeason (0 in an old real save means 2011).
+func (s *server) realSeason() int {
+	if !s.isReal() {
+		return 0
+	}
+	if s.lg.RealSeason == 0 {
+		return 2011
+	}
+	return s.lg.RealSeason
+}
+
+// teamObj builds the team object the app shows; col is the colour pair.
+func teamObj(id int, abbr, city, name string, col [2]string) M {
+	conf := engine.Conference(id)
+	return M{"id": id, "abbr": abbr, "city": city, "name": name, "fullName": city + " " + name,
+		"primary": col[0], "secondary": col[1], "conf": conf, "confName": confNames[conf]}
+}
+
+// realTeamObj is the team object of franchise id as named in one real season.
+func realTeamObj(id int, ti engine.RealTeamInfo) M {
+	col, ok := realColors[ti.Abbr]
+	if !ok {
+		col = fictionalColors(id)
+	}
+	return teamObj(id, ti.Abbr, ti.City, ti.Name, col)
+}
+
+// teamRef is the team object; realSeason is 0 for a fictional league, else the
+// real season whose abbreviations and colours apply.
+func teamRef(t *engine.Team, realSeason int) M {
+	if realSeason != 0 {
+		if a := engine.RealTeamAbbrevsFor(realSeason); t.ID < len(a) {
+			return realTeamObj(t.ID, engine.RealTeamInfo{Abbr: a[t.ID], City: t.City, Name: t.Name})
 		}
 	}
-	conf := engine.Conference(t.ID)
-	return M{"id": t.ID, "abbr": abbr, "city": t.City, "name": t.Name, "fullName": t.FullName(),
-		"primary": col[0], "secondary": col[1], "conf": conf, "confName": confNames[conf]}
+	return teamObj(t.ID, fictionalAbbr(t.City), t.City, t.Name, fictionalColors(t.ID))
 }
 
 func (s *server) team(id int) M {
 	if s.lg == nil || id < 0 || id >= len(s.lg.Teams) {
 		return M{"id": -1, "abbr": "-", "fullName": "-", "primary": "#444444", "secondary": "#888888", "conf": 0, "confName": ""}
 	}
-	return teamRef(s.lg.Teams[id], s.isReal())
+	return teamRef(s.lg.Teams[id], s.realSeason())
 }
 
 func (s *server) loadTeamLists() {
 	s.metaOnce.Do(func() {
 		g := engine.GenerateLeague(1)
 		for _, t := range g.Teams {
-			s.fictTeam = append(s.fictTeam, teamRef(t, false))
+			s.fictTeam = append(s.fictTeam, teamRef(t, 0))
 		}
-		if rl, err := engine.NewRealLeague(s.realDir, 1); err == nil {
-			for _, t := range rl.Teams {
-				s.realTeam = append(s.realTeam, teamRef(t, true))
+		// Team names per real season come from the small team table; no league is built.
+		infos, err := engine.RealSeasons(s.realDir)
+		if err != nil {
+			return
+		}
+		for i := len(infos) - 1; i >= 0; i-- { // newest first
+			teams := []M{}
+			for id, ti := range infos[i].Teams {
+				teams = append(teams, realTeamObj(id, ti))
+			}
+			s.realSeasons = append(s.realSeasons, M{"season": infos[i].Season, "label": infos[i].Label, "teams": teams})
+			if infos[i].Season == 2011 {
+				s.realTeam = teams
 			}
 		}
 	})
@@ -157,7 +192,7 @@ func (s *server) meta(r *http.Request) (any, error) {
 	s.loadTeamLists()
 	return M{
 		"loaded": s.lg != nil, "realAvailable": len(s.realTeam) > 0, "saveExists": fileExists(s.savePath),
-		"fictionalTeams": s.fictTeam, "realTeams": s.realTeam, "conferences": confNames,
+		"fictionalTeams": s.fictTeam, "realTeams": s.realTeam, "realSeasons": s.realSeasons, "conferences": confNames,
 	}, nil
 }
 
@@ -166,6 +201,8 @@ func (s *server) newGame(r *http.Request) (any, error) {
 		Mode string `json:"mode"`
 		Seed uint64 `json:"seed"`
 		Team int    `json:"team"`
+		// Season is the real start season (2011 to 2026); only read in real mode, 0 means 2011.
+		Season int `json:"season"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -179,8 +216,14 @@ func (s *server) newGame(r *http.Request) (any, error) {
 	var lg *engine.League
 	switch in.Mode {
 	case "real":
+		if in.Season == 0 {
+			in.Season = 2011
+		}
+		if in.Season < 2011 || in.Season > 2026 {
+			return nil, bad("the real league can start in a season from 2011 to 2026, not %d", in.Season)
+		}
 		var err error
-		if lg, err = engine.NewRealLeague(s.realDir, in.Seed); err != nil {
+		if lg, err = engine.NewRealLeagueSeason(s.realDir, in.Seed, in.Season); err != nil {
 			return nil, bad("real league unavailable: %v", err)
 		}
 	case "", "fictional":

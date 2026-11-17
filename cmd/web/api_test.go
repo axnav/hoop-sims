@@ -2788,3 +2788,82 @@ func TestPlayersSearch(t *testing.T) {
 		}
 	}
 }
+
+func TestMetaRealSeasons(t *testing.T) {
+	c := newTC(t)
+	meta := c.call("GET", "/api/meta", nil, 200)
+	if meta["realAvailable"] != true {
+		t.Skip("real data absent")
+	}
+	rs := meta["realSeasons"].([]any)
+	if len(rs) != 16 {
+		t.Fatalf("realSeasons has %d entries", len(rs))
+	}
+	has := func(e M, abbr string) bool {
+		for _, x := range e["teams"].([]any) {
+			if x.(M)["abbr"] == abbr {
+				return true
+			}
+		}
+		return false
+	}
+	for i, x := range rs {
+		e := x.(M)
+		if int(e["season"].(float64)) != 2026-i {
+			t.Fatalf("entry %d is season %v, want newest first", i, e["season"])
+		}
+		if len(e["teams"].([]any)) != 30 {
+			t.Fatalf("season %v has %d teams", e["season"], len(e["teams"].([]any)))
+		}
+		for id, tm := range e["teams"].([]any) {
+			if int(tm.(M)["id"].(float64)) != id {
+				t.Fatalf("season %v: team at position %d has id %v", e["season"], id, tm.(M)["id"])
+			}
+		}
+	}
+	if !has(rs[0].(M), "BRK") || has(rs[0].(M), "NJN") {
+		t.Fatal("2026 should have BRK and not NJN")
+	}
+	if !has(rs[15].(M), "NJN") || has(rs[15].(M), "BRK") {
+		t.Fatal("2011 should have NJN and not BRK")
+	}
+	if len(meta["realTeams"].([]any)) != 30 {
+		t.Fatal("realTeams missing")
+	}
+}
+
+func TestNewRealLeagueWithSeason(t *testing.T) {
+	c := newTC(t)
+	if c.call("GET", "/api/meta", nil, 200)["realAvailable"] != true {
+		t.Skip("real data absent")
+	}
+	st := c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3, "season": 2020}, 200)
+	if int(st["realSeason"].(float64)) != 2020 || st["mode"] != "real" || int(st["year"].(float64)) != 2020 {
+		t.Fatalf("state after season 2020: realSeason %v year %v", st["realSeason"], st["year"])
+	}
+	teams := c.call("GET", "/api/teams", nil, 200)["teams"].([]any)
+	brk := false
+	for _, x := range teams {
+		if x.(M)["team"].(M)["abbr"] == "BRK" {
+			brk = true
+		}
+	}
+	if !brk {
+		t.Fatal("no BRK team in the 2020 league")
+	}
+	if got := c.call("GET", "/api/state", nil, 200)["realSeason"]; int(got.(float64)) != 2020 {
+		t.Fatalf("/api/state realSeason = %v", got)
+	}
+	// Default is 2011.
+	st = c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3}, 200)
+	if int(st["realSeason"].(float64)) != 2011 {
+		t.Fatalf("default realSeason = %v", st["realSeason"])
+	}
+	// Fictional league: 0.
+	st = c.call("POST", "/api/new", M{"mode": "fictional", "seed": 2, "team": 3}, 200)
+	if int(st["realSeason"].(float64)) != 0 {
+		t.Fatalf("fictional realSeason = %v", st["realSeason"])
+	}
+	c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3, "season": 1990}, 400)
+	c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3, "season": 2027}, 400)
+}

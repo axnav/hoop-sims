@@ -8,7 +8,7 @@ Money in the code is an integer number of thousands of dollars. Day and year num
 
 HoopSim is a basketball general-manager game. You run one team of a 30-team league: you set the lineup and minutes, trade players and draft picks, re-sign or release players, scout and make draft picks, bid for free agents, and then advance the calendar while the computer plays every game. There is no on-court play and no graphics of play beyond an optional replay of a finished game.
 
-There are two league modes. The default is a fictional league made from generated players and team names. The second mode builds the league from private Basketball-Reference CSV files in `data/real/` (the 2010-11 season is the starting year); it only works if those files are present on the machine, and they are never committed (`.gitignore` excludes `/data/real/` and `/saves/`). It also holds `photos/` (player photos, see section 16) and `phototool/` (the downloader). The CSV files there are `Advanced.csv`, `Draft Pick History.csv`, `Player Career Info.csv`, `Player Totals.csv`, `Team Abbrev.csv` and `Team Summaries.csv`. Everything after the start is simulated by the same engine in both modes.
+There are two league modes. The default is a fictional league made from generated players and team names. The second mode builds the league from private Basketball-Reference CSV files in `data/real/` (any season from 2010-11 to 2025-26 can be the starting year, named by its ending year, 2011 to 2026); it only works if those files are present on the machine, and they are never committed (`.gitignore` excludes `/data/real/` and `/saves/`). It also holds `photos/` (player photos, see section 16) and `phototool/` (the downloader). The CSV files there are `Advanced.csv`, `Draft Pick History.csv`, `Player Career Info.csv`, `Player Totals.csv`, `Team Abbrev.csv` and `Team Summaries.csv`. Everything after the start is simulated by the same engine in both modes.
 
 The game is simulation only: results come from a possession-by-possession model in `engine/game.go`. Every player also has a hidden number, `Player.Impact`, that shifts his real performance away from his visible ratings. It exists by design and is never shown.
 
@@ -34,7 +34,7 @@ Dependencies point downward only. `engine/` imports nothing from the project. `c
 | `cmd/web/` | Only translates: read a request, call the engine, build a JSON response (plain maps, so engine structs and the hidden number never leak). |
 | `web/src/` | Only shows what the API returns; no game rules in the browser. |
 | `cmd/sim/` | Developer tool: runs league-average games, multi-season runs and rating tables, printed to the terminal. |
-| `cmd/realcheck/` | Developer tool: compares simulated real-data seasons with real 2010-11 results. Needs `data/real/`. |
+| `cmd/realcheck/` | Developer tool: compares a simulated real start season (`-season`, default 2011) with its real results. Needs `data/real/`. |
 
 The standard library is the only Go dependency (`go.mod` says `module hoopsim`, `go 1.22`).
 
@@ -72,7 +72,7 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 | News volume and award winners (stories per kind per season, the headline stories and awards of the last season) | `go run ./cmd/sim -mode news -seed 1 -seasons 3` |
 | Real-data comparison | `go run ./cmd/realcheck -runs 30` |
 
-`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `badges`, `coaches`, `morale`, `develop`, `resign`, `gm` or `owner`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`.
+`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `badges`, `coaches`, `morale`, `develop`, `resign`, `gm` or `owner`), `-seasons`, and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`, `-season` (real start season, 2011 to 2026, default 2011).
 
 The Go server serves `web/dist` for any path that is not `/api/...` and falls back to `index.html`, so the browser router can use real URLs. If `web/dist/index.html` is missing it answers 503 with the build command. The Vite dev server (`web/vite.config.ts`) proxies `/api` to `http://localhost:8095`, which is why the dev instance of the Go server must use port 8095.
 
@@ -216,8 +216,8 @@ Hooks outside `owner.go`: `GenerateLeague` creates `League.Owner`; `StartSeason`
 
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
-| `realdata.go` | Reads the CSVs, turns stats into ratings, builds the real league and its draft classes, helpers for `cmd/realcheck` | `NewRealLeague`, `RatingsFromStats`, `RealPerGameStats`, `RealTeamWins`, `RealLeaguePPG` | `RealTuning` |
-| `realteams.go` | The 30 real franchises (names, abbreviations) | `RealTeamAbbrevs` | none |
+| `realdata.go` | Reads the CSVs, turns stats into ratings, builds the real league and its draft classes, helpers for `cmd/realcheck`. `NewRealLeagueSeason(dir, seed, season)` builds the league at the start of any season 2011 to 2026 (constants `firstRealSeason`, `lastRealSeason`, `lastDataSeason` = 2027, the few games of 2026-27 used only as extra evidence); `NewRealLeague` means 2011 and gives the same league as before. Only draft classes of the start year and later are stored. Ceilings of young players (under `PotentialEqualAge`) come from `ceilingFor`: the blurred hindsight peak, blended with `projectedPotential` (age and overall, the fictional generator's mean ceiling room `ProjectRoomPerYear` x (`ProjectEndAge` - age)) by `ceilingWeight` = full seasons of data after the start season / seasons until the player turns 27, capped at 1 (always 1 for a 2011 start). No random stream added | `NewRealLeague`, `NewRealLeagueSeason`, `RatingsFromStats`, `RealPerGameStats`, `RealTeamWins`, `RealLeaguePPG` | `RealTuning` |
+| `realteams.go` | The 30 real franchises in the fixed 2011 order (index = franchise, West 0-14, East 15-29) plus the renames by season (`realRenames`: NJN to BRK Brooklyn Nets from 2013, NOH to NOP New Orleans Pelicans from 2014, CHA to CHO Charlotte Hornets from 2015); `RealSeasons(dir)` lists 2011 to 2026 with each season's team names without building a league (label from `SeasonLabel` in `realseason.go`) | `RealTeamAbbrevs` (2011), `RealTeamAbbrevsFor(season)`, `RealSeasons`, `RealSeasonInfo`, `RealTeamInfo` | none |
 
 ## 6. The data model
 
@@ -243,6 +243,7 @@ The whole game is one `League` value (`engine/generate.go`). Engine structs have
 | `Report` | The current offseason report |
 | `FA` | Non-nil only during free agency |
 | `DraftClasses` | Real-data mode: stored future rookies by year |
+| `RealSeason` | Real-data mode: the season the league started from (ending year, 2011 to 2026); `omitempty`, 0 in a fictional league or an old real save (means 2011); no save version bump |
 | `Picks` | Every tradable pick in the next four draft years |
 | `Transactions` | Log of executed trades, oldest first |
 | `Proposals`, `NextProposalID`, `DeadlineStopYear` | Computer-team trade offers waiting for the user, their ID counter, and the season in which the deadline pause already fired |
@@ -442,11 +443,11 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 
 | Method | Path | What it does | Handler (file) |
 |---|---|---|---|
-| GET | `/api/meta` | Is a league loaded, is real data available, does a save exist, team lists for both modes | `meta` (main.go) |
-| POST | `/api/new` | Start a game: body `{mode, seed, team}`; `mode` is `fictional` or `real` | `newGame` (main.go) |
+| GET | `/api/meta` | Is a league loaded, is real data available, does a save exist, team lists for both modes; `realTeams` (the 2011 list) and `realSeasons: [{season, label, teams: Team[]}]` newest first, 2026 to 2011 (team ids are franchise indexes; built from `engine.RealSeasons`, no league is built) | `meta` (main.go) |
+| POST | `/api/new` | Start a game: body `{mode, seed, team, season?}`; `mode` is `fictional` or `real`; `season` (2011 to 2026, missing or 0 = 2011) is only read in real mode, outside the range is a 400 | `newGame` (main.go) |
 | POST | `/api/load` | Load the save file | `load` (main.go) |
 | POST | `/api/save` | Write the save file | `save` (main.go) |
-| GET | `/api/state` | Phase, day, record, next game, last result, payroll summary, `nextAction` and `actions`, `owner:{trust,label,fired,alert}` (alert = the newest warn or bad owner message of the current week, else null) | `state` (state.go) |
+| GET | `/api/state` | Phase, day, `realSeason` (0 for a fictional league), record, next game, last result, payroll summary, `nextAction` and `actions`, `owner:{trust,label,fired,alert}` (alert = the newest warn or bad owner message of the current week, else null) | `state` (state.go) |
 | POST | `/api/sim` | Sim days: `{days, toEnd, auto}`; returns day results, standings strip, new state, optional `pause` `{reason, text}` (reasons `deadline`, `offer`, and `assistant` when the GM trade-alert switch is on and a new trade idea appears; text is the idea's title). `state` also has `gm: {count}` | `sim` (state.go) |
 | GET | `/api/standings` | Conference standings | `standings` (league.go) |
 | GET | `/api/leaders` | Top 10 in points, rebounds, assists; optional `?badge=<key>` keeps only players with that badge (unknown key: 400) | `leaders` (league.go) |
@@ -619,7 +620,7 @@ Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have
 | `cmd/web/assistant_test.go` | The trade assistant routes |
 | `cmd/web/finder_test.go` | The trade finder route: shape, filters, a returned deal executes, bad input |
 | `cmd/web/gm_test.go` | The GM routes: shape, settings round trip, apply once then 409, 400s, state count, the `assistant` pause, draft suggestion shows scouting ranges, auto draft does not stop on the user |
-| `engine/realdata_test.go` | Real league shape, determinism, potential blur (skipped without data) |
+| `engine/realdata_test.go` | Real league shape, determinism, potential blur; every season 2011 to 2026 builds (30 full rosters, no duplicate player, no earlier draft class); abbreviations of every season against `Team Abbrev.csv`; invalid seasons refused; ceiling blend (2011 equals the old rule, 2026 young players have potential above overall) (skipped without data) |
 | `cmd/web/api_test.go` | The API end to end through the handlers: a full flow, hidden number never present, real conferences, trades and deals, negotiation, offers, injuries and commissioner, contracts, free agency, lineup, lottery and scouting, prospect secrecy, scouting points running out |
 
 Not covered: the front end (no tests; the type check in `npm run build` is the only automatic check), `cmd/sim`, `cmd/realcheck`, and the real-data mode through the API beyond conferences. `RULES.md` asks for an end-to-end pass with a scratch server and headless browser on top of these tests.
@@ -651,7 +652,7 @@ Not covered: the front end (no tests; the type check in `npm run build` is the o
 - **Positions are not used in the game sim or in who starts; they only decide which slot each automatic starter is shown in.** `newSide` in `game.go` weighs players by minutes and effective ratings only. `Team.Rotation` picks the five best by overall, `StarterSlots` and `AutoLineup` only seat them in PG..C, and the overall formula is position-based, so position matters to how good a player looks, not to who plays or how a lineup plays together.
 - **Engine trade tests halve salaries.** `tradeLeague` in `engine/trade_test.go` halves every salary so all teams have cap room; salary matching is covered separately in `contract_test.go` and `deal_test.go`, but the trade value tests do not run under realistic payrolls.
 - **The compiled binary is no longer tracked (2026-11-17).** `cmd/web/web` (about 11 MB) was committed until then; it is now in `.gitignore`. A plain `go build` inside `cmd/web` still produces that file, which is why `RULES.md` says to build with `-o` outside the repository. Older commits still contain it.
-- **Real data is detected indirectly.** `server.isReal()` looks at the first player on the first roster for a `RealID`; the mode is not stored on the league.
+- **Real data is detected indirectly.** `server.isReal()` looks at the first player on the first roster for a `RealID`; the mode is not stored on the league (only the start season, `League.RealSeason`, through `server.realSeason()`, which team abbreviations and colours use).
 - **Prospect secrecy depends on each handler.** The draft pool is saved with true values and the API hides them handler by handler (`prospectRows`, `prospectPlayer`, `ScoutView`). A new screen that reads `Draft.Pool` directly would leak them; `RULES.md` rule 1.2 and `TestProspectSecrecy` exist for this.
 - **Scattered phase logic.** Which trades, signings and releases are allowed is decided in several places by looking at `Draft`, `FA` and `Season` (`TradeWindowOpen`, `inOffseason`, `offseasonOpen` in `cmd/web`), not only through `Phase`. A new stage has to be checked against all of them.
 - **Year means two things.** During an offseason `League.Year` is still the season just played, and `Season.Year < Year` is how several functions detect "offseason with no draft". The draft pick `Year` follows the same rule.

@@ -10,13 +10,16 @@ export default function Start({ meta }: { meta: Meta }) {
   const [mode, setMode] = useState<'fictional' | 'real'>('fictional')
   const [seed, setSeed] = useState('1')
   const [team, setTeam] = useState(0)
-  const teams = mode === 'real' ? meta.realTeams : meta.fictionalTeams
+  const seasons = meta.realSeasons ?? []
+  const [season, setSeason] = useState(0)
+  const picked = seasons.find((x) => x.season === season) ?? seasons[0]
+  const teams = (mode === 'real' ? (picked?.teams ?? meta.realTeams) : meta.fictionalTeams) ?? []
   const done = (s: Awaited<ReturnType<typeof api.state>>) => {
     qc.setQueryData(['state'], s)
     qc.invalidateQueries({ queryKey: ['meta'] })
   }
   const create = useMutation({
-    mutationFn: () => api.newGame({ mode, seed: Math.max(1, Number(seed) || 1), team }),
+    mutationFn: () => api.newGame({ mode, seed: Math.max(1, Number(seed) || 1), team, ...(mode === 'real' && picked ? { season: picked.season } : {}) }),
     onSuccess: done,
   })
   const load = useMutation({ mutationFn: api.load, onSuccess: done })
@@ -30,7 +33,7 @@ export default function Start({ meta }: { meta: Meta }) {
         <div className="flex overflow-hidden rounded-lg border border-line">
           <button className={`px-4 py-2 font-semibold ${mode === 'fictional' ? 'bg-accent text-black' : 'bg-panel'}`} onClick={() => { setMode('fictional'); setTeam(0) }}>Fictional league</button>
           {meta.realAvailable && (
-            <button className={`px-4 py-2 font-semibold ${mode === 'real' ? 'bg-accent text-black' : 'bg-panel'}`} onClick={() => { setMode('real'); setTeam(0) }}>Real 2010-11 league</button>
+            <button className={`px-4 py-2 font-semibold ${mode === 'real' ? 'bg-accent text-black' : 'bg-panel'}`} onClick={() => { setMode('real'); setTeam(0) }}>Real league</button>
           )}
         </div>
         <label className="flex items-center gap-2 text-muted">Seed
@@ -42,6 +45,16 @@ export default function Start({ meta }: { meta: Meta }) {
           </button>
         )}
       </div>
+      {mode === 'real' && seasons.length > 0 && (
+        <div className="mt-3">
+          <label htmlFor="start-season" className="flex items-center gap-2 text-muted">Starting season
+            <select id="start-season" className="rounded-md border border-line bg-panel px-2 py-1.5 text-ink" value={picked?.season} onChange={(e) => setSeason(Number(e.target.value))}>
+              {seasons.map((x) => <option key={x.season} value={x.season}>{x.label}</option>)}
+            </select>
+          </label>
+          <p className="mt-1 text-sm text-muted">Rosters and ratings come from that season. The salary cap and rules are the game's own.</p>
+        </div>
+      )}
       {err && <div className="mt-3"><ErrorBox error={err} /></div>}
       {[0, 1].map((conf) => (
         <div key={conf} className="mt-6">

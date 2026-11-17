@@ -21,7 +21,7 @@ export type DayResult = {
   opp?: Team; home?: boolean; me?: number; them?: number; win?: boolean; hasReplay?: boolean
 }
 export type GameState = {
-  year: number; phase: Phase; day: number; totalDays: number; mode: 'real' | 'fictional'; conferences: string[]
+  year: number; phase: Phase; day: number; totalDays: number; mode: 'real' | 'fictional'; realSeason?: number; conferences: string[]
   user: { team: Team; w: number; l: number; pd: number; confRank: number; confName: string }
   next: { kind: string; opp: Team; home: boolean; oppW: number; oppL: number; label: string; seriesMe?: number; seriesThem?: number } | null
   last?: { opp: Team; me: number; them: number; win: boolean; home: boolean; label: string; boxId: string; playoff: boolean; year: number }
@@ -100,6 +100,7 @@ export type FreeAgencyData = {
 export type Meta = {
   loaded: boolean; realAvailable: boolean; saveExists: boolean
   fictionalTeams: Team[]; realTeams: Team[]; conferences: string[]
+  realSeasons?: { season: number; label: string; teams: Team[] }[]
 }
 export type StandRow = { rank: number; team: Team; w: number; l: number; pct: number; gb: number; pd: number; inPlayoffs: boolean }
 export type Standings = { year: number; conferences: { conf: number; name: string; rows: StandRow[] }[]; playoffLine: number; userTeam: number }
@@ -338,7 +339,7 @@ const post = <T,>(u: string, b?: unknown) => req<T>('POST', u, b ?? {})
 
 export const api = {
   meta: () => get<Meta>('/api/meta'),
-  newGame: (b: { mode: string; seed: number; team: number }) => post<GameState>('/api/new', b),
+  newGame: (b: { mode: string; seed: number; team: number; season?: number }) => post<GameState>('/api/new', b),
   load: () => post<GameState>('/api/load'),
   save: () => post<{ ok: boolean }>('/api/save'),
   state: () => get<GameState>('/api/state'),
