@@ -216,7 +216,7 @@ func (s *server) dealEvaluate(r *http.Request) (any, error) {
 	teams := []M{}
 	for _, t := range v.Teams {
 		row := M{"team": s.team(t.Team), "accept": t.Accept, "reason": t.Reason,
-			"gives": round1(t.Gives), "gets": round1(t.Gets), "needed": round1(t.Needed),
+			"gives": round1(t.Gives), "gets": round1(t.Gets), "needed": math.Round(t.Needed*100) / 100,
 			"mood": t.Mood, "askText": t.AskText}
 		if t.Ask != nil {
 			user := s.lg.UserTeamID

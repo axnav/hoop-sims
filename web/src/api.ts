@@ -229,6 +229,8 @@ export type TakeAsset =
   | { kind: 'pick'; year: number; round: number; original: Team; label: string; value: number }
 export type TakePackage = { label: string; give: TakeAsset[]; receive: TakeAsset[]; note: string; cost: number; cheapest: boolean; deal: { moves: DealMove[] } }
 export type WhatWouldItTake = { player: TradeAssetRow; team: Team; possible: boolean; reason: string; packages: TakePackage[] }
+export type UpgradeRow = { player: TradeAssetRow; team: Team; direction: TeamStatus; gain: number; shopped: boolean; shopReason: string; possible: boolean; reason: string; package?: TakePackage }
+export type Upgrades = { player: TradeAssetRow; possible: boolean; reason: string; upgrades: UpgradeRow[] }
 export type FindOffer = { team: Team; direction: TeamStatus; receive: TakeAsset[]; value: number; salaryIn: number; salaryOut: number; note: string; deal: { moves: DealMove[] } }
 export type FindOffers = {
   possible: boolean; reason: string; want: string; wants: { key: string; label: string }[]
@@ -376,6 +378,7 @@ export const api = {
   tradeBlock: (id: number) => get<TradeBlockData>(`/api/trade/block/${id}`),
   tradeNeeds: (id: number) => get<TeamNeeds>(`/api/trade/needs/${id}`),
   whatWouldItTake: (id: number) => get<WhatWouldItTake>(`/api/trade/whatwouldittake/${id}`),
+  findUpgrades: (id: number) => get<Upgrades>(`/api/trade/upgrade/${id}`),
   tradeFind: (b: FindBody) => post<FindOffers>('/api/trade/find', b),
   tradeAdvisor: () => get<Advisor>('/api/trade/advisor'),
   tradeEvaluate: (o: TradeOfferIn) => post<TradeVerdict>('/api/trade/evaluate', o),

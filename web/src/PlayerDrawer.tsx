@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
-import { Search, Sparkles, X } from 'lucide-react'
+import { Search, Sparkles, TrendingUp, X } from 'lucide-react'
 import { api, type ExtensionAsk, type PlayerPage, type ReleasePreview, type Training, type StatLine, type Badge } from './api'
 import { useFlow } from './flow'
 import { AdviceChip, BadgeChip, Chip, groupLabel, groupOrder, tierLabel, tierOrder, Avatar, Delta, ErrorBox, InjuryTag, Q, RangeBar, Ring, MoraleChip, moraleColor, StanceChip, TeamBadge, injuryText, levelClass, motivationRows, ovrColor, f1, money, rangeText } from './ui'
@@ -452,6 +452,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
           {!p.prospect && p.team && p.team.id === state?.user.team.id && ts.data?.open && (
             <div className="mt-3 flex flex-wrap gap-2">
               <button className="btn" onClick={() => { close(); nav(`/trade?find=${p.id}`) }}><Search size={14} className="text-accent" />See offers for him</button>
+              <button className="btn" onClick={() => { close(); nav(`/trade?upgrade=${p.id}`) }}><TrendingUp size={14} className="text-accent" />Find an upgrade</button>
             </div>
           )}
           {!p.prospect && p.team && p.team.id === state?.user.team.id && <AdviceBlock id={p.id} />}

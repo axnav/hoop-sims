@@ -340,15 +340,25 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 		res.Reason = target.Name + " has an expiring contract and cannot be traded during the draft."
 		return res, nil
 	}
-	cf := lg.contendFactors()
+	return lg.takeSearch(res, target, nil, lg.contendFactors(), false), nil
+}
+
+// takeSearch is the package search behind WhatWouldItTake. With must set
+// (used by FindUpgrades) every package has to include that player of the
+// user's, even a core one; with cheapestOnly only the cheapest package is
+// searched for. res already holds Player and Team of the target.
+func (lg *League) takeSearch(res TakeResult, target, must *Player, cf []float64, cheapestOnly bool) TakeResult {
+	tid := target.TeamID
+	user := lg.UserTeamID
 	un := lg.untouchables(tid, cf)
-	needs := lg.NeedsOf(tid)
-	wantYoung := needs.Status.Key == "rebuilding" || needs.Status.Key == "seller"
+	status := statusFor(cf[tid])
+	wantYoung := status.Key == "rebuilding" || status.Key == "seller"
 	wantPicks := wantYoung
-	wantVets := needs.Status.Key == "contender" || needs.Status.Key == "buyer"
+	wantVets := status.Key == "contender" || status.Key == "buyer"
 
 	ownUn := lg.untouchables(user, cf)
 	var cands []*takeCand
+	var mustCand *takeCand
 	for _, p := range lg.Teams[user].Roster {
 		if lg.Draft != nil && p.Contract.Years < 1 {
 			continue
@@ -361,6 +371,13 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 			c.cost *= 1 - AssistTuning.LikeDiscount
 		}
 		cands = append(cands, c)
+		if must != nil && p == must {
+			mustCand = c
+		}
+	}
+	if must != nil && mustCand == nil {
+		res.Reason = must.Name + " cannot be traded right now."
+		return res
 	}
 	for _, k := range lg.PicksOwnedBy(user) {
 		a := PickOf(k.Year, k.Round, k.Original)
@@ -379,11 +396,11 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 	build := func(allowCore bool) []TakePackage {
 		var pool []*takeCand
 		for _, c := range cands {
-			if allowCore || !c.core {
+			if allowCore || !c.core || c == mustCand {
 				pool = append(pool, c)
 			}
 		}
-		combos := lg.takeCombos(pool, threshold)
+		combos := lg.takeCombos(pool, threshold, mustCand)
 		type strat struct {
 			label string
 			ok    func(c *takeCombo) bool
@@ -419,6 +436,9 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 		}
 		var out []TakePackage
 		seen := map[string]bool{}
+		if cheapestOnly {
+			strats = strats[:1]
+		}
 		for si, s := range strats {
 			var list []*takeCombo
 			for _, c := range combos {
@@ -449,7 +469,7 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 			if si == 0 {
 				pk.Label = comboLabel(found)
 			}
-			pk.Note = lg.takeNote(found, needs.Status.Key, user, tid, target, allowCore)
+			pk.Note = lg.takeNote(found, status.Key, user, tid, target, allowCore)
 			out = append(out, pk)
 			if len(out) == AssistTuning.MaxPackages {
 				break
@@ -464,7 +484,11 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 	}
 	if len(res.Packages) > 0 {
 		res.Possible = true
-		return res, nil
+		return res
+	}
+	if must != nil {
+		res.Reason = lg.mustReason(must, target, un, &diag, cf)
+		return res
 	}
 	switch {
 	case un[target.ID] && (PlayerTier(target) == "Franchise" || lg.isTopValue(target, tid, cf)):
@@ -480,7 +504,7 @@ func (lg *League) WhatWouldItTake(playerID int) (TakeResult, error) {
 	default:
 		res.Reason = "Nothing in your roster and picks makes a deal that works."
 	}
-	return res, nil
+	return res
 }
 
 func (lg *League) isTopValue(p *Player, tid int, cf []float64) bool {
@@ -503,10 +527,14 @@ type takeDiag struct {
 
 // takeCombos lists every set of up to MaxTradePlayers players and MaxPicks
 // picks whose value to the other team reaches threshold (a necessary
-// condition: the position penalty and the roster only make it harder).
-func (lg *League) takeCombos(pool []*takeCand, threshold float64) []*takeCombo {
+// condition: the position penalty and the roster only make it harder). With
+// must set, only sets that include that player are listed.
+func (lg *League) takeCombos(pool []*takeCand, threshold float64, must *takeCand) []*takeCombo {
 	var ps, ks []*takeCand
 	for _, c := range pool {
+		if c == must {
+			continue
+		}
 		if c.p != nil {
 			ps = append(ps, c)
 		} else {
@@ -525,8 +553,20 @@ func (lg *League) takeCombos(pool []*takeCand, threshold float64) []*takeCombo {
 		}
 	}
 	var playerSets [][]*takeCand
-	playerSets = append(playerSets, nil)
 	n := len(ps)
+	if must != nil {
+		// every set holds the required player
+		playerSets = append(playerSets, []*takeCand{must})
+		for i := 0; i < n && MaxTradePlayers >= 2; i++ {
+			playerSets = append(playerSets, []*takeCand{must, ps[i]})
+			for j := i + 1; j < n && MaxTradePlayers >= 3; j++ {
+				playerSets = append(playerSets, []*takeCand{must, ps[i], ps[j]})
+			}
+		}
+		n = 0
+	} else {
+		playerSets = append(playerSets, nil)
+	}
 	for i := 0; i < n; i++ {
 		playerSets = append(playerSets, []*takeCand{ps[i]})
 		for j := i + 1; j < n; j++ {
@@ -776,13 +816,19 @@ type AdvisorRow struct {
 	Player  *Player
 	Advice  string
 	Reasons []string
+	Against []string // the pulls toward moving him, strongest first (used by FindUpgrades)
 	Score   float64
 }
 
 // AdvisorOf gives Keep / Shop / Sell for every player on the user's roster,
 // best player first, and a one-sentence summary. Advice only.
 func (lg *League) AdvisorOf() ([]AdvisorRow, string) {
-	user := lg.UserTeamID
+	return lg.advisorFor(lg.UserTeamID)
+}
+
+// advisorFor is AdvisorOf for any team (the Keep / Shop / Sell rule applied
+// to that team's roster).
+func (lg *League) advisorFor(user int) ([]AdvisorRow, string) {
 	tm := lg.Teams[user]
 	t := &AdvisorTuning
 	cf := lg.contendFactors()
@@ -911,6 +957,16 @@ func (lg *League) AdvisorOf() ([]AdvisorRow, string) {
 		if advice == AdviceShop && len(parts) == 0 {
 			parts = append(parts, part{0, "Nothing strong either way; fine to move for the right offer"})
 		}
+		var against []string
+		{
+			neg := append([]part(nil), parts...)
+			sort.SliceStable(neg, func(i, j int) bool { return neg[i].pts < neg[j].pts })
+			for _, x := range neg {
+				if x.pts < 0 {
+					against = append(against, x.reason)
+				}
+			}
+		}
 		// reasons: the pulls that agree with the advice first, biggest first
 		sort.SliceStable(parts, func(i, j int) bool {
 			a, b := parts[i].pts, parts[j].pts
@@ -937,7 +993,7 @@ func (lg *League) AdvisorOf() ([]AdvisorRow, string) {
 		if corner != "" && p.Contract.Years == 1 && st.Key == "test" && len(rs) < 3 {
 			rs = append(rs, "Extend him soon: he may test free agency")
 		}
-		rows = append(rows, AdvisorRow{Player: p, Advice: advice, Reasons: rs, Score: score})
+		rows = append(rows, AdvisorRow{Player: p, Advice: advice, Reasons: rs, Against: against, Score: score})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i].Player, rows[j].Player
@@ -967,4 +1023,22 @@ func (lg *League) AdvisorOf() ([]AdvisorRow, string) {
 		s += " Build around: " + joinList(first(keep, 2)) + "."
 	}
 	return rows, s
+}
+
+// mustReason is the sentence for "no package with must in it works".
+func (lg *League) mustReason(must, target *Player, un map[int]bool, diag *takeDiag, cf []float64) string {
+	tid := target.TeamID
+	switch {
+	case un[target.ID] && (PlayerTier(target) == "Franchise" || lg.isTopValue(target, tid, cf)):
+		return "They will not move him: he is their franchise player."
+	case un[target.ID] && diag.valueOK == 0:
+		return "They will not move him for what you have."
+	case diag.valueOK == 0:
+		return "Nothing you can add to " + must.Name + " is worth enough to them."
+	case diag.salaryFail > 0 && diag.otherFail == "":
+		return "Salary can't be matched under the cap rules. " + diag.salaryMsg
+	case diag.otherFail != "":
+		return diag.otherFail
+	}
+	return "No deal with " + must.Name + " in it works for both teams."
 }

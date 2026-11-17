@@ -314,6 +314,7 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/trade/needs/{id}", true, s.tradeNeeds)
 	g("/api/trade/whatwouldittake/{id}", true, s.whatWouldItTake)
 	g("/api/trade/advisor", true, s.tradeAdvisor)
+	g("/api/trade/upgrade/{id}", true, s.tradeUpgrade)
 	p("/api/trade/find", true, s.tradeFind)
 	p("/api/trade/evaluate", true, s.tradeEvaluate)
 	p("/api/trade/counter", true, s.tradeCounter)

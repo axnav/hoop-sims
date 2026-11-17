@@ -7,6 +7,7 @@ import { api, type AssetRow, type DealMove, type TakePackage, type Team, type Tr
 import { useFlow } from '../flow'
 import { TxItem, NewsItem } from '../TxItem'
 import { OffersCard } from '../OffersCard'
+import { UpgradeFinder } from '../UpgradeFinder'
 import { AdvisorList, FinderPanel, NeedsPanel, TakePanel } from '../TradeAssistant'
 import { Card, Delta, ErrorBox, Page, InjuryTag, PayrollBar, PlayerLink, Q, Spinner, StatusChip, TeamBadge, TradeRequestTag, TierChip, money, ovrColor } from '../ui'
 
@@ -145,6 +146,9 @@ function TradeScreen() {
     const f = Number(sp.get('find'))
     return sp.get('find') && Number.isInteger(f) ? f : null
   })
+  // ?upgrade=<playerId> shows the upgrade finder; it wins over ?find= and ?want=
+  const upgradeRaw = Number(sp.get('upgrade'))
+  const upgradeId = sp.get('upgrade') && Number.isInteger(upgradeRaw) ? upgradeRaw : null
   const [tab, setTab] = useState<'players' | 'advisor'>('players')
   const [pending, setPending] = useState<number | null>(() => {
     const g = Number(sp.get('get'))
@@ -254,6 +258,7 @@ function TradeScreen() {
       qc.setQueryData(['state'], r.state)
       qc.removeQueries({ queryKey: ['what-would-it-take'] })
       qc.removeQueries({ queryKey: ['trade-find'] })
+      qc.removeQueries({ queryKey: ['upgrades'] })
       qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'state' })
     },
   })
@@ -413,8 +418,12 @@ function TradeScreen() {
         <button className="btn mb-3" onClick={addThird}><Plus size={14} />Add a third team</button>
       )}
       {partners.map((pid) => <NeedsPanel key={`needs-${pid}`} teamId={pid} />)}
-      {take !== null && open && <TakePanel key={take} playerId={take} disabled={exec.isPending} onClose={() => setTake(null)} onLoad={loadPackage} />}
-      {finder && open && (
+      {take !== null && open && upgradeId === null && <TakePanel key={take} playerId={take} disabled={exec.isPending} onClose={() => setTake(null)} onLoad={loadPackage} />}
+      {upgradeId !== null && open && (
+        <UpgradeFinder key={upgradeId} playerId={upgradeId} disabled={exec.isPending} onLoad={loadPackage}
+          onClose={() => setSp((p) => { const n = new URLSearchParams(p); n.delete('upgrade'); return n }, { replace: true })} />
+      )}
+      {finder && open && upgradeId === null && (
         <FinderPanel
           give={{
             players: rawMoves.filter((m) => m.from === me && m.playerId !== undefined).map((m) => m.playerId!),
