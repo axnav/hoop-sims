@@ -14,7 +14,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 - Test changes the owner approved: `TestLongStability` drift 2.5, 90+ limit 20, FT% ceiling 81; `TestTeamBalance` allows one team-season outside 12-70 wins (hard limits 9-73).
 - Effects kept small for now (owner's choice): coach and fit, morale. Raise later in `CoachTuning`/`SystemTuning`/`MoraleTuning`.
 
-**Pushed:** everything, including the news feed and awards (`17b5a34`) and the handoff commit made right after it; pushed by the main session on the owner's word on 2026-11-17. Confirm with `git status -sb` (it should show `main` level with `origin/main`).
+**Pushed:** everything, including the news feed and awards (`17b5a34`) and the small fixes batch (`50c4f6c`); pushed by the main session on the owner's word on 2026-11-17. Confirm with `git status -sb` (it should show `main` level with `origin/main`).
 
 **Documents (2026-11-16):** `ARCHITECTURE.md` was checked against the code and brought up to date, and keeping it current is now `RULES.md` hard limit 7 (owner's request). Folder structure reviewed: Go tests stay beside the code; no restructuring. Merged locally, not pushed.
 
@@ -32,7 +32,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **Not pushed:** nothing. (Lines above that say "not pushed" for the assistant tuning and owner goals are older: those are pushed now.)
 
-**Small fixes batch, 2026-11-17 (new session), merged locally, NOT pushed:** the Dashboard "League news" card moved to the bottom of the page (below the Next game grid); `cmd/web/web` untracked and ignored (owner said yes; the file stays on disk); the last status uses of orange are now blue (Lineup "Custom" chip and "Starter" label, Draft scouting dots and POT bar); duplicated paragraphs removed from this section; on the Lineup court the out-of-position message is now inside the circle (amber "PG, not SG" in place of the position line, also in the spot's aria-label) so a neighbouring spot cannot cover it; the blue in-the-five label in the Rotation table reads "Starting 5" so it no longer repeats the grey tier chip "Starter". **Work in progress: none.**
+**Small fixes batch, 2026-11-17 (new session), merged and pushed on the owner's word:** the Dashboard "League news" card moved to the bottom of the page (below the Next game grid); `cmd/web/web` untracked and ignored (owner said yes; the file stays on disk); the last status uses of orange are now blue (Lineup "Custom" chip and "Starter" label, Draft scouting dots and POT bar); duplicated paragraphs removed from this section; on the Lineup court the out-of-position message is now inside the circle (amber "PG, not SG" in place of the position line, also in the spot's aria-label) so a neighbouring spot cannot cover it; the blue in-the-five label in the Rotation table reads "Starting 5" so it no longer repeats the grey tier chip "Starter". **Work in progress: none.**
 
 **Next:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
@@ -432,7 +432,7 @@ Owner's choices: the full award set; news about the whole league with the user's
 - Who did what: a Sonnet helper made the Dashboard, Draft and first Lineup edits (three files); the main session read its diff, made the two later Lineup edits (`CourtLineup.tsx`, `pages/Lineup.tsx`), the git change and the documents.
 - Verified by the main session: `go vet ./...` clean and `go test ./... -count=1` pass (engine 355 s, `cmd/web` 29 s; started before the last two Lineup edits, which touch no Go code); `npx tsc --noEmit` and `npm run build` pass after the last edit. Browser pass on port 8097 (scratch save, seed 2, team 3, 1400 and 390 px): Dashboard card order, Lineup custom chip and label colours, Draft page with the blue POT bar, court with four starters deliberately out of position (message inside the circle and not covered), no console errors, no page-level sideways scroll. Server stopped afterwards; port 8080 and `saves/league.json` untouched.
 - Not seen: a filled scouting dot (nothing was scouted in the run; it is a one-class change). Not fixed: at 390 px the avatar on a court spot covers part of the last name.
-- Merged to `main` locally, not pushed.
+- Merged to `main` locally, then pushed the same day when the owner said "push it".
 
 ### 2026-11-17, news feed and awards pushed; owner moving to a new session
 - Owner said "push this and we will move on to a new session". `main` pushed to origin with the news feed and awards and this handoff update. No work in progress, no server running on 8097, port 8080 and `saves/league.json` untouched. To play the new screens the owner runs `cd web && npm run build` and restarts their own server.
