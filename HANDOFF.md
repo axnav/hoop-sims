@@ -40,7 +40,9 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **"Find an upgrade" (section 22), built 2026-11-17, merged locally, NOT pushed (real coaches, also merged locally, are not pushed either):** a "Find an upgrade" button in the drawer of one of your players opens an "Upgrades for <name>" panel on the Trade page: better players at his position on computer teams, a "Shopped" chip when their team would move him (the advisor's Keep/Shop/Sell rule applied to that team), a package that includes your player and that the team accepts, "Load this offer"; the rest listed as out of reach with the reason. `engine/upgrade.go`, `GET /api/trade/upgrade/{id}`, `web/src/UpgradeFinder.tsx`. Read-only, no saved field, no stream. **Work in progress: none.**
 
-**Next:** ask the owner. Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Possible follow-ups: real out-of-work coaches in the hiring pool; generous ratings for low-minute big men in recent seasons; 2011 `realcheck` error 6.9 vs 5.1 earlier; several seasons from a late start, photo coverage for recent players and an old real save not tried; `cmd/web/upgrade.go` repeats about ten lines of the what-would-it-take handler (could share one function). The owner prefers the main session to write code rather than fill in "Learn by Doing" blanks (said so once, 2026-11-17, about `SeasonLabel`).
+**Work in progress (2026-11-20): real-life ratings at the start year, section 23.** Plan approved with both options; building on branch `feat/real-standing`.
+
+**Next (before 2026-11-20):** ask the owner. Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Possible follow-ups: real out-of-work coaches in the hiring pool; generous ratings for low-minute big men in recent seasons; 2011 `realcheck` error 6.9 vs 5.1 earlier; several seasons from a late start, photo coverage for recent players and an old real save not tried; `cmd/web/upgrade.go` repeats about ten lines of the what-would-it-take handler (could share one function). The owner prefers the main session to write code rather than fill in "Learn by Doing" blanks (said so once, 2026-11-17, about `SeasonLabel`).
 
 **Older next list:** ask the owner what to build. Choices left from the owner's list: several save slots; a tuning batch; the code walk-through (only when asked). Small open item seen in the 2026-11-17 browser pass: on a phone (390 px) the avatar on a Lineup court spot covers part of the player's last name. Owner feature follow-ups: building goals are met about 70% of the time (a bit easy); the assistant-run team is let go in about 2 of 5 leagues within eight seasons, in the leagues where it sinks late; real-data mode not tried. The code walk-through still waits until the owner asks.
 
@@ -487,7 +489,40 @@ API contract (exact): `GET /api/trade/upgrade/{playerId}` returns
 
 Screens (`web/src/api.ts`, `web/src/PlayerDrawer.tsx`, `web/src/pages/Trade.tsx`, new `web/src/UpgradeFinder.tsx`): a "Find an upgrade" button in the drawer of one of your players, beside "See offers for him" (`/trade?upgrade=<playerId>`); the Trade page then shows an "Upgrades for <name>" panel: one row per candidate (name link, team, position, age, OVR with the gain, a "Shopped" chip with the reason as its title, what you give and get, the note) and "Load this offer", which fills the trade builder the way the finder's button does. Not-possible candidates are listed below, greyed, with the reason. Colour rule: orange for the action button only; chips through `Chip`.
 
+## 23. Build plan for real-life ratings at the start year (owner asked and approved 2026-11-20)
+
+Owner's answers (2026-11-20): reference list from memory, yes; small correction file, yes (built now, filled only where the formula misses).
+
+Owner's words: "it might be accurate to the database, but it is not accurate to the real thing ... it should have some sort of resemblance when we are starting from that particular year ... we need to fix the data entirely." Goal: a real league started in any season 2011 to 2026 shows players roughly where they really stood that season (stars at the top, starters in the middle, bench players low).
+
+What was seen (main session, 2026-11-20, seed 1, `NewRealLeagueSeason(2018)`): Warriors Curry 93, Durant 87, David West (37, 14 minutes a game) 81, Jordan Bell (rookie, 14 min) 77, Pachulia 75, Draymond Green 74, Klay Thompson 66, Iguodala 57. League: Harden 97, Davis 94, LeBron 89, Westbrook 82; Montrezl Harrell 82 and Greg Monroe 80 in the top 30.
+
+Causes in `engine/realdata.go` (`rate`, `valueZ`, `baseRatings`):
+1. Per-minute numbers only: the value score is BPM, WS/48 and PER, so 14 efficient minutes beat 35 minutes as a starter (West BPM 3.1 vs Klay -0.4). Volume columns already loaded (`vorp`, `ws`, `g`, `gs`) are unused.
+2. The low-minute discount (`ShrinkPower`) uses season minutes against `MinQual` 500, so 800 to 1,000-minute bench players count in full.
+3. Box-score defence (DBPM, steals, blocks, DWS) misses perimeter defenders (Klay defence 40).
+4. Rebounds and blocks lift big men (open problem "generous ratings for low-minute big men").
+5. The top is compressed (`CompressZ` 1.8): LeBron (BPM 8.7, VORP 8.2) ends 89.
+
+Steps:
+1. **Measuring tool (permanent).** `go run ./cmd/sim -mode realratings -season Y [-team NAME]` prints a team's roster and the league top 40 with minutes a game and VORP, and a summary line per season for `-season all`: (a) how many of the reference top 15 are in the game's top 15 and top 30; (b) players under 20 minutes a game inside the top 40; (c) correlation of overall with VORP. Replaces throwaway programs; every later step is measured with it.
+2. **Reference list (private, from memory, no download).** `data/real/standing.csv`: season, player_id, band (`top` = All-NBA that season, 15 a season; optionally `starter`). Written by the main session from memory like `coaches.csv`; may hold a few mistakes, the owner can edit it. Used only by the measuring tool and a test that skips without it; never by the game.
+3. **Formula change.** Value score gets a volume part (VORP and total win shares percentiles, minutes a game) beside the per-minute part; the low-minute discount uses minutes a game (full weight from about 28) as well as season minutes; positions compared within guards / wings / bigs for the box part; top compression rechecked. All numbers in `RealTuning`. Tuned by running 2 to 3 candidate settings in one script run, not by an agent watching.
+4. **Small correction file (owner's choice, optional).** `data/real/standing.csv` may also give a target overall for a few players the stats cannot see (perimeter defenders like Klay); applied after the formula, ratings keep their shape. Only where the formula misses the reference band.
+5. **Checks.** Targets: Warriors 2018 Curry and Durant 92+, Klay and Draymond 80 to 87, West and Bell 70 or less; across 2011 to 2026 at least 11 of the reference 15 in the game's top 30 every season; no player under 20 minutes a game in the top 40; `realcheck -runs 10` win error for 2011 and 2018 no worse than before (measure "before" first); `go vet`, `go test` once at the end; one browser pass (start a 2018 real league on port 8097, open the Warriors roster).
+
+No saved field, no save version change, no new random stream: ratings are made when a real league is created, so existing saves keep their ratings; only new real leagues change. Files: `engine/realdata.go` (+ test), `cmd/sim` (new mode), `ARCHITECTURE.md`, this file. Not in this piece: how ratings move in later simulated seasons (check once after, with one 2018 league simmed a season).
+
+Agents and token plan (one layer, named models, at most two at a time):
+- Main session (Opus): writes `standing.csv` from memory, writes the two briefs with exact formula targets, reviews the diff and the tables only (no full-file reads), updates this file and commits.
+- Writer helper (Sonnet): steps 1, 3 and 4 code, the test and `ARCHITECTURE.md`; may edit only `engine/realdata.go`, `engine/realdata_test.go`, `cmd/sim/*.go`, `ARCHITECTURE.md`. Returns a short report: what changed, the summary table, test result.
+- Measurer helper (Haiku): runs the "before" numbers (tool, `realcheck` 2011 and 2018) and the final full check, one foreground job, returns tables only; no code edits.
+- Saving tokens: the measuring tool prints compact tables; the writer runs the full test suite once at the end, in the background, and reports pass/fail lines only; the browser pass is one scripted run.
+
 ## Update log (newest first)
+
+### 2026-11-20, plan for real-life ratings (section 23), approved
+- Owner said real-data ratings at a start year do not match real life (Golden State 2017-18). Main session measured with a throwaway program (deleted) and wrote section 23; owner approved it with both options. Owner also changed the commit rule: nothing is committed before the owner reviews it (CLAUDE.md). Separately, the owner asked to stop the Docker container `agentiq-keycloak` holding port 8080 (another project's Keycloak); stopped with `docker stop`, not removed.
 
 ### 2026-11-17, "Find an upgrade" built and merged locally
 - Two Sonnet helpers against section 22 (engine + API; screens). Engine: `WhatWouldItTake`'s search moved into `takeSearch` with a "must include this player" option; `AdvisorOf` now calls `advisorFor(team)`, and `AdvisorRow.Against` holds the reasons to move a player (used for "Shopped"). The existing assistant and finder tests pass unedited.

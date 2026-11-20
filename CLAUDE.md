@@ -10,7 +10,7 @@ Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RU
 - Run the checks once per finished piece of work, not after every small step.
 - Every feature gets one end-to-end pass on a throwaway server (port 8097, scratch save, headless Chromium) before merging.
 - Do not weaken a test to make it pass.
-- Commit and merge to `main` locally when the code is correct (standing permission). Push only with the owner's go-ahead. Never commit `data/real/`, `saves/`, `web/dist`, `node_modules`.
+- Do not commit until the owner has reviewed the changes and given the go-ahead (owner, 2026-11-20; replaces the old standing permission to commit). Leave work uncommitted for review, then commit and merge to `main` locally on the owner's word. Push only with the owner's go-ahead. Never commit `data/real/`, `saves/`, `web/dist`, `node_modules`.
 - Report honestly: what you ran and saw versus what a helper reported versus what was not tried.
 - **Core rule: `HANDOFF.md` is always current** (RULES.md hard limit 6). After every finished piece, owner decision or push, and before a session ends or moves: update the log AND sections 0, 3, 4, 7, 10 where they changed; note work in progress (branch, done, left) in section 0. Write it yourself and commit it with the piece. A piece is not finished while the handoff is stale.
 - **`ARCHITECTURE.md` matches the code** (RULES.md hard limit 7): a piece that adds or changes a file, route, page, saved field, stream, stage, test file or game rule updates it in the same commit; fix stale parts when you find them.
