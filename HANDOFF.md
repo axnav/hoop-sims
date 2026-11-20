@@ -40,7 +40,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **"Find an upgrade" (section 22), built 2026-11-17, merged locally, NOT pushed (real coaches, also merged locally, are not pushed either):** a "Find an upgrade" button in the drawer of one of your players opens an "Upgrades for <name>" panel on the Trade page: better players at his position on computer teams, a "Shopped" chip when their team would move him (the advisor's Keep/Shop/Sell rule applied to that team), a package that includes your player and that the team accepts, "Load this offer"; the rest listed as out of reach with the reason. `engine/upgrade.go`, `GET /api/trade/upgrade/{id}`, `web/src/UpgradeFinder.tsx`. Read-only, no saved field, no stream. **Work in progress: none.**
 
-**Work in progress (2026-11-20): real-life ratings at the start year, section 23.** Plan approved with both options; building on branch `feat/real-standing`.
+**Work in progress (2026-11-21), branch `feat/real-standing`, ALL UNCOMMITTED, waiting for the owner's review:** section 23 parts A, B, C built and checked; section 24 phase 1 (set overall directly) built. Left: owner review, then commit + merge; open item found in the browser pass: injured stars are rated low at the start year (Anthony Davis 2026: 20 games, 626 minutes, overall 65) because part A's games/minutes shrink treats them like bench players; proposed fix: blend a low-games season with the player's previous season. Then section 24 phases 2 to 5.
 
 **Next (before 2026-11-20):** ask the owner. Open question to the owner, not answered: should free agency be explained on its page, give rejection hints, or get a difficulty switch. Possible follow-ups: real out-of-work coaches in the hiring pool; generous ratings for low-minute big men in recent seasons; 2011 `realcheck` error 6.9 vs 5.1 earlier; several seasons from a late start, photo coverage for recent players and an old real save not tried; `cmd/web/upgrade.go` repeats about ten lines of the what-would-it-take handler (could share one function). The owner prefers the main session to write code rather than fill in "Learn by Doing" blanks (said so once, 2026-11-17, about `SeasonLabel`).
 
@@ -513,13 +513,83 @@ Steps:
 
 No saved field, no save version change, no new random stream: ratings are made when a real league is created, so existing saves keep their ratings; only new real leagues change. Files: `engine/realdata.go` (+ test), `cmd/sim` (new mode), `ARCHITECTURE.md`, this file. Not in this piece: how ratings move in later simulated seasons (check once after, with one 2018 league simmed a season).
 
+Owner, 2026-11-21: "do not make it specific for the 2018 season, make it for all seasons." Settings are chosen by the all-seasons numbers only; the Warriors 2018 stay a printed example, not a target or a test.
+
+**Part B, later rookie classes (owner, 2026-11-21):** "rookies like Anthony Edwards do not develop into the players they became ... one of the main issues, the later rookie classes." How a real prospect gets his ceiling (`prospect`, `ceilingFor`, `ceilingWeight`, `projectedPotential` in `engine/realdata.go`): rookie ratings from his first real season minus `RookieDrop` 4; ceiling = his best later rated season (hindsight peak), blurred by `PotentialBlurSD` 4, then blended with a plain projection (overall + 1.5 a year to 28) by weight = seasons of data after his first / years until 27. Edwards (first season 2021, age 19): weight 5/8, so 3/8 of his ceiling is the plain projection even though his real peak is already in the data; the hindsight peak itself comes from the per-minute formula that underrates high-volume young scorers (part A); the blur can lower it by 4 or more; then the sim's growth must still reach it. Steps:
+1. Measure first (after part A): for draft classes 2015 to 2023, each top-14 pick's rookie overall, hindsight peak, stored ceiling, and the overall he reaches after 3 to 5 simulated seasons in a 2011 and a 2016 league (3 seeds), against his real peak; list the biggest shortfalls.
+2. Likely fixes, in order: (a) part A's volume term raises the peaks of high-volume young stars; (b) the projection may only add room, never pull a ceiling below a peak the data already shows (ceiling = at least the blurred hindsight peak); (c) check the sim's growth reaches ceilings for real prospects (development target 55 to 65% within 4 points); (d) owner choice if still short: blur only upward for players whose real peak is top-15 standing.
+3. Check: real top-15 players from the 2015-2023 classes reach within about 5 of their real peak in most seeds; problem 1 (same stars every seed) not made worse (top-ten overlap measured as before).
+
+**Part C, scouting-style ceilings for new classes (owner, 2026-11-21):** "how do they [NBA 2K] evaluate Cooper Flagg's potential ... we should do something like that for the rookie classes ... the database has potential max at 81 or 83 ... not ideal for a game that goes 10 to 20 seasons from the current season." Owner: plan it and proceed at once; more tokens allowed for this. Seen (seed 1, 2026 start, after part A): the 2026 class has no real season, so `prospect` makes placeholder players (Dybantsa #1 overall 47, ceiling 61); the 2025 class gets the plain projection (Flagg 74/88, Harper 67/81, Bailey 50/64, Johnson 48/62); low rookie minutes shrink their first-season rating.
+How the console game does it, in short: a rookie's potential comes from his draft pedigree and scouting (where he was picked, his age, his tools), not only from his rookie numbers. Our version uses our own data as the scout:
+1. **Pedigree table from the data.** For draft classes with at least six real seasons after (2011 to 2019), the distribution of each pick's real peak overall (part A formula) and of his rookie-season overall, by pick band (1, 2-3, 4-5, 6-10, 11-14, 15-30, 31-60), adjusted for age at the draft (younger = more room). Computed when a real league is built; numbers in `RealTuning`.
+2. **Ceiling for young real players and prospects** = the trusted part of the hindsight peak (as now, weight = seasons seen / seasons needed) blended with a pedigree draw from his band (own seed per league and player, so stars differ between leagues), replacing the flat 1.5-a-year projection; never below a peak the data already shows, never below his overall.
+3. **Rookie rating** for a prospect with no real season (2026 class and any later stored class): drawn from his band's rookie-overall distribution (position and shape from the generator), instead of the 36-overall placeholder; for a first season with few minutes, his rating is blended toward his band's rookie median by minutes played.
+4. **After the data ends**, classes are generated as in the fictional game (two star prospects a class); check the star count holds.
+Checks: in a 2026 league (3 seeds) the 2025 and 2026 top-3 picks get ceilings mostly 85 to 97 and differ between seeds; over 15 simulated seasons from 2026 the league keeps at least as many 90+ players as the fictional game does; in a 2016 league (3 seeds, 9 seasons) real 85+ players from the 2015-2023 classes reach within 5 of their real peak in most seeds (part B measure); top-ten overlap between seeds not worse.
+
 Agents and token plan (one layer, named models, at most two at a time):
 - Main session (Opus): writes `standing.csv` from memory, writes the two briefs with exact formula targets, reviews the diff and the tables only (no full-file reads), updates this file and commits.
 - Writer helper (Sonnet): steps 1, 3 and 4 code, the test and `ARCHITECTURE.md`; may edit only `engine/realdata.go`, `engine/realdata_test.go`, `cmd/sim/*.go`, `ARCHITECTURE.md`. Returns a short report: what changed, the summary table, test result.
 - Measurer helper (Haiku): runs the "before" numbers (tool, `realcheck` 2011 and 2018) and the final full check, one foreground job, returns tables only; no code edits.
 - Saving tokens: the measuring tool prints compact tables; the writer runs the full test suite once at the end, in the background, and reports pass/fail lines only; the browser pass is one scripted run.
 
+## 24. Map: 2K-style detailed ratings and tendencies (owner asked 2026-11-21, NOT approved, nothing built)
+
+Owner's words: "we should be able to edit the player's overall directly, and the shooting tendencies and everything, all the metrics that are in 2K. Get it mapped once, and then we can do the rating rehaul."
+
+Today: seven ratings (`Ratings` in `engine/player.go`), one tendency (`UsageTendency`, how often he shoots), a position-weighted overall computed from the seven, hidden `Impact`. The game sim (`engine/game.go`) reads only these. Commissioner mode (`EditPlayer` in `engine/commissioner.go`) edits the seven ratings, age, potential and healing, not the overall.
+
+Proposed shape: about 35 detailed attributes in 2K's six groups, plus about 14 tendencies. Each of the seven current ratings becomes the weighted average of its group's attributes, so the sim behaves the same on day one; then the sim reads the detailed ones where a game event exists. The overall stays computed (position-weighted), and "set overall" moves every attribute by the same amount until the overall matches (the same loop the real-data formula uses).
+
+| 2K attribute | Our group today | Sim would use it for | Real-data source (`data/real/`) |
+|---|---|---|---|
+| Close Shot, Layup | Inside | shots at the rim | 2P%, 2PA per 36 |
+| Standing Dunk, Driving Dunk | Inside | rim finishing, and-ones | none (height/weight, ORB% as proxy) |
+| Post Hook, Post Fade, Post Control | Inside | post-up shots | none (height + 2P% proxy) |
+| Draw Foul | Inside | free-throw trips | FTA/FGA |
+| Hands | Playmaking | turnovers on catches | TOV% |
+| Mid-Range | Mid | mid shots | 2P% (non-rim not in data) |
+| Free Throw | Mid | free throws | FT% (exact) |
+| Three-Point | Three | threes | 3P%, 3PA rate |
+| Shot IQ | (none) | shot quality | TS% minus shot mix |
+| Offensive Consistency | (none) | game-to-game spread | none |
+| Pass Accuracy, Pass Vision, Pass IQ | Playmaking | assists, turnovers | AST%, TOV% |
+| Ball Handle, Speed with Ball | Playmaking | turnovers, drives | TOV%, AST% |
+| Interior Defense | Defense | defending the rim | DBPM, BLK%, height |
+| Perimeter Defense | Defense | defending shooters | DBPM, STL% (weak: stats miss it) |
+| Help Defense IQ, Pass Perception | Defense | team defence, deflections | DWS, STL% |
+| Steal | Defense | steals | STL% (exact) |
+| Block | Defense | blocks | BLK% (exact) |
+| Defensive Consistency | (none) | game-to-game spread | none |
+| Offensive Rebound | Rebounding | offensive boards | ORB% (exact) |
+| Defensive Rebound | Rebounding | defensive boards | DRB% (exact) |
+| Speed, Acceleration | Athleticism | pace, drives, transition | none (age, STL%, FTr proxy) |
+| Strength | Athleticism | post, rebounding fights | weight (career file) |
+| Vertical | Athleticism | dunks, blocks, boards | none (BLK%, ORB% proxy) |
+| Stamina | Athleticism | minutes before tiring | minutes a game |
+| Hustle | Athleticism | loose balls | ORB%, STL% |
+| Durability | Athleticism | injury chance | games played over seasons |
+| Potential, Intangibles | Potential exists | growth | hindsight/pedigree (section 23) |
+
+Tendencies (0 to 100): Shot (= today's `UsageTendency`), Three (3PA share, exact: `x3p_ar`), Mid-range, Drive / at the rim (2PA rate), Dunk (none), Post-up (none), Draw foul (FTr), Pass (AST%), Isolation (usage proxy), Steal (STL%), Block (BLK%), Foul (PF per 36, exact), Crash offensive glass (ORB%), Pull-up vs catch-and-shoot (none).
+
+Phases (each its own piece, owner approves each):
+1. **Set overall directly** (small, now possible): commissioner editor gets an "Overall" field; all seven ratings move by the same amount until the overall matches; potential kept at least the overall. No saved field change.
+2. **Detailed attributes and tendencies stored** (save version 5, upgrade old saves by spreading each of the seven ratings onto its attributes): generated for fictional players, from stats for real players; the seven become group averages; proof that games come out the same for the same seed.
+3. **Sim reads the details**: free throws, rim/post/mid/three shots, steals, blocks, offensive and defensive boards separately, shot choice from tendencies, stamina to minutes, durability to injuries. Retune with `cmd/sim -mode sanity` and `realcheck`.
+4. **Screens**: player page in 2K groups, commissioner editor for every attribute, tendency and the overall.
+5. **Rating overhaul** (section 23 formula) pointed at the detailed attributes.
+
+Owner's answers (2026-11-21): trimmed set (about 22 attributes + 8 tendencies, each changes something in the sim); phase 1 (set overall) now, first; section 23 parts B and C finish first, then the attribute work. Phase 1 started 2026-11-21 on `feat/real-standing` (same branch, separate files).
+
 ## Update log (newest first)
+
+### 2026-11-21, real-life ratings (section 23 A, B, C) and set overall (section 24 phase 1) built, uncommitted
+- Part A (Sonnet helper, checked by the main session): value score gets a volume part (VORP, total WS, minutes a game), shrink by minutes a game and games, box percentile within guards/wings/bigs, top stretched (`CompressZ` 1.5, slope 1.35). `cmd/sim -mode realratings`. All seasons 2011-2025: All-NBA players in game top 15 9.6 -> 10.8, in top 30 worst season 10 -> 12, under-20-mpg players in top 40 3.2 -> 0, corr(overall, VORP) 0.84 -> 0.93. `realcheck -runs 10`: 2011 MAE 6.79 -> 6.74, 2018 8.28 -> 6.51. Klay 70, Draymond 75 in 2018 (stats miss perimeter defence; target file can fix). `standing.csv` targets give Impact 0 (main session change).
+- Parts B and C (Sonnet helper; main session re-ran `realrookies` and got the same summary): real players' growth target uses `RealImpactMult` 0.25 instead of 2.0 x Impact, `RealCeilingOffset` 1, smaller minutes penalty; pedigree table by pick band from the 2011-2019 classes gives ceilings and rookie ratings for classes without data (`engine/realprospect.go`, stream salt 150000, next free 160000). 2016 start, 3 seeds: real 85+ draftees within 5 of real peak in most seeds 6 -> 13 of 14, mean shortfall 6.1 -> 2.8. 2026 start: Flagg ceiling 94/97/97 by seed, Dybantsa 92/97/82 (was 61); 90+ players per year 11.0 vs fictional 9.7, no collapse by 2040. Not met: Brunson (pick 33) 18 short in one seed; `TestRealCeilingBlend` kept, so a fully trusted ceiling can sit a few points under the real peak.
+- Set overall directly (Sonnet helper): `PlayerEdit.Overall`, editor field, tests; main session re-ran the engine tests and read the screenshot (71 -> 81).
+- Verified by the main session: `go vet ./...` clean; helper's full `go test ./... -count=1` pass (engine 374 s) reported, not re-run; targeted tests re-run pass; browser pass on 8097 (2026 real league, Dallas roster, Flagg 74/94, no console errors, no Impact in the API), server stopped. Not tried: a ratings-plus-overall edit in the browser.
 
 ### 2026-11-20, plan for real-life ratings (section 23), approved
 - Owner said real-data ratings at a start year do not match real life (Golden State 2017-18). Main session measured with a throwaway program (deleted) and wrote section 23; owner approved it with both options. Owner also changed the commit rule: nothing is committed before the owner reviews it (CLAUDE.md). Separately, the owner asked to stop the Docker container `agentiq-keycloak` holding port 8080 (another project's Keycloak); stopped with `docker stop`, not removed.

@@ -113,6 +113,7 @@ function EditForm({ p, onDone }: { p: PlayerPage; onDone: () => void }) {
   const [ratings, setRatings] = useState<Record<string, string>>(() => Object.fromEntries(p.ratings.map((r) => [r.key, String(r.value)])))
   const [age, setAge] = useState(String(p.age))
   const [pot, setPot] = useState(String(p.pot))
+  const [ovr, setOvr] = useState(String(p.ovr))
   const [heal, setHeal] = useState(false)
   const save = useMutation({
     mutationFn: (b: Parameters<typeof api.adminEditPlayer>[1]) => api.adminEditPlayer(p.id, b),
@@ -132,6 +133,7 @@ function EditForm({ p, onDone }: { p: PlayerPage; onDone: () => void }) {
     if (Object.keys(changed).length) body.ratings = changed
     if (age !== '' && Number(age) !== p.age) body.age = Number(age)
     if (pot !== '' && Number(pot) !== p.pot) body.potential = Number(pot)
+    if (ovr !== '' && Number(ovr) !== p.ovr) body.overall = Number(ovr)
     if (heal) body.heal = true
     save.mutate(body)
   }
@@ -143,6 +145,7 @@ function EditForm({ p, onDone }: { p: PlayerPage; onDone: () => void }) {
     <div className="mt-4 rounded-lg border border-accent/50 bg-panel2/50 p-3">
       <div className="h2 mb-2">Edit player</div>
       <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        <label className="flex items-center justify-between gap-2 sm:col-span-2"><span className="font-semibold">Overall</span>{num(ovr, setOvr, L.minRating, L.maxRating, 'Overall')}</label>
         {p.ratings.map((r) => (
           <label key={r.key} className="flex items-center justify-between gap-2">
             <span className="text-muted">{r.label}</span>

@@ -87,6 +87,7 @@ func (s *server) adminPlayer(r *http.Request) (any, error) {
 		Potential *int           `json:"potential"`
 		Ratings   map[string]int `json:"ratings"`
 		Heal      *bool          `json:"heal"`
+		Overall   *int           `json:"overall"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -101,7 +102,7 @@ func (s *server) adminPlayer(r *http.Request) (any, error) {
 	if s.inPool(id) {
 		return nil, conflict("prospects cannot be edited before the draft")
 	}
-	e := engine.PlayerEdit{Age: in.Age, Potential: in.Potential, Ratings: in.Ratings, Heal: in.Heal}
+	e := engine.PlayerEdit{Age: in.Age, Potential: in.Potential, Ratings: in.Ratings, Heal: in.Heal, Overall: in.Overall}
 	if err := s.lg.EditPlayer(id, e); err != nil {
 		return nil, bad("%v", err)
 	}

@@ -201,7 +201,17 @@ var Progression = ProgressionConfigT{
 }
 
 // TrueCeiling is the hidden ceiling: Potential shifted by Impact.
+//
+// Real-data players (RealID set, only ever in leagues built from data/real)
+// use RealTuning.RealImpactMult instead of CeilingImpactMult and add
+// RealCeilingOffset: their stored Potential already comes from what the player
+// really became, so the hidden Impact of one early season must not move it by
+// up to 10 points, and growth that closes only part of the gap each year
+// would otherwise leave real stars short of their real peak.
 func (p *Player) TrueCeiling() float64 {
+	if p.RealID != "" {
+		return float64(p.Potential) + float64(p.Impact)*RealTuning.RealImpactMult + RealTuning.RealCeilingOffset
+	}
 	return float64(p.Potential) + float64(p.Impact)*Progression.CeilingImpactMult + Progression.CeilingOffset
 }
 
@@ -277,7 +287,13 @@ func (p *Player) ProgressMentored(r *RNG, mpg float64, w *[NumRatings]float64, g
 			delta -= c.StallMin + r.Float64()*(c.StallMax-c.StallMin)
 		}
 	}
-	if adj := MinutesAdjust(p.Age, mpg); adj > 0 {
+	adj := MinutesAdjust(p.Age, mpg)
+	if adj < 0 && p.RealID != "" {
+		// Real young players on deep rosters are not held back by few minutes
+		// as much (their ratings already come from real play).
+		adj *= RealTuning.RealMinutesPenaltyShare
+	}
+	if adj > 0 {
 		// Minutes alone never push a player past his true ceiling.
 		adj = math.Min(adj, math.Max(0, p.TrueCeiling()-(ovr+delta)))
 		delta += adj

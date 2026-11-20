@@ -584,6 +584,13 @@ func TestInjuriesAndCommissioner(t *testing.T) {
 			t.Fatalf("edit not applied: %v", v)
 		}
 	}
+	// edit the overall directly
+	want := num(got["ovr"]) - 7
+	ov := c.call("POST", admin, M{"overall": want}, 200)
+	if num(ov["ovr"]) != want {
+		t.Fatalf("overall not applied: want %d got %v", want, ov["ovr"])
+	}
+	c.call("POST", admin, M{"overall": 5}, 400)
 	c.call("POST", "/api/options", M{"commissioner": false}, 200)
 	if c.call("GET", path, nil, 200)["editable"] != false {
 		t.Fatalf("editable should follow option")

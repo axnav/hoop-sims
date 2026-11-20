@@ -32,15 +32,35 @@ type RealTuningT struct {
 	// Composite value estimate weights (z-scores).
 	ValBPM, ValWS48, ValPER float64
 
+	// Volume part of the value score (realstanding.go work): VolWeight is its
+	// share of the blend with the per-minute part; inside it VORP, total win
+	// shares and minutes a game are z-scores weighted VolVORP, VolWS, VolMPG.
+	VolWeight, VolVORP, VolWS, VolMPG float64
+	// The low-minute shrink also uses minutes a game and games played: full
+	// weight from ShrinkMPG minutes a game and ShrinkGames games, below that
+	// (x/full)^power on top of the season-minutes shrink.
+	ShrinkMPG, ShrinkMPGPower, ShrinkGames, ShrinkGamesPower float64
+	// BoxGroups: the box-score percentile is taken within guards (PG, SG),
+	// wings (SF) and bigs (PF, C) instead of the whole league, so rebounds and
+	// blocks do not lift big men over guards.
+	BoxGroups bool
+
 	UsageInside, UsageMid, UsageThree, UsagePlay float64
 	RookieDrop                                   float64
 
-	// Ceiling projection for starts near the end of the data (see
-	// projectedPotential). The fictional generator gives a player of age a a
-	// ceiling room drawn uniformly from 0 to 3 x (28 - a), mean 1.5 x (28 - a);
-	// ProjectEndAge is that 28 and ProjectRoomPerYear that 1.5.
-	ProjectEndAge      int
-	ProjectRoomPerYear float64
+	// Pedigree (realprospect.go): draft classes PedigreeFirstDraft to
+	// PedigreeLastDraft (each has six or more real seasons after it) give, per
+	// pick band (upper pick of each band), the distribution of the peak and of
+	// the first-season overall. PedigreeSpread scales the band's spread of
+	// the peak draw; PedigreeBoost is the scouting optimism added to the
+	// draw, in standard deviations of the band (a ceiling is above the typical outcome). RookieBlendMP: a first
+	// real season with fewer minutes is blended toward the band's median
+	// first-season overall by minutes / RookieBlendMP.
+	PedigreeBands                         [7]int
+	PedigreeFirstDraft, PedigreeLastDraft int
+	PedigreeSpread, PedigreeBoost         float64
+	PedigreeMax                           float64 // a pedigree draw never exceeds this
+	RookieBlendMP                         float64
 
 	// PotentialBlurSD is the standard deviation (rating points) of a normal
 	// draw added to a young real player's or prospect's hindsight ceiling, so
@@ -55,6 +75,12 @@ type RealTuningT struct {
 	// n/(n+RealCoachShrink) (players explain most of a team's rating).
 	// RealCoachSpread scales the result onto CoachTuning.RatingSD.
 	RealCoachShrink, RealCoachSpread float64
+	// Growth of real players (progression.go, TrueCeiling and
+	// ProgressMentored; fictional players are untouched): the hidden Impact
+	// moves the growth target by RealImpactMult x Impact (fictional: 2.0),
+	// RealCeilingOffset is added to the target, and a young player's
+	// few-minutes penalty is multiplied by RealMinutesPenaltyShare.
+	RealImpactMult, RealCeilingOffset, RealMinutesPenaltyShare float64
 	// Favourite system rule (z values after the same shrink): defence ahead of
 	// offence by CoachDefLead and above CoachDefMin gives defense_first; three
 	// rate at or above CoachThreeHigh is pace_space, or run_gun when pace is
@@ -67,13 +93,19 @@ type RealTuningT struct {
 
 var RealTuning = RealTuningT{
 	MinQual: 500, ShrinkPower: 0.6, Replacement: 50,
-	Mean: 63.8, Sd: 12, CompressZ: 1.8, CompressSlop: 1.0,
-	BoxWeight: 0.4, ImpactK: 1.0, ImpactMax: 5,
+	Mean: 63.8, Sd: 12, CompressZ: 1.5, CompressSlop: 1.35,
+	BoxWeight: 0.3, ImpactK: 1.0, ImpactMax: 5,
 	ValBPM: 0.6, ValWS48: 0.3, ValPER: 0.1,
+	VolWeight: 0.4, VolVORP: 0.4, VolWS: 0.3, VolMPG: 0.3,
+	ShrinkMPG: 28, ShrinkMPGPower: 1.0, ShrinkGames: 50, ShrinkGamesPower: 0.5,
+	BoxGroups:   true,
 	UsageInside: 30, UsageMid: 22, UsageThree: 22, UsagePlay: 8,
 	RookieDrop: 4, PotentialBlurSD: 4.0,
-	ProjectEndAge: 28, ProjectRoomPerYear: 1.5,
+	PedigreeBands:      [7]int{1, 3, 5, 10, 14, 30, 60},
+	PedigreeFirstDraft: 2011, PedigreeLastDraft: 2019,
+	PedigreeSpread: 0.5, PedigreeBoost: 1.0, PedigreeMax: 97, RookieBlendMP: 1200,
 	RealCoachShrink: 3, RealCoachSpread: 1.0,
+	RealImpactMult: 0.25, RealCeilingOffset: 1, RealMinutesPenaltyShare: 0.25,
 	CoachDefLead: 0.2, CoachDefMin: 0, CoachThreeHigh: 0.2, CoachPaceHigh: 0.1,
 	CoachPaceLow: -0.1, CoachThreeLow: -0.1, CoachStarOff: 0.25,
 }
@@ -114,6 +146,8 @@ type realData struct {
 	pickBy map[string]draftPick
 	models map[int]*seasonModel
 	rated  map[int]map[string]*ratedPlayer
+	target map[int]map[string]float64 // standing.csv overall targets (optional)
+	ped    *pedigree                  // pick-band table, measured on first use (realprospect.go)
 }
 
 func readCSV(path string) ([]map[string]string, error) {
@@ -192,8 +226,8 @@ func loadRealDataFrom(dir string, start int) (*realData, error) {
 		advBy[key{int(num(m["season"])), m["player_id"], m["team"]}] = m
 	}
 	d := &realData{
-		start: start,
-		all:   map[int]map[string]*statRow{}, teams: map[int]map[string][]*statRow{},
+		start: start, target: loadStandingTargets(dir),
+		all: map[int]map[string]*statRow{}, teams: map[int]map[string][]*statRow{},
 		career: map[string]careerInfo{}, pickBy: map[string]draftPick{},
 		models: map[int]*seasonModel{}, rated: map[int]map[string]*ratedPlayer{},
 	}
@@ -305,6 +339,9 @@ type seasonModel struct {
 	reg3, ft, reg2, a3, a2, ftr, orb, ast, tov, trb dist
 	dbpm, stl, blk, dws48, usg                      dist
 	zBox, zVal                                      dist
+	zBoxG                                           [3]dist // by position group, see boxGroup
+	pmM, pmS, vlM, vlS                              float64 // per-minute and volume parts of the value score
+	vorpM, vorpS, wsTM, wsTS, mpgM, mpgS            float64
 	meanBox, sdBox                                  float64
 	bpmM, bpmS, wsM, wsS, perM, perS                float64
 }
@@ -424,6 +461,21 @@ func (d *realData) model(season int) *seasonModel {
 	}
 	m.meanBox, m.sdBox = meanSD(box)
 	m.zBox = newDist(append([]float64(nil), box...))
+	var grp [3][]float64
+	for i, r := range qual {
+		pos, _ := d.position(m, r)
+		g := boxGroup(pos)
+		grp[g] = append(grp[g], box[i])
+	}
+	for g := range grp {
+		m.zBoxG[g] = newDist(grp[g])
+	}
+	// Value score: moments of its two parts over the pool, then the blend.
+	m.vorpM, m.vorpS = getv(func(r *statRow) float64 { return r.vorp })
+	m.wsTM, m.wsTS = getv(func(r *statRow) float64 { return r.ws })
+	m.mpgM, m.mpgS = getv(mpgOf)
+	m.pmM, m.pmS = getv(m.perMinRaw)
+	m.vlM, m.vlS = getv(m.volumeRaw)
 	vals := make([]float64, len(qual))
 	for i, r := range qual {
 		vals[i] = m.valueZ(r)
@@ -432,9 +484,39 @@ func (d *realData) model(season int) *seasonModel {
 	return m
 }
 
-func (m *seasonModel) valueZ(r *statRow) float64 {
+func mpgOf(r *statRow) float64 {
+	if r.g <= 0 {
+		return 0
+	}
+	return r.mp / r.g
+}
+
+func (m *seasonModel) perMinRaw(r *statRow) float64 {
 	c := &RealTuning
 	return c.ValBPM*(r.bpm-m.bpmM)/m.bpmS + c.ValWS48*(r.ws48-m.wsM)/m.wsS + c.ValPER*(r.per-m.perM)/m.perS
+}
+
+func (m *seasonModel) volumeRaw(r *statRow) float64 {
+	c := &RealTuning
+	return c.VolVORP*(r.vorp-m.vorpM)/m.vorpS + c.VolWS*(r.ws-m.wsTM)/m.wsTS + c.VolMPG*(mpgOf(r)-m.mpgM)/m.mpgS
+}
+
+// valueZ blends the per-minute part with the volume part (each in its own
+// pool standard deviations).
+func (m *seasonModel) valueZ(r *statRow) float64 {
+	c := &RealTuning
+	return (1-c.VolWeight)*(m.perMinRaw(r)-m.pmM)/m.pmS + c.VolWeight*(m.volumeRaw(r)-m.vlM)/m.vlS
+}
+
+// boxGroup: 0 guards (PG, SG), 1 wings (SF), 2 bigs (PF, C).
+func boxGroup(p Position) int {
+	switch p {
+	case PG, SG:
+		return 0
+	case SF:
+		return 1
+	}
+	return 2
 }
 
 // ---------------------------------------------------------------- ratings
@@ -603,13 +685,26 @@ func (d *realData) rate(r *statRow, drop float64) *ratedPlayer {
 	b := d.baseRatings(m, r, pos)
 	boxOvr := float64(overallOfRatings(ratingsOf(b), pos, alt))
 
-	tBox := c.Mean + c.Sd*zq(m.zBox.pct(boxOvr))
+	zb := m.zBox
+	if c.BoxGroups {
+		zb = m.zBoxG[boxGroup(pos)]
+	}
+	tBox := c.Mean + c.Sd*zq(zb.pct(boxOvr))
 	tVal := c.Mean + c.Sd*zq(m.zVal.pct(m.valueZ(r)))
-	w := math.Pow(math.Min(1, r.mp/c.MinQual), c.ShrinkPower)
+	w := math.Pow(math.Min(1, r.mp/c.MinQual), c.ShrinkPower) *
+		math.Pow(math.Min(1, mpgOf(r)/c.ShrinkMPG), c.ShrinkMPGPower) *
+		math.Pow(math.Min(1, r.g/c.ShrinkGames), c.ShrinkGamesPower)
 	shrink := func(t float64) float64 { return c.Replacement + (t-c.Replacement)*w }
 	tBox, tVal = shrink(tBox), shrink(tVal)
 	tVis := c.BoxWeight*tBox + (1-c.BoxWeight)*tVal - drop
 
+	// A player-season named in standing.csv with a target keeps its shape but
+	// shows that overall. Its Impact is 0: the target says the formula's value
+	// was wrong, so the gap to it must not lower his play in games.
+	t, hasTarget := d.target[r.season][r.pid]
+	if hasTarget {
+		tVis = t - drop
+	}
 	delta := tVis - boxOvr
 	var rt Ratings
 	ovr := 0
@@ -627,6 +722,9 @@ func (d *realData) rate(r *statRow, drop float64) *ratedPlayer {
 		delta += diff
 	}
 	imp := clamp(int(math.Floor(c.ImpactK*(tVal-drop-float64(ovr))+0.5)), -c.ImpactMax, c.ImpactMax)
+	if hasTarget {
+		imp = 0
+	}
 	return &ratedPlayer{Ratings: rt, Pos: pos, Alt: alt, Impact: imp, Overall: ovr, Qual: r.mp >= c.MinQual}
 }
 
@@ -677,23 +775,6 @@ func (d *realData) hindsightPeak(pid string, from int, cur int) int {
 	return best
 }
 
-// ceilingFor is the stored ceiling of a young player (age below
-// PotentialEqualAge): the blurred hindsight peak, blended with a projection
-// when too few later seasons exist to show what he became. `from` is the first
-// season to look at for the hindsight peak: the league's start season for a
-// player, his first real season for a draft prospect. Later full seasons are
-// counted from there, so a prospect drafted near the end of the data gets a
-// projected ceiling even in a league that started in 2011.
-func (d *realData) ceilingFor(seed uint64, pid string, from, age, ovr int) int {
-	hind := clamp(blurPotential(seed, pid, d.hindsightPeak(pid, from, ovr)), ovr, 99)
-	w := ceilingWeight(max(d.start, from), age)
-	if w >= 1 {
-		return hind
-	}
-	proj := projectedPotential(age, ovr)
-	return clamp(round(w*float64(hind)+(1-w)*float64(proj)), ovr, 99)
-}
-
 // ceilingWeight is the share of the hindsight ceiling that can be trusted:
 // full seasons of data after `after` (up to lastRealSeason) divided by the
 // seasons until the player turns Progression.PotentialEqualAge, capped at 1.
@@ -707,18 +788,6 @@ func ceilingWeight(after, age int) float64 {
 		have = 0
 	}
 	return math.Min(1, float64(have)/float64(need))
-}
-
-// projectedPotential is the ceiling expected from age and overall alone: the
-// mean ceiling room of the fictional generator (GeneratePlayer), which is
-// ProjectRoomPerYear points for every year below ProjectEndAge.
-func projectedPotential(age, ovr int) int {
-	c := &RealTuning
-	room := c.ProjectRoomPerYear * float64(c.ProjectEndAge-age)
-	if room < 0 {
-		room = 0
-	}
-	return clamp(ovr+round(room), ovr, 99)
 }
 
 // ---------------------------------------------------------------- league
@@ -927,13 +996,26 @@ func (d *realData) prospect(r *RNG, seed uint64, pk draftPick, year int) *Player
 	}
 	p := &Player{Name: pk.name, Age: age, TeamID: -1, DraftYear: year, DraftPick: pk.pick, RealID: pk.pid}
 	if row == nil {
+		// No real season yet: his rookie overall is drawn from his pick
+		// band's first-season distribution (the shape comes from the
+		// fictional generator), his ceiling from the band's peak distribution.
 		pos := Position(r.IntN(5))
 		bp := buildPlayer(r, 0, pos, 36+r.Normal(0, 3), age)
-		p.Pos, p.AltPos, p.Ratings, p.Impact, p.UsageTendency = pos, bp.AltPos, bp.Ratings, 0, bp.UsageTendency
-		p.Potential = clamp(p.Overall()+r.Between(0, 4), 25, 99)
+		want := clamp(round(d.pedigreeFirst(seed, pk, year)), 30, 80)
+		p.Pos, p.AltPos, p.Impact, p.UsageTendency = pos, bp.AltPos, 0, bp.UsageTendency
+		p.Ratings = shiftToOverall(bp.Ratings, pos, bp.AltPos, want)
+		ovr := p.Overall()
+		p.Potential = clamp(max(round(d.pedigreeCeiling(seed, pk.pid, age)), ovr), ovr, 99)
 		return p
 	}
 	rp := d.rate(row, RealTuning.RookieDrop)
+	// A first season with few minutes says little: blend toward the band's
+	// median first-season overall by minutes played.
+	if w := math.Min(1, row.mp/RealTuning.RookieBlendMP); w < 1 {
+		med := d.pedigreeFirstMedian(pk, year)
+		want := w*float64(rp.Overall) + (1-w)*med
+		rp = d.rate(row, RealTuning.RookieDrop+float64(rp.Overall)-want)
+	}
 	p.Pos, p.AltPos, p.Ratings, p.Impact = rp.Pos, rp.Alt, rp.Ratings, rp.Impact
 	p.UsageTendency = usageFromPercentile(d.model(first).usg.pct(row.usg))
 	p.Potential = d.ceilingFor(seed, pk.pid, first, p.Age, p.Overall())

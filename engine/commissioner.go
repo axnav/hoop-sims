@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 // Rating bounds used everywhere in the engine.
@@ -69,6 +70,7 @@ type PlayerEdit struct {
 	Potential *int
 	Ratings   map[string]int
 	Heal      *bool // true clears the injury
+	Overall   *int  // target overall; applied after the rating edits
 }
 
 // findPlayer looks in rosters, free agents and the current draft pool.
@@ -120,9 +122,16 @@ func (lg *League) EditPlayer(id int, e PlayerEdit) error {
 			return fmt.Errorf("unknown rating %q", k)
 		}
 	}
+	if e.Overall != nil && (*e.Overall < MinRating || *e.Overall > MaxRating) {
+		return fmt.Errorf("overall must be %d to %d", MinRating, MaxRating)
+	}
 	// Everything is valid: apply.
 	q := *p
 	q.Ratings = nr
+	if e.Overall != nil {
+		q.Ratings = commissionerShiftOverall(&q, *e.Overall)
+		nr = q.Ratings
+	}
 	pot := p.Potential
 	if e.Potential != nil {
 		pot = *e.Potential
@@ -136,4 +145,36 @@ func (lg *League) EditPlayer(id int, e PlayerEdit) error {
 		p.Injury = nil
 	}
 	return nil
+}
+
+// commissionerShiftOverall moves all seven ratings by the same amount until the
+// player's overall matches target, or is as close as clamping allows.
+func commissionerShiftOverall(q *Player, target int) Ratings {
+	base := q.Ratings
+	best, bestDiff := base, absInt(q.Overall()-target)
+	delta := 0.0
+	for i := 0; i < 12 && bestDiff > 0; i++ {
+		delta += float64(target - q.Overall())
+		q.Ratings = commissionerShiftRatings(base, delta)
+		if d := absInt(q.Overall() - target); d < bestDiff {
+			best, bestDiff = q.Ratings, d
+		}
+	}
+	q.Ratings = best
+	return best
+}
+
+func commissionerShiftRatings(r Ratings, delta float64) Ratings {
+	for _, k := range []string{"inside", "mid", "three", "playmaking", "rebounding", "defense", "athleticism"} {
+		f := ratingField(&r, k)
+		*f = clamp(int(math.Round(float64(*f)+delta)), MinRating, MaxRating)
+	}
+	return r
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
