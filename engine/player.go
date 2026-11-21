@@ -37,6 +37,9 @@ type Player struct {
 	AltPos    []Position // other positions the player can also play
 	Ratings   Ratings    // the visible ratings everyone sees
 	Potential int        // the overall this player can grow into
+	// EditedCeiling is a commissioner-set potential above his overall: he keeps
+	// growing toward it at any age, then the field clears. 0 = none.
+	EditedCeiling int `json:",omitempty"`
 	// UsageTendency is this player's appetite for taking shots, on a 25-90
 	// scale. It is separate from shooting skill and playmaking. A zero value
 	// means an older save or imported player should use a derived default.

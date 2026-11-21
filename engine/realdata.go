@@ -36,6 +36,16 @@ type RealTuningT struct {
 	// share of the blend with the per-minute part; inside it VORP, total win
 	// shares and minutes a game are z-scores weighted VolVORP, VolWS, VolMPG.
 	VolWeight, VolVORP, VolWS, VolMPG float64
+	// VolPPG: points a game as a fourth part of the volume score (console
+	// ratings follow scoring). PrevWeight: share of the previous healthy
+	// qualified season's level mixed into this season's (ratings are smooth
+	// from year to year). InjuryGames: a season with fewer games than this is
+	// blended with the previous seasons (up to two), weighted by games, so a
+	// hurt star keeps most of his level (only if he played InjuryMPG minutes a
+	// game or more, so a part-time player does not borrow a bigger past). NoTargets ignores standing.csv
+	// targets (measuring only).
+	VolPPG, PrevWeight, InjuryGames, InjuryMPG float64
+	NoTargets                                  bool
 	// The low-minute shrink also uses minutes a game and games played: full
 	// weight from ShrinkMPG minutes a game and ShrinkGames games, below that
 	// (x/full)^power on top of the season-minutes shrink.
@@ -94,11 +104,11 @@ type RealTuningT struct {
 var RealTuning = RealTuningT{
 	MinQual: 500, ShrinkPower: 0.6, Replacement: 50,
 	Mean: 63.8, Sd: 12, CompressZ: 1.5, CompressSlop: 1.35,
-	BoxWeight: 0.3, ImpactK: 1.0, ImpactMax: 5,
+	BoxWeight: 0.1, ImpactK: 1.0, ImpactMax: 5,
 	ValBPM: 0.6, ValWS48: 0.3, ValPER: 0.1,
-	VolWeight: 0.4, VolVORP: 0.4, VolWS: 0.3, VolMPG: 0.3,
+	VolWeight: 0.65, VolVORP: 0.8, VolWS: 0.2, VolMPG: 0.2, VolPPG: 0.6, PrevWeight: 0.2,
 	ShrinkMPG: 28, ShrinkMPGPower: 1.0, ShrinkGames: 50, ShrinkGamesPower: 0.5,
-	BoxGroups:   true,
+	BoxGroups: true, InjuryGames: 45, InjuryMPG: 24,
 	UsageInside: 30, UsageMid: 22, UsageThree: 22, UsagePlay: 8,
 	RookieDrop: 4, PotentialBlurSD: 4.0,
 	PedigreeBands:      [7]int{1, 3, 5, 10, 14, 30, 60},
@@ -334,16 +344,16 @@ func (d dist) pct(v float64) float64 {
 }
 
 type seasonModel struct {
-	season                                          int
-	lg3, lgFT, lg2                                  float64
-	reg3, ft, reg2, a3, a2, ftr, orb, ast, tov, trb dist
-	dbpm, stl, blk, dws48, usg                      dist
-	zBox, zVal                                      dist
-	zBoxG                                           [3]dist // by position group, see boxGroup
-	pmM, pmS, vlM, vlS                              float64 // per-minute and volume parts of the value score
-	vorpM, vorpS, wsTM, wsTS, mpgM, mpgS            float64
-	meanBox, sdBox                                  float64
-	bpmM, bpmS, wsM, wsS, perM, perS                float64
+	season                                           int
+	lg3, lgFT, lg2                                   float64
+	reg3, ft, reg2, a3, a2, ftr, orb, ast, tov, trb  dist
+	dbpm, stl, blk, dws48, usg                       dist
+	zBox, zVal                                       dist
+	zBoxG                                            [3]dist // by position group, see boxGroup
+	pmM, pmS, vlM, vlS                               float64 // per-minute and volume parts of the value score
+	vorpM, vorpS, wsTM, wsTS, mpgM, mpgS, ppgM, ppgS float64
+	meanBox, sdBox                                   float64
+	bpmM, bpmS, wsM, wsS, perM, perS                 float64
 }
 
 func meanSD(v []float64) (float64, float64) {
@@ -474,6 +484,7 @@ func (d *realData) model(season int) *seasonModel {
 	m.vorpM, m.vorpS = getv(func(r *statRow) float64 { return r.vorp })
 	m.wsTM, m.wsTS = getv(func(r *statRow) float64 { return r.ws })
 	m.mpgM, m.mpgS = getv(mpgOf)
+	m.ppgM, m.ppgS = getv(ppgOf)
 	m.pmM, m.pmS = getv(m.perMinRaw)
 	m.vlM, m.vlS = getv(m.volumeRaw)
 	vals := make([]float64, len(qual))
@@ -482,6 +493,13 @@ func (d *realData) model(season int) *seasonModel {
 	}
 	m.zVal = newDist(vals)
 	return m
+}
+
+func ppgOf(r *statRow) float64 {
+	if r.g <= 0 {
+		return 0
+	}
+	return r.pts / r.g
 }
 
 func mpgOf(r *statRow) float64 {
@@ -498,7 +516,7 @@ func (m *seasonModel) perMinRaw(r *statRow) float64 {
 
 func (m *seasonModel) volumeRaw(r *statRow) float64 {
 	c := &RealTuning
-	return c.VolVORP*(r.vorp-m.vorpM)/m.vorpS + c.VolWS*(r.ws-m.wsTM)/m.wsTS + c.VolMPG*(mpgOf(r)-m.mpgM)/m.mpgS
+	return c.VolVORP*(r.vorp-m.vorpM)/m.vorpS + c.VolWS*(r.ws-m.wsTM)/m.wsTS + c.VolMPG*(mpgOf(r)-m.mpgM)/m.mpgS + c.VolPPG*(ppgOf(r)-m.ppgM)/m.ppgS
 }
 
 // valueZ blends the per-minute part with the volume part (each in its own
@@ -676,6 +694,68 @@ type ratedPlayer struct {
 	Qual    bool // had enough minutes for the numbers to be trusted
 }
 
+// rawTargets are the box and value target overalls of a player-season after
+// the low-minute shrink; withGames also applies the games-played shrink.
+func (d *realData) rawTargets(r *statRow, pos Position, boxOvr float64, withGames bool) (float64, float64) {
+	c := &RealTuning
+	m := d.model(r.season)
+	zb := m.zBox
+	if c.BoxGroups {
+		zb = m.zBoxG[boxGroup(pos)]
+	}
+	tBox := c.Mean + c.Sd*zq(zb.pct(boxOvr))
+	tVal := c.Mean + c.Sd*zq(m.zVal.pct(m.valueZ(r)))
+	w := math.Pow(math.Min(1, r.mp/c.MinQual), c.ShrinkPower) *
+		math.Pow(math.Min(1, mpgOf(r)/c.ShrinkMPG), c.ShrinkMPGPower)
+	if withGames {
+		w *= math.Pow(math.Min(1, r.g/c.ShrinkGames), c.ShrinkGamesPower)
+	}
+	shrink := func(t float64) float64 { return c.Replacement + (t-c.Replacement)*w }
+	return shrink(tBox), shrink(tVal)
+}
+
+// blendedTargets: rawTargets of the season, mixed with the previous seasons
+// when the player missed games (InjuryGames) and, by PrevWeight, with the
+// previous qualified season in general.
+func (d *realData) blendedTargets(r *statRow, pos Position, boxOvr float64) (float64, float64) {
+	c := &RealTuning
+	prev := func(k int) (float64, float64, float64, bool) {
+		pr := d.all[r.season-k][r.pid]
+		if pr == nil || pr.mp < c.MinQual {
+			return 0, 0, 0, false
+		}
+		ppos, _ := d.position(d.model(pr.season), pr)
+		b := d.baseRatings(d.model(pr.season), pr, ppos)
+		bo := float64(overallOfRatings(ratingsOf(b), ppos, nil))
+		tb, tv := d.rawTargets(pr, ppos, bo, false)
+		return tb, tv, math.Min(1, pr.g/c.InjuryGames), true
+	}
+	blend := c.InjuryGames > 0 && r.g < c.InjuryGames && mpgOf(r) >= c.InjuryMPG
+	cb, cv := d.rawTargets(r, pos, boxOvr, !blend)
+	if blend {
+		wc := r.g / c.InjuryGames
+		rem := 1 - wc
+		tb, tv := wc*cb, wc*cv
+		for k := 1; k <= 2 && rem > 0; k++ {
+			if pb, pv, h, ok := prev(k); ok {
+				take := rem * h
+				tb += take * pb
+				tv += take * pv
+				rem -= take
+			}
+		}
+		fb, fv := d.rawTargets(r, pos, boxOvr, true)
+		cb, cv = tb+rem*fb, tv+rem*fv
+	}
+	if c.PrevWeight > 0 {
+		if pb, pv, _, ok := prev(1); ok {
+			cb = (1-c.PrevWeight)*cb + c.PrevWeight*pb
+			cv = (1-c.PrevWeight)*cv + c.PrevWeight*pv
+		}
+	}
+	return cb, cv
+}
+
 // rate converts one player-season to ratings. drop lowers the target
 // overall (used for draft prospects who enter before their first season).
 func (d *realData) rate(r *statRow, drop float64) *ratedPlayer {
@@ -685,23 +765,14 @@ func (d *realData) rate(r *statRow, drop float64) *ratedPlayer {
 	b := d.baseRatings(m, r, pos)
 	boxOvr := float64(overallOfRatings(ratingsOf(b), pos, alt))
 
-	zb := m.zBox
-	if c.BoxGroups {
-		zb = m.zBoxG[boxGroup(pos)]
-	}
-	tBox := c.Mean + c.Sd*zq(zb.pct(boxOvr))
-	tVal := c.Mean + c.Sd*zq(m.zVal.pct(m.valueZ(r)))
-	w := math.Pow(math.Min(1, r.mp/c.MinQual), c.ShrinkPower) *
-		math.Pow(math.Min(1, mpgOf(r)/c.ShrinkMPG), c.ShrinkMPGPower) *
-		math.Pow(math.Min(1, r.g/c.ShrinkGames), c.ShrinkGamesPower)
-	shrink := func(t float64) float64 { return c.Replacement + (t-c.Replacement)*w }
-	tBox, tVal = shrink(tBox), shrink(tVal)
+	tBox, tVal := d.blendedTargets(r, pos, boxOvr)
 	tVis := c.BoxWeight*tBox + (1-c.BoxWeight)*tVal - drop
 
 	// A player-season named in standing.csv with a target keeps its shape but
 	// shows that overall. Its Impact is 0: the target says the formula's value
 	// was wrong, so the gap to it must not lower his play in games.
 	t, hasTarget := d.target[r.season][r.pid]
+	hasTarget = hasTarget && !c.NoTargets
 	if hasTarget {
 		tVis = t - drop
 	}

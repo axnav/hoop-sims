@@ -43,6 +43,7 @@ func main() {
 	focus := flag.String("focus", "auto", "develop mode: auto (computer teams pick a training focus) or balanced (everyone Balanced)")
 	realSeason := flag.String("season", "2018", "realratings mode: season (ending year) or all")
 	realTeam := flag.String("team", "", "realratings mode: team name or city to print the roster of")
+	ref2k := flag.Bool("ref2k", false, "realratings mode: compare with data/real/ref2k.csv (console-game overalls)")
 	tune := flag.String("tune", "", "realratings mode: override RealTuning fields, e.g. VolWeight=0.4,BoxGroups=false")
 	rookieStart := flag.Int("start", 2016, "realrookies mode: real season to start the league in")
 	rookieSeeds := flag.Int("seeds", 3, "realrookies mode: number of seeds (1 to N)")
@@ -91,7 +92,7 @@ func main() {
 		return
 	}
 	if *mode == "realratings" {
-		runRealRatings(*seed, *realSeason, *realTeam)
+		runRealRatings(*seed, *realSeason, *realTeam, *ref2k)
 		return
 	}
 	if *mode == "ratings" {

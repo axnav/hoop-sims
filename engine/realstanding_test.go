@@ -101,3 +101,13 @@ func TestRealStandingMatchesReference(t *testing.T) {
 		}
 	}
 }
+
+func TestAvgRanksTies(t *testing.T) {
+	got := avgRanks([]float64{10, 30, 10, 20})
+	want := []float64{1.5, 4, 1.5, 3}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ranks %v, want %v", got, want)
+		}
+	}
+}

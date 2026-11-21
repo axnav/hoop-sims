@@ -138,6 +138,11 @@ func (lg *League) EditPlayer(id int, e PlayerEdit) error {
 	}
 	p.Ratings = nr
 	p.Potential = max(pot, q.Overall())
+	if e.Potential != nil && *e.Potential > q.Overall() {
+		p.EditedCeiling = *e.Potential
+	} else if p.EditedCeiling <= q.Overall() {
+		p.EditedCeiling = 0
+	}
 	if e.Age != nil {
 		p.Age = *e.Age
 	}

@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"math"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -14,7 +15,11 @@ import (
 // runRealRatings is the measuring tool for real-data ratings: one season
 // (team roster plus league top 40, then the summary line) or "all" (summary
 // lines for 2011-2025 and their averages).
-func runRealRatings(seed uint64, season, team string) {
+func runRealRatings(seed uint64, season, team string, ref2k bool) {
+	if ref2k {
+		runRef2K(seed, season)
+		return
+	}
 	const dir = "data/real"
 	if season == "all" {
 		var n, t15, t30, ref, u20, corr float64
@@ -107,4 +112,51 @@ func applyTune(spec string) error {
 		}
 	}
 	return nil
+}
+
+// runRef2K compares one season (or the four reference seasons) with ref2k.csv.
+func runRef2K(seed uint64, season string) {
+	const dir = "data/real"
+	years := []int{2014, 2018, 2022, 2025}
+	detail := true
+	if season != "all" {
+		y, err := strconv.Atoi(season)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "season must be a year or all")
+			os.Exit(1)
+		}
+		years = []int{y}
+	} else {
+		detail = false
+	}
+	for _, y := range years {
+		rep, err := engine.RealRatingsReport(dir, seed, y)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		res, err := engine.Ref2KReport(dir, rep)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		worst := ""
+		for i := 0; i < 3 && i < len(res.Rows); i++ {
+			r := res.Rows[i]
+			worst += fmt.Sprintf(" %s %+.1f;", r.Name, r.Gap)
+		}
+		fmt.Printf("2k %d  n %d  fit 2k=%.2f+%.3f*ours  spearman %.3f  mae %.2f  top10-out-of-top20 %d (worst rank %d)  worst:%s\n",
+			y, res.N, res.Icept, res.Slope, res.Spearman, res.MAE, res.TopTenOut, res.TopTenWorstRank, worst)
+		if detail {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "Name\tours\tmapped\t2K\tgap\trank\tmpg\tG\tid\tour-scale value of 2K")
+			for i, r := range res.Rows {
+				if i >= 12 && math.Abs(r.Gap) <= 5 {
+					break
+				}
+				fmt.Fprintf(w, "%s\t%d\t%.1f\t%d\t%+.1f\t%d\t%.1f\t%d\t%s\t%.0f\n", r.Name, r.Ours, r.Mapped, r.K2, r.Gap, r.Rank, r.MPG, r.G, r.ID, (float64(r.K2)-res.Icept)/res.Slope)
+			}
+			w.Flush()
+		}
+	}
 }

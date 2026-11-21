@@ -303,7 +303,7 @@ func (p *Player) ProgressMentored(r *RNG, mpg float64, w *[NumRatings]float64, g
 	delta -= gain
 	var ds [NumRatings]float64
 	for i := range ds {
-		ds[i] = ratingStep(p.Age, i, delta+r.Normal(0, c.RatingNoiseSD))
+		ds[i] = ratingStep(stepAge(p), i, delta+r.Normal(0, c.RatingNoiseSD))
 		if ds[i] > 0 {
 			ds[i] *= grow
 		}
@@ -320,7 +320,12 @@ func (p *Player) ProgressMentored(r *RNG, mpg float64, w *[NumRatings]float64, g
 	p.Age++
 	p.Experience++
 	newOvr := p.Overall()
-	if p.Age >= c.PotentialEqualAge {
+	if p.EditedCeiling > 0 && newOvr >= p.EditedCeiling {
+		p.EditedCeiling = 0
+	}
+	if p.EditedCeiling > 0 {
+		p.Potential = p.EditedCeiling
+	} else if p.Age >= c.PotentialEqualAge {
 		p.Potential = newOvr
 	} else {
 		pot := float64(p.Potential) + (p.TrueCeiling()-float64(p.Potential))*c.PotentialLearnRate

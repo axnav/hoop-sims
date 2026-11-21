@@ -176,3 +176,111 @@ func (r *RealReport) Summary() string {
 	return fmt.Sprintf("season %d  ref-in-top15 %d/%d  ref-in-top30 %d/%d  under20mpg-in-top40 %d  corr(ovr,vorp) %.3f",
 		r.Season, r.RefTop15, r.Ref, r.RefTop30, r.Ref, r.Under20In40, math.Round(r.CorrVORP*1000)/1000)
 }
+
+// Ref2KRow is one reference player in the 2K comparison.
+type Ref2KRow struct {
+	ID, Name string
+	Ours     int
+	Mapped   float64 // ours on the 2K scale (per-season linear fit)
+	K2       int
+	Rank     int // rank in our league (1 = best), 0 if not found
+	MPG      float64
+	G        int
+	Gap      float64 // Mapped - K2
+}
+
+// Ref2KResult compares a season's league with ref2k.csv (private, from
+// memory, console-game style overalls).
+type Ref2KResult struct {
+	Season          int
+	N               int
+	Slope, Icept    float64
+	Spearman, MAE   float64
+	Rows            []Ref2KRow // biggest absolute gap first
+	TopTenOut       int        // 2K top-10 players outside our top 20
+	TopTenWorstRank int
+}
+
+// Ref2KReport maps the report's overalls to the 2K scale and measures it.
+func Ref2KReport(dir string, rep *RealReport) (*Ref2KResult, error) {
+	rows, err := readCSV(filepath.Join(dir, "ref2k.csv"))
+	if err != nil {
+		return nil, err
+	}
+	d, err := loadRealDataFrom(dir, rep.Season)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]int{}
+	for i, r := range rep.Rows {
+		byID[r.ID] = i
+	}
+	res := &Ref2KResult{Season: rep.Season}
+	for _, m := range rows {
+		if int(num(m["season"])) != rep.Season {
+			continue
+		}
+		i, ok := byID[m["player_id"]]
+		if !ok {
+			continue
+		}
+		r := rep.Rows[i]
+		g := 0
+		if sr := d.all[rep.Season][r.ID]; sr != nil {
+			g = int(sr.g)
+		}
+		res.Rows = append(res.Rows, Ref2KRow{ID: r.ID, Name: r.Name, Ours: r.Ovr, K2: int(num(m["ovr2k"])), Rank: i + 1, MPG: r.MPG, G: g})
+	}
+	n := len(res.Rows)
+	res.N = n
+	if n < 3 {
+		return res, nil
+	}
+	var xs, ys []float64
+	for _, r := range res.Rows {
+		xs = append(xs, float64(r.Ours))
+		ys = append(ys, float64(r.K2))
+	}
+	mx, sx := meanSD(xs)
+	my, sy := meanSD(ys)
+	res.Slope = correlation(xs, ys) * sy / sx
+	res.Icept = my - res.Slope*mx
+	res.Spearman = correlation(avgRanks(xs), avgRanks(ys))
+	for i := range res.Rows {
+		r := &res.Rows[i]
+		r.Mapped = res.Icept + res.Slope*float64(r.Ours)
+		r.Gap = r.Mapped - float64(r.K2)
+		res.MAE += math.Abs(r.Gap) / float64(n)
+	}
+	// 2K top ten: the ten highest reference overalls.
+	order := append([]Ref2KRow(nil), res.Rows...)
+	sort.SliceStable(order, func(i, j int) bool { return order[i].K2 > order[j].K2 })
+	for i := 0; i < 10 && i < len(order); i++ {
+		if order[i].Rank > 20 {
+			res.TopTenOut++
+		}
+		res.TopTenWorstRank = max(res.TopTenWorstRank, order[i].Rank)
+	}
+	sort.SliceStable(res.Rows, func(i, j int) bool { return math.Abs(res.Rows[i].Gap) > math.Abs(res.Rows[j].Gap) })
+	return res, nil
+}
+
+func avgRanks(v []float64) []float64 {
+	idx := make([]int, len(v))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.Slice(idx, func(a, b int) bool { return v[idx[a]] < v[idx[b]] })
+	out := make([]float64, len(v))
+	for i := 0; i < len(idx); {
+		j := i
+		for j+1 < len(idx) && v[idx[j+1]] == v[idx[i]] {
+			j++
+		}
+		for k := i; k <= j; k++ {
+			out[idx[k]] = float64(i+j)/2 + 1
+		}
+		i = j + 1
+	}
+	return out
+}

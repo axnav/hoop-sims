@@ -26,6 +26,10 @@ func (lg *League) DevChangesLastDay() []DevLine {
 // progression and by the in-season steps.
 func expectedTrend(p *Player, base float64) float64 {
 	c := &Progression
+	if p.EditedCeiling > 0 && p.Age >= c.PrimeStartAge {
+		// Commissioner-edited potential: an older player still grows toward it.
+		return (float64(p.EditedCeiling) - base) * c.RateAge24
+	}
 	switch {
 	case p.Age < c.PrimeStartAge:
 		rate := c.RateAge26
@@ -59,6 +63,15 @@ func ratingStep(age, idx int, d float64) float64 {
 		}
 	}
 	return d
+}
+
+// stepAge is the age used for per-rating rules: a player growing toward an
+// edited potential is treated as not yet declining.
+func stepAge(p *Player) int {
+	if p.EditedCeiling > 0 && p.Age >= Progression.DeclineStartAge {
+		return Progression.DeclineStartAge - 1
+	}
+	return p.Age
 }
 
 // athleticismGrowth: false for athleticism at an age where it no longer grows.
@@ -109,11 +122,16 @@ func (lg *League) inSeasonDev(step int) {
 			if r.Float64() < frac {
 				k++
 			}
-			a[i] = clamp(a[i]+round(ratingStep(p.Age, i, sign*k)), 25, 99)
+			a[i] = clamp(a[i]+round(ratingStep(stepAge(p), i, sign*k)), 25, 99)
 		}
 		p.Ratings = Ratings{a[0], a[1], a[2], a[3], a[4], a[5], a[6]}
 		newOvr := p.Overall()
-		if p.Age >= c.PotentialEqualAge {
+		if p.EditedCeiling > 0 && newOvr >= p.EditedCeiling {
+			p.EditedCeiling = 0
+		}
+		if p.EditedCeiling > 0 {
+			p.Potential = p.EditedCeiling
+		} else if p.Age >= c.PotentialEqualAge {
 			p.Potential = newOvr
 		} else {
 			p.Potential = clamp(max(p.Potential, newOvr), 25, 99)
