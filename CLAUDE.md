@@ -28,7 +28,7 @@ Read `HANDOFF.md` first (state, decisions, known problems, next steps), then `RU
 
 ## Commands
 Shell may need `export PATH="/usr/local/bin:$PATH"`. Run from the project root.
-- `go vet ./... && go test ./... -count=1` : checks (engine tests take 4 to 5 minutes; run in the background)
+- `go vet ./... && go test ./... -count=1 -timeout 30m` : checks (engine tests take about 12 minutes, past Go's default 10-minute limit, hence `-timeout 30m`; run in the background)
 - `cd web && npm install && npm run build` : build the app into `web/dist` (once, and after screen changes)
 - `go run ./cmd/web` : API plus built app on http://localhost:8080 (flags `-port`, `-save`, `-web`)
 - `cd web && npm run dev` : Vite dev server (proxies `/api` to port 8095; also run `go run ./cmd/web -port 8095`)

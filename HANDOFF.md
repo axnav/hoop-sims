@@ -40,7 +40,7 @@ Legend: **verified** means a person or session ran it or read the code and saw i
 
 **"Find an upgrade" (section 22), built 2026-11-17, merged locally, NOT pushed (real coaches, also merged locally, are not pushed either):** a "Find an upgrade" button in the drawer of one of your players opens an "Upgrades for <name>" panel on the Trade page: better players at his position on computer teams, a "Shopped" chip when their team would move him (the advisor's Keep/Shop/Sell rule applied to that team), a package that includes your player and that the team accepts, "Load this offer"; the rest listed as out of reach with the reason. `engine/upgrade.go`, `GET /api/trade/upgrade/{id}`, `web/src/UpgradeFinder.tsx`. Read-only, no saved field, no stream. **Work in progress: none.**
 
-**DO THIS FIRST, before any new piece (owner, 2026-11-21):** the main session's full `go test ./... -count=1` on the phase-2 + positions work FAILED in `engine` after 602 s, probably Go's default 10-minute test timeout (the run printed a stack trace; only the tail was kept). A re-run with `go test ./engine -count=1 -timeout 40m -v` was started. The owner chose to commit, merge and push before it finished. Next session: check that re-run's result (or run it again); if a test really fails, fix it first; if it is only the timeout, make the checks command use `-timeout 30m` (CLAUDE.md, HANDOFF section 2) and consider speeding up the slowest tests.
+**Resolved 2026-11-21:** the 602 s engine failure was only Go's 10-minute test timeout. Re-run with `-timeout 40m`: every engine test passes in 697 s (slowest: `TestLongStability` 208 s, `TestGMUpgradePackageLimits` 49 s, `TestOwnerGoodUserNotFired` 36 s, `TestWhatWouldItTakeAccepted` 35 s). The checks command now carries `-timeout 30m` (CLAUDE.md, section 2).
 
 **Committed and merged 2026-11-21 on the owner's word (pushed if `git status -sb` shows level):** section 24 phase 2 (22 attributes + 7 tendencies stored as offsets from the seven group ratings, save version 5) and section 25 (change a player's position). Games identical (digest test), real ratings line unchanged. Edited potential and the 2K tuning are committed (`4ae2574`; pushed by the owner or still 1 ahead, check `git status -sb`). Next: owner review, then phase 3 (sim reads attributes). Open: Durant 2025 ranks 27th; our scale ~2x wider than 2K; a correction target lifts all seven groups evenly (Klay 2018 playmaking 87).
 
@@ -86,7 +86,7 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 
 | What | Command |
 |---|---|
-| Checks (Go) | `go vet ./... && go test ./... -count=1` (engine tests take about 4 to 5 minutes, run them in the background; verified 2026-11-16 on `dd7c11c`: vet clean, all pass, engine 202 s, `cmd/web` 15 s) |
+| Checks (Go) | `go vet ./... && go test ./... -count=1 -timeout 30m` (engine tests take about 12 minutes since 2026-11-21, past Go's default 10-minute limit; run them in the background; earlier: verified 2026-11-16 on `dd7c11c`: vet clean, all pass, engine 202 s, `cmd/web` 15 s) |
 | Build the web app (needed once, and after screen changes) | `cd web && npm install && npm run build` |
 | Run the game | `go run ./cmd/web` then open http://localhost:8080 (flags `-port`, `-save`, `-web`) |
 | Front-end dev server | `cd web && npm run dev` (proxies `/api` to port 8095, so also run `go run ./cmd/web -port 8095`) |
