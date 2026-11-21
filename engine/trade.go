@@ -161,7 +161,7 @@ func tradeValue(p *Player, contend float64, others []*Player) float64 {
 	}
 	n := 0
 	for _, q := range others {
-		if q != p && q.CanPlay(p.Pos) {
+		if q != p && q.CanPlay(p.NatPos()) {
 			n++
 		}
 	}

@@ -195,7 +195,18 @@ func (s *server) player(r *http.Request) (any, error) {
 	}
 	addInjury(out, p)
 	addContract(out, p)
+	s.addPosition(out, p, status == "Retired")
 	if !s.inPool(p.ID) {
+		// Detailed attributes and tendencies, read-only (a prospect's stay hidden).
+		attrs := []M{}
+		for _, a := range p.Attributes() {
+			attrs = append(attrs, M{"key": a.Key, "label": a.Label, "group": a.Group, "value": a.Value})
+		}
+		tends := []M{}
+		for _, v := range p.TendencyValues() {
+			tends = append(tends, M{"key": v.Key, "label": v.Label, "value": v.Value})
+		}
+		out["attributes"], out["tendencies"] = attrs, tends
 		out["badges"] = s.badgesObj(p)
 		s.addPhoto(out, p)
 		if status != "Retired" {

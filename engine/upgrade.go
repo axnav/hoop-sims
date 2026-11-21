@@ -115,7 +115,7 @@ func (lg *League) FindUpgrades(playerID int) (UpgradeResult, error) {
 		}
 		for _, q := range tm.Roster {
 			gain := q.Overall() - p.Overall()
-			if gain < t.MinGain || !q.CanPlay(p.Pos) {
+			if gain < t.MinGain || !q.CanPlay(p.NatPos()) {
 				continue
 			}
 			if q.Injury != nil && q.Injury.GamesLeft > t.MaxInjuryDays {

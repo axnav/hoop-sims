@@ -43,7 +43,7 @@ The standard library is the only Go dependency (`go.mod` says `module hoopsim`, 
 ```
 engine/            one Go package: <feature>.go with <feature>_test.go beside it
 cmd/web/           the API server: one <feature>.go per group of routes, api_test.go for all of them
-cmd/sim/           terminal tool (main.go, develop.go, resign.go, gm.go, realratings.go, realrookies.go)
+cmd/sim/           terminal tool (main.go, develop.go, resign.go, gm.go, realratings.go, realrookies.go, attributes.go)
 cmd/realcheck/     terminal tool (main.go)
 web/src/           api.ts, flow.tsx, ui.tsx, shared cards; pages/ one file per screen; court3d/
 data/real/, saves/ private, git-ignored
@@ -71,10 +71,11 @@ Your shell may need `export PATH="/usr/local/bin:$PATH"`. Run everything from th
 | Owner goals and trust measurement (seeds 1 to 5, team 0, eight seasons, three users: hands-off, assistant GM on auto, "bad GM" who re-signs everyone and bids up to the tax line; firing on, the fired user takes the first job; about 80 s; env `OWNER_TEAM`, `OWNER_SEED0`, `OWNER_SEEDS`, `OWNER_SEASONS`, `OWNER_QUIET=1` for totals only) | `go run ./cmd/sim -mode owner` |
 | Real-data ratings against real standing (`-season 2018 -team Warriors` prints the roster, the league top 40 and a summary line; `-season all` prints one summary line per season 2011 to 2025 plus averages; `-tune Name=value,...` overrides `RealTuning` fields for a run; `-ref2k` compares with the private 2K-style list `data/real/ref2k.csv` (per-season linear fit, Spearman, mean gap, biggest gaps); needs `data/real/`) | `go run ./cmd/sim -mode realratings -season 2018 -team Warriors` |
 | Real prospects against real peaks (`-start 2016 -seasons 9 -seeds 3`: each 2015-2023 draftee's real peak, stored ceiling and simulated peak per seed, summary line; `-start 2026 -seasons 15`: ceilings of the 2025 and 2026 top-5 picks and the count of 90+ and 85+ players per year against the fictional league; needs `data/real/`) | `go run ./cmd/sim -mode realrookies -start 2016` |
+| Attributes and tendencies: one team's seven ratings, 22 attributes and 7 tendencies, league mean and SD of each, per-position means (add `-real -season 2018 -team Warriors` for the real league and spot checks) | `go run ./cmd/sim -mode attributes -seed 1` |
 | News volume and award winners (stories per kind per season, the headline stories and awards of the last season) | `go run ./cmd/sim -mode news -seed 1 -seasons 3` |
 | Real-data comparison | `go run ./cmd/realcheck -runs 30` |
 
-`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `realratings`, `realrookies`, `badges`, `coaches`, `morale`, `develop`, `resign`, `gm` or `owner`), `-seasons`, `-season`, `-team` and `-ref2k` (`realratings` only), `-tune` (`realratings` and `realrookies`), `-start` and `-seeds` (`realrookies` only), and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`, `-season` (real start season, 2011 to 2026, default 2011).
+`cmd/web` flags: `-port` (default 8080), `-save` (save file path, default `saves/league.json`), `-web` (built app directory, default `web/dist`). The real-data folder is fixed at `data/real`, relative to the working directory. `cmd/sim` flags: `-seed`, `-games`, `-mode` (`sanity`, `seasons`, `ratings`, `realratings`, `realrookies`, `attributes`, `badges`, `coaches`, `morale`, `develop`, `resign`, `gm` or `owner`), `-seasons`, `-season`, `-team` and `-ref2k` (`realratings` only), `-tune` (`realratings` and `realrookies`), `-start` and `-seeds` (`realrookies` only), `-real` (`attributes` only, with `-season` and `-team`), and a debug flag `-reveal` that only affects that terminal tool. `cmd/realcheck` flags: `-runs`, `-data`, `-season` (real start season, 2011 to 2026, default 2011).
 
 The Go server serves `web/dist` for any path that is not `/api/...` and falls back to `index.html`, so the browser router can use real URLs. If `web/dist/index.html` is missing it answers 503 with the build command. The Vite dev server (`web/vite.config.ts`) proxies `/api` to `http://localhost:8095`, which is why the dev instance of the Go server must use port 8095.
 
@@ -139,7 +140,9 @@ All files are in `engine/`. "Tunable" names the config block that holds the numb
 
 | File | Owns | Main exports | Tunable |
 |---|---|---|---|
+| `attributes.go` | Detailed attributes and tendencies (HANDOFF section 24 phase 2). 22 attributes in the seven rating groups (Inside: close shot, layup, dunk, post scoring, draw foul; Mid: mid-range, free throw; Three: three-point; Playmaking: pass accuracy, ball handle, pass vision; Rebounding: offensive, defensive; Defense: interior, perimeter, steal, block; Athleticism: speed, strength, vertical, stamina, durability) and 7 tendencies (three, mid-range, drive, post up, pass, steal gamble, foul; the existing `UsageTendency` stays the shot tendency). Stored on `Player` as `AttrOffsets [22]int` (offsets from the group rating) and `Tendencies [7]int` (0-100); shown attribute = clamp(group rating + offset, 25, 99). `AttrTuning.Weights` are fixed per attribute inside a group (sum 1); offsets of a group have weighted mean 0 within 0.5 (`balanceOffsets`; Three has one member and never moves off its group). The seven `Ratings` stay the stored truth, so `Overall`, the game sim, progression and editing are untouched and games are identical (`TestAttributesDoNotChangeGames`). Fictional players (`fictionalAttributes`, called by `buildPlayer`, so also rookies): offsets from `PosOffset` (bigs up on dunk, post, interior defense, block, strength; guards on speed, ball handle, perimeter defense), a few cross-rating terms and a normal draw on its own stream 160000 `NewRNG(mix64(160000, id, hash of name))` (no existing stream is consumed); tendencies from position, group ratings and shot tendency plus the same stream. Real players (`realData.realAttributes`, called where `mk` and `prospect` build them): offsets `RealScale` x (percentile score - group weighted mean), tendencies from percentiles (FT% against his mid, FTA/FGA, height `ht_in_in` and weight `wt` from `Player Career Info.csv`, AST%, TOV%, ORB%, DRB%, STL%, BLK%, 3PA/FGA, PF per 36, minutes a game, games over his last three seasons); prospects with no real season use the fictional rule (`ensureAttributes`). `ensureAttributes` also upgrades old saves. Web: `attributes` and `tendencies` (read-only) on `GET /api/player/{id}`, absent for draft prospects. Tool: `cmd/sim -mode attributes` | `Player.Attributes`, `Player.AttrOf`, `Player.TendencyValues`, `AttrKeys`, `TendencyKeys`, `Attr*` and `Tend*` indexes, `League.ensureAttributes` | `AttrTuning`, `cmd/sim -mode attributes` |
 | `player.go` | The `Player` type, positions, ratings, overall maths; saved `EditedCeiling` (commissioner-set potential, see `commissioner.go`) | `Player`, `Ratings`, `Position` (`PG`..`C`), `Overall`, `OverallAt`, `Effective` (ratings shifted by hidden `Impact`), `TrueOverall`, `ShotUsage`, `ScoringRole`, `CanPlay`, `PosLabel` | `overallWeights` (per-position weights) |
+| `position.go` | Changing a player's position (HANDOFF section 25). Positions are created exactly as before (no reorder). Saved fields `NaturalPos *Position` and `NaturalAlt []Position` (omitempty, inside save version 5): set the first time `SetPositions` moves a player, holding the positions he was created with; moving him back to exactly those clears them. `Player.Overall()`/`TrueOverall()`: never moved = best of his listed positions (old rule); moved = overall at `Pos` only. `Player.NatPos()` (natural main, else `Pos`) is what badge caps (`maxTier`), All-League groups, trade fit and upgrade fit read, so a move never changes them or the games. `SetPositions(id, main, second)`: own players, or any with `Options.Commissioner`, never a draft prospect; second must differ, nil clears; `Potential` kept at least the new overall, `EditedCeiling` cleared when reached. `CanSetPositions`, `Player.PositionOveralls` | `SetPositions`, `CanSetPositions`, `PositionOveralls`, `NatPos` | none |
 | `generate.go` | Teams, the `League` type, new fictional league | `League`, `Team`, `GenerateLeague`, `GeneratePlayer`, `Team.Rotation` (the five best healthy players by overall start, then the bench best-first), `Team.StarterSlots` (seats those five in PG..C by best total `OverallAt`), `RosterSize` (13) | uses `Progression` |
 | `names.go` | Name lists | (unexported lists) | none |
 | `rng.go` | The only random source | `RNG`, `NewRNG`, `Between`, `Normal`, `Chance`, `Pick`, `PickWeighted` | none |
@@ -282,6 +285,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 | `Focus` | Training focus (omitempty; zero = Balanced = the old behaviour; `training.go`) |
 | `Morale`, `TradeRequest`, `MoraleStreak` | Mood from -50 to +50 (0 = content), when he asked for a trade (year*100+week, 0 = no request), and the weeks counter behind requests (all omitempty; `morale.go`) |
 | `Injury` | `*Injury{Name, GamesLeft, Serious}`; nil means healthy |
+| `NaturalPos`, `NaturalAlt` | `*Position`, `[]Position`, omitempty (save version 5, no further bump): the positions he was created with, set when `SetPositions` first moves him; nil = never moved (see `position.go`) |
 | `Dev` | `*DevChange{Overall, Potential, Ratings}`: new minus old in the latest yearly progression (set in `ProgressMinutes`); nil for rookies and old saves. It is the whole year (in-season steps plus the offseason) |
 | `SeasonDev` | `*DevChange`: change so far this season from in-season steps; nil before the first step, cleared by `ProgressMinutes`. `addDev` in `cmd/web/admin.go` sends `SeasonDev` if present (`changeScope` "season"), else `Dev` ("year"), as `ovrChange`, `potChange`, `ratingChanges` |
 
@@ -313,7 +317,7 @@ Two unexported fields, `newProposals` and `newInjuries`, hold what the most rece
 
 ### GM
 
-`League.GM *GMState` (pointer, omitempty; nil = the assistant never used or everything off, so such a league saves exactly the old bytes and `SaveVersion` stays 4). `GMState{Plan, Auto GMAuto{Lineup, Training, Contracts, FreeAgency, Draft, TradeAlerts}, Log []GMLogEntry{Year, Day, Area, Text, Auto}, Seen}`; `Seen` holds trade ideas already alerted this season. An all-zero state is dropped again by `SetGMPlan` and `SetGMAuto`. Unsaved: `gmAlert` (the title of the idea found after the last `SimDay`) and `gmCounts` (the cached counts).
+`League.GM *GMState` (pointer, omitempty; nil = the assistant never used or everything off, so such a league saves exactly the old bytes). `GMState{Plan, Auto GMAuto{Lineup, Training, Contracts, FreeAgency, Draft, TradeAlerts}, Log []GMLogEntry{Year, Day, Area, Text, Auto}, Seen}`; `Seen` holds trade ideas already alerted this season. An all-zero state is dropped again by `SetGMPlan` and `SetGMAuto`. Unsaved: `gmAlert` (the title of the idea found after the last `SimDay`) and `gmCounts` (the cached counts).
 
 ### Owner state
 
@@ -417,7 +421,9 @@ Streams in the code today:
 | 140000 | Owners: `(seed, 140000, team ID, k)` hashed, no draw order: k = 1 the market-size ranking, 2 the personality, 3 and 4 the name. Nothing saved | `OwnerOf` |
 | 150000 | Real-data pedigree: `(seed, 150000, hash of the real player id)`, two correlated normal draws (first-season overall, peak), no draw order, nothing saved | `pedStream` |
 
-Next free offset: 160000.
+| 160000 | Attributes and tendencies of fictional players: `NewRNG(mix64(160000, player id, hash of name))`, 22 offset draws then 7 tendency draws, saved on the player | `fictionalAttributes` |
+
+Next free offset: 170000.
 
 The hashed streams (`mix64`) are built from the seed, year, offset and ids, so they do not depend on the order in which picks are made or screens are opened. `MidSeasonTradeStep` (7500) is defined in `trade.go` as a suggested offset for a mid-season AI trade call, but no code uses it.
 
@@ -425,7 +431,7 @@ The hashed streams (`mix64`) are built from the seed, year, offset and ids, so t
 
 `League.Save(path)` stamps `Version = SaveVersion`, prunes each team's lineup, marshals the whole league with `encoding/json`, creates the folder if needed, writes `path + ".tmp"` and renames it over the target (so a crash does not leave a half-written save). There is one save file; the web server uses `saves/league.json` unless `-save` says otherwise.
 
-`SaveVersion` is currently 4. `saveUpgrades[i]` upgrades a league from version `i` to `i+1`:
+`SaveVersion` is currently 5. `saveUpgrades[i]` upgrades a league from version `i` to `i+1`:
 
 | Step | What it does |
 |---|---|
@@ -433,6 +439,7 @@ The hashed streams (`mix64`) are built from the seed, year, offset and ids, so t
 | 1 to 2 | Draft picks became owned objects: if `Picks` is empty, gives every team its own picks (`initPicks`) |
 | 2 to 3 | Contracts and the cap arrived: if nobody has a contract, assigns market-salary contracts (`assignInitialContracts`) |
 | 3 to 4 | Coaches and systems arrived: every team gets a generated coach (`initCoaches`, deterministic from the seed and team ID); `Team.System` stays empty (the coach's favourite) |
+| 4 to 5 | Detailed attributes and tendencies arrived: every player without them gets a set by the fictional rule (`ensureAttributes`, deterministic from name and ID, stream 160000) |
 
 `Load` reads the file and then:
 
@@ -463,7 +470,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | GET | `/api/players` | Player search over every team and free agency (not prospects): `q`, `team` (id or `fa`), `pos`, `minOvr`/`maxOvr`, `minAge`/`maxAge`, `maxSalary`, `yearsLeft`, `badge`, `tradeRequest=1`, `morale`, `sort`/`dir`, `limit`/`offset` → `{total, players:[rows]}` | `players` (players.go) |
 | GET | `/api/teams` | All 30 teams: record, rank, payroll, cap room, top-8 average, best player, status, pending offers | `teamsList` (teams.go) |
 | GET | `/api/team/{id}` | A team's roster, record, payroll (for the user's team the `payroll` object also has `budget`, the owner's payroll budget; omitted before the owner state exists), `coach` (name, system in use) and `teamFit` | `teamPage` (league.go) |
-| GET | `/api/player/{id}` | A player's page (prospects get ranges only; others get `badges`) | `player` (league.go) |
+| GET | `/api/player/{id}` | A player's page (prospects get ranges only; others get `badges`, read-only `attributes` [{key,label,group,value 25-99}] x22 and `tendencies` [{key,label,value 0-100}] x7) | `player` (league.go) |
 | GET | `/api/schedule` | A team's games; `?team=` (default user) | `schedule` (league.go) |
 | GET | `/api/box/{id}` | A box score (`last` or a playoff game id) | `box` (league.go) |
 | GET | `/api/game/{id}/events` | Play-by-play events for the replay | `gameEvents` (league.go) |
@@ -527,6 +534,7 @@ All routes are registered in `routes()` in `cmd/web/main.go`. "Needs league" rou
 | POST | `/api/freeagents/day` | Advance one day; returns signings | `faAdvance` (freeagency.go) |
 | POST | `/api/freeagents/sheet` | Answer an offer sheet for one of the user's restricted players: `{playerId, match}`; returns `{signings, freeAgency, state, voided}` | `faSheet` (freeagency.go) |
 | POST | `/api/admin/player/{id}` | Commissioner edit (age, potential, ratings, overall, heal; `EditForm` in `PlayerDrawer.tsx` has an Overall field); refused unless the option is on | `adminPlayer` (admin.go) |
+| POST | `/api/player/{id}/position` | `{pos:"PG", alt:"SG"|""}`; sets main and second position, returns the player page; 400 bad or equal positions, 404 unknown player, 409 not your player (without commissioner) or a prospect. The player page carries `posOverall:{PG,SG,SF,PF,C}` and `canSetPosition` (both absent for pool prospects); `PositionPanel` in `PlayerDrawer.tsx` | `setPosition`, `addPosition` (position.go) |
 
 **Response conventions.**
 
@@ -608,6 +616,8 @@ Two packages have tests; `cmd/sim`, `cmd/realcheck` and the whole of `web/` have
 | `engine/negotiate_test.go` | Asks, proposals generated, accept, reject and drop, proposals leave game results alone, deadline pause |
 | `engine/injury_test.go` | Determinism with and without injuries, sitting and healing, rates, serious injuries, offseason clearing, saving |
 | `engine/lineup_test.go` | Automatic minutes, custom lineup rules and effect, injured starter, departed player, saving, minutes-based development |
+| `engine/attributes_test.go` | Games identical to the digest recorded before attributes existed (`TestAttributesDoNotChangeGames`), group weights sum to 1 and offsets balance, bigs dunk more and guards are quicker, deterministic draws, a version 4 save gains a full set and round-trips |
+| `engine/position_test.go` | Unmoved overall = best of listed, moved overall = at the new main, badge tiers unchanged by a move, flag survives JSON, moving back clears it, `SetPositions` rules (own player, other team, commissioner, prospect, equal second); `TestSetPositionAPI` in `cmd/web/api_test.go` covers the route |
 | `engine/coach_test.go` | Coach determinism, the version 3 save upgrade, fit grades and reasons, the off-favourite penalty, centred effects, system shifts, offseason-only hiring, computer teams replacing weak coaches, system choice |
 | `engine/commissioner_test.go` | Player editing |
 | `engine/progression_test.go`, `engine/inseason_test.go` | The yearly change record; in-season steps (deterministic, switch off, games untouched, yearly totals kept, saving) |

@@ -495,7 +495,7 @@ func (lg *League) badgeSet(p *Player) BadgeSet {
 	in := inputsOf(p)
 	for i := range badgeDefs {
 		d := &badgeDefs[i]
-		limit := d.maxTier(p.Pos)
+		limit := d.maxTier(p.NatPos())
 		rt := min(d.ratingTier(in), limit)
 		bs.RatingTier[i] = rt
 		bs.Tier[i] = rt
@@ -608,7 +608,7 @@ func (lg *League) BadgesOf(p *Player) []Badge {
 			b.Kind = "performance"
 			b.Rule = "Rating tier plus one for last season: " + perfRuleFor(d.Key).text()
 		}
-		if t < d.maxTier(p.Pos) {
+		if t < d.maxTier(p.NatPos()) {
 			b.Next = t.Next().Name() + " at " + d.formulaText(int(t))
 		}
 		out = append(out, b)

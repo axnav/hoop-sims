@@ -2874,3 +2874,90 @@ func TestNewRealLeagueWithSeason(t *testing.T) {
 	c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3, "season": 1990}, 400)
 	c.call("POST", "/api/new", M{"mode": "real", "seed": 2, "team": 3, "season": 2027}, 400)
 }
+
+// The player page carries the 22 attributes and 7 tendencies, read-only; a
+// draft prospect carries neither.
+func TestPlayerAttributesAndTendencies(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"mode": "fictional", "seed": 7, "team": 3}, 200)
+	team := c.call("GET", "/api/team/3", nil, 200)
+	for _, row := range team["roster"].([]any) {
+		pl := c.call("GET", "/api/player/"+itoa(num(row.(M)["id"])), nil, 200) // checkNoImpact runs here
+		attrs, tends := pl["attributes"].([]any), pl["tendencies"].([]any)
+		if len(attrs) != 22 || len(tends) != 7 {
+			t.Fatalf("got %d attributes, %d tendencies", len(attrs), len(tends))
+		}
+		for _, a := range attrs {
+			m := a.(M)
+			if v := num(m["value"]); v < 25 || v > 99 || m["key"] == "" || m["label"] == "" || m["group"] == "" {
+				t.Fatalf("bad attribute %v", m)
+			}
+		}
+		for _, a := range tends {
+			m := a.(M)
+			if v := num(m["value"]); v < 0 || v > 100 || m["key"] == "" || m["label"] == "" {
+				t.Fatalf("bad tendency %v", m)
+			}
+		}
+	}
+	toDraftStart(c, 11)
+	id := c.s.lg.Draft.Pool[0].ID
+	pl := c.call("GET", "/api/player/"+itoa(id), nil, 200)
+	if pl["attributes"] != nil || pl["tendencies"] != nil {
+		t.Fatalf("a prospect shows attributes: %v", pl)
+	}
+}
+
+func TestSetPositionAPI(t *testing.T) {
+	c := newTC(t)
+	c.call("POST", "/api/new", M{"seed": 7, "team": 3}, 200)
+	lg := c.s.lg
+	own := lg.Teams[lg.UserTeamID].Roster[0]
+	otherTeam := (lg.UserTeamID + 1) % len(lg.Teams)
+	other := lg.Teams[otherTeam].Roster[0]
+	path := "/api/player/" + itoa(own.ID)
+	pl := c.call("GET", path, nil, 200)
+	if pl["canSetPosition"] != true || pl["posOverall"] == nil {
+		t.Fatalf("own player: %v", pl)
+	}
+	target := "C"
+	if own.Pos == engine.C {
+		target = "PG"
+	}
+	want := num(pl["posOverall"].(M)[target])
+	got := c.call("POST", path+"/position", M{"pos": target, "alt": ""}, 200)
+	if num(got["ovr"]) != want || got["pos"] != target || num(got["posOverall"].(M)[target]) != want {
+		t.Fatalf("moved to %s: want %d got %v / %v", target, want, got["ovr"], got["pos"])
+	}
+	if num(got["ovr"]) > num(pl["ovr"]) {
+		t.Fatalf("overall went up from %v to %v", pl["ovr"], got["ovr"])
+	}
+	if g2 := c.call("POST", path+"/position", M{"pos": "PG", "alt": "SG"}, 200); g2["pos"] != "PG/SG" {
+		t.Fatalf("second position: %v", g2["pos"])
+	}
+	c.call("POST", path+"/position", M{"pos": "XX"}, 400)
+	c.call("POST", path+"/position", M{"pos": "PG", "alt": "PG"}, 400)
+	c.call("POST", path+"/position", M{"pos": "PG", "alt": "ZZ"}, 400)
+	c.call("POST", "/api/player/999999/position", M{"pos": "PG"}, 404)
+
+	op := "/api/player/" + itoa(other.ID)
+	if o := c.call("GET", op, nil, 200); o["canSetPosition"] != false {
+		t.Fatalf("other player: %v", o["canSetPosition"])
+	}
+	c.call("POST", op+"/position", M{"pos": "C"}, 409)
+	c.call("POST", "/api/options", M{"commissioner": true}, 200)
+	if o := c.call("GET", op, nil, 200); o["canSetPosition"] != true {
+		t.Fatalf("commissioner: %v", o["canSetPosition"])
+	}
+	c.call("POST", op+"/position", M{"pos": "C"}, 200)
+	c.call("POST", "/api/options", M{"commissioner": false}, 200)
+
+	toDraftStart(c, 11)
+	c.call("POST", "/api/options", M{"commissioner": true}, 200)
+	id := c.s.lg.Draft.Pool[0].ID
+	pp := c.call("GET", "/api/player/"+itoa(id), nil, 200)
+	if _, ok := pp["posOverall"]; ok || pp["canSetPosition"] != nil {
+		t.Fatalf("prospect page shows positions: %v", pp)
+	}
+	c.call("POST", "/api/player/"+itoa(id)+"/position", M{"pos": "C"}, 409)
+}

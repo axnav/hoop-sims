@@ -355,6 +355,7 @@ func (s *server) routes() *http.ServeMux {
 	g("/api/contracts/release/{id}", true, s.releasePreview)
 	p("/api/contracts/release", true, func(r *http.Request) (any, error) { return s.contractAction(s.lg.Release)(r) })
 	p("/api/admin/player/{id}", true, s.adminPlayer)
+	p("/api/player/{id}/position", true, s.setPosition)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, M{"error": "not found"})
 	})

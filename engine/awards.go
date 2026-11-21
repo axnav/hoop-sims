@@ -245,7 +245,7 @@ func (lg *League) computeLeagueAwards() {
 			if used[c.ps.PlayerID] {
 				continue
 			}
-			g := posGroup(c.p.Pos)
+			g := posGroup(c.p.NatPos())
 			if left[g] > 0 {
 				left[g]--
 				used[c.ps.PlayerID] = true

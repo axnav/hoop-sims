@@ -89,7 +89,9 @@ files, this file wins for rules and `HANDOFF.md` wins for current state.
 
    | 150000 | Real-data pedigree ceilings (`engine/realprospect.go`: `(seed, 150000, hash of real player id)`, two correlated normal draws; nothing saved) |
 
-   Take the next free ten-thousand (160000) for a new feature and add it here and to
+   | 160000 | Attributes and tendencies of fictional players (`engine/attributes.go`: `NewRNG(mix64(160000, player id, hash of name))`; offsets and tendencies are saved on the player; save version 5 upgrades old saves with the same rule) |
+
+   Take the next free ten-thousand (170000) for a new feature and add it here and to
    `ARCHITECTURE.md` section 9, which has the full table with the function that uses each.
 3. Never use `math/rand` or the clock in `engine/` or `cmd/`.
 4. Do not draw random numbers in an order that depends on map iteration.

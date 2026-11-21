@@ -36,7 +36,7 @@ var focusMode = "auto"
 func main() {
 	seed := flag.Uint64("seed", 1, "random seed")
 	games := flag.Int("games", 2000, "number of league-average games to simulate")
-	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, realratings, realrookies, badges, coaches, morale, develop, resign, gm, owner or news")
+	mode := flag.String("mode", "sanity", "sanity, seasons, ratings, realratings, realrookies, attributes, badges, coaches, morale, develop, resign, gm, owner or news")
 	seasons := flag.Int("seasons", 10, "number of seasons to simulate (mode seasons)")
 	reveal := flag.Bool("reveal", false, "debug: show hidden Impact in the prospect tracker")
 	noInSeason := flag.Bool("noinseason", false, "switch off in-season player development")
@@ -47,6 +47,7 @@ func main() {
 	tune := flag.String("tune", "", "realratings mode: override RealTuning fields, e.g. VolWeight=0.4,BoxGroups=false")
 	rookieStart := flag.Int("start", 2016, "realrookies mode: real season to start the league in")
 	rookieSeeds := flag.Int("seeds", 3, "realrookies mode: number of seeds (1 to N)")
+	attrReal := flag.Bool("real", false, "attributes mode: use the real-data league (with -season and -team)")
 	flag.Parse()
 	if *tune != "" {
 		if err := applyTune(*tune); err != nil {
@@ -93,6 +94,10 @@ func main() {
 	}
 	if *mode == "realratings" {
 		runRealRatings(*seed, *realSeason, *realTeam, *ref2k)
+		return
+	}
+	if *mode == "attributes" {
+		runAttributes(*seed, *attrReal, *realSeason, *realTeam)
 		return
 	}
 	if *mode == "ratings" {

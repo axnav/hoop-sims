@@ -30,13 +30,18 @@ func (r Ratings) array() [7]int {
 }
 
 type Player struct {
-	ID        int
-	Name      string
-	Age       int
-	Pos       Position   // primary position
-	AltPos    []Position // other positions the player can also play
-	Ratings   Ratings    // the visible ratings everyone sees
-	Potential int        // the overall this player can grow into
+	ID     int
+	Name   string
+	Age    int
+	Pos    Position   // primary position
+	AltPos []Position // other positions the player can also play
+
+	// NaturalPos and NaturalAlt hold the positions he was created with, set the
+	// first time SetPositions moves him (nil = never moved; see position.go).
+	NaturalPos *Position  `json:",omitempty"`
+	NaturalAlt []Position `json:",omitempty"`
+	Ratings    Ratings    // the visible ratings everyone sees
+	Potential  int        // the overall this player can grow into
 	// EditedCeiling is a commissioner-set potential above his overall: he keeps
 	// growing toward it at any age, then the field clears. 0 = none.
 	EditedCeiling int `json:",omitempty"`
@@ -45,6 +50,12 @@ type Player struct {
 	// means an older save or imported player should use a derived default.
 	UsageTendency int `json:",omitempty"`
 	TeamID        int
+
+	// AttrOffsets are the 22 detailed attributes as offsets from the rating of
+	// their group; Tendencies are seven 0-100 tendencies (see attributes.go).
+	// All zero = not set yet (an old save, upgraded on load).
+	AttrOffsets [NumAttrs]int
+	Tendencies  [NumTendency]int
 
 	Experience int // seasons played
 	DraftYear  int // 0 for the initial league
@@ -138,13 +149,36 @@ func overallAt(r Ratings, pos Position) int {
 // OverallAt is the visible overall if the player lines up at pos.
 func (p *Player) OverallAt(pos Position) int { return overallAt(p.Ratings, pos) }
 
-// Overall is the visible overall: the best across the player's positions.
+// Overall is the visible overall. A player the user has never moved
+// (NaturalPos nil) keeps the best-of-listed-positions rule; a moved player's
+// overall is the overall at his main position only (2K style).
 func (p *Player) Overall() int {
+	if p.NaturalPos != nil {
+		return p.OverallAt(p.Pos)
+	}
 	best := 0
 	for _, pos := range p.Positions() {
 		best = max(best, p.OverallAt(pos))
 	}
 	return best
+}
+
+// PositionOveralls is the overall at each of the five positions, PG first.
+func (p *Player) PositionOveralls() [5]int {
+	var o [5]int
+	for i := range o {
+		o[i] = p.OverallAt(Position(i))
+	}
+	return o
+}
+
+// NatPos is the main position the player was created with: what badge caps,
+// awards and trade fit use, so moving a player never changes them.
+func (p *Player) NatPos() Position {
+	if p.NaturalPos != nil {
+		return *p.NaturalPos
+	}
+	return p.Pos
 }
 
 // Effective returns the ratings the game sim should use: the visible
@@ -204,6 +238,9 @@ func usageVariation(id int, name string) int {
 
 // TrueOverall is the hidden overall: what the player is really worth.
 func (p *Player) TrueOverall() int {
+	if p.NaturalPos != nil {
+		return overallAt(p.Effective(), p.Pos)
+	}
 	best := 0
 	for _, pos := range p.Positions() {
 		best = max(best, overallAt(p.Effective(), pos))

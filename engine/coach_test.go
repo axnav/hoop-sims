@@ -43,8 +43,8 @@ func TestLoadVersion3SaveGetsCoaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != SaveVersion || SaveVersion != 4 {
-		t.Errorf("version %d, want %d (4)", got.Version, SaveVersion)
+	if got.Version != SaveVersion || SaveVersion < 4 {
+		t.Errorf("version %d, want %d (at least 4)", got.Version, SaveVersion)
 	}
 	for i, tm := range got.Teams {
 		if tm.Coach == nil || *tm.Coach != want[i] {

@@ -139,6 +139,7 @@ export type PlayerPage = {
   id: number; name: string; age: number; pos: string; ovr: number; pot: number; status: string; team: Team | null
   photo?: boolean; ovrChange?: number; changeScope?: ChangeScope; potChange?: number; ratingChanges?: Record<string, number>
   role: string; usage: number; salary: number; years: number
+  posOverall?: Record<'PG' | 'SG' | 'SF' | 'PF' | 'C', number>; canSetPosition?: boolean
   injury?: Injury; editable: boolean; limits: { minRating: number; maxRating: number; minAge: number; maxAge: number }
   ratings: { key: string; label: string; value: number; lo?: number; hi?: number }[]; experience: number; draftYear: number; draftPick: number
   badges?: Badge[]
@@ -401,6 +402,7 @@ export const api = {
   contractExtend: (playerId: number, salary: number, years: number) => post<{ message: string; state: GameState }>('/api/contracts/extend', { playerId, salary, years }),
   releasePreview: (id: number) => get<ReleasePreview>(`/api/contracts/release/${id}`),
   contractRelease: (playerId: number) => post<{ expiring: Expiring; state: GameState }>('/api/contracts/release', { playerId }),
+  setPosition: (id: number, pos: string, alt: string) => post<PlayerPage>(`/api/player/${id}/position`, { pos, alt }),
   setTraining: (playerId: number, focus: string) => post<{ training: Training; message: string }>('/api/training', { playerId, focus }),
   draftAuto: () => post<GameState>('/api/draft/auto'),
   freeAgents: () => get<FreeAgencyData>('/api/freeagents'),

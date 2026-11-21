@@ -298,6 +298,47 @@ function Wants({ p }: { p: PlayerPage }) {
   )
 }
 
+const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'] as const
+
+function PositionPanel({ p }: { p: PlayerPage }) {
+  const qc = useQueryClient()
+  const [curMain, curAlt = ''] = p.pos.split('/')
+  const [main, setMain] = useState(curMain)
+  const [alt, setAlt] = useState(curAlt)
+  const po = p.posOverall!
+  const save = useMutation({
+    mutationFn: () => api.setPosition(p.id, main, alt === main ? '' : alt),
+    onSuccess: (np) => {
+      qc.setQueryData(['player', p.id], np)
+      for (const k of ['team', 'trade-block', 'leaders', 'state', 'lineup', 'contracts']) qc.invalidateQueries({ queryKey: [k] })
+    },
+  })
+  const row = (label: string, value: string, pick: (v: string) => void, none: boolean) => (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="w-14 text-[13px] text-muted">{label}</span>
+      {none && <button onClick={() => pick('')} className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${value === '' ? 'bg-panel text-ink ring-1 ring-muted' : 'bg-panel2 text-muted hover:text-ink'}`}>None</button>}
+      {POSITIONS.map((q) => (
+        <button key={q} onClick={() => pick(q)}
+          className={`rounded-full px-2.5 py-1 text-[12px] font-semibold tabular-nums ${value === q ? 'bg-panel text-ink ring-1 ring-muted' : 'bg-panel2 text-muted hover:text-ink'}`}>{q} {po[q]}</button>
+      ))}
+    </div>
+  )
+  const changed = main !== curMain || (alt === main ? '' : alt) !== curAlt
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-panel2/50 p-3">
+      <div className="h2 mb-1">Position</div>
+      <div className="text-[12px] text-muted">His overall is the one at his main position. The number on each button is his overall there.</div>
+      {row('Main', main, setMain, false)}
+      {row('Second', alt === main ? '' : alt, setAlt, true)}
+      <div className="mt-3 flex items-center gap-3">
+        <button className="btn btn-accent" disabled={!changed || save.isPending} onClick={() => save.mutate()}>Save position</button>
+        {changed && <span className="text-[13px] text-muted">Overall {p.ovr} becomes {po[main as keyof typeof po]}</span>}
+      </div>
+      {save.isError && <ErrorBox error={save.error} />}
+    </div>
+  )
+}
+
 function TrainingPanel({ id, ratings, t }: { id: number; ratings: PlayerPage['ratings']; t: Training }) {
   const qc = useQueryClient()
   const [msg, setMsg] = useState('')
@@ -460,6 +501,7 @@ function Body({ id, close }: { id: number; close: () => void }) {
           )}
           {!p.prospect && p.team && p.team.id === state?.user.team.id && <AdviceBlock id={p.id} />}
           {!p.prospect && p.team && p.team.id === state?.user.team.id && <ReleaseBox p={p} close={close} />}
+          {p.canSetPosition && p.posOverall && <PositionPanel key={`${p.id}-${p.pos}`} p={p} />}
           <MoodBlock p={p} />
           <Wants p={p} />
           {p.prospect && p.scout && <ScoutPanel id={p.id} level={p.scout.level} maxLevel={3} />}

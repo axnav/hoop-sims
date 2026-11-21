@@ -140,6 +140,7 @@ type careerInfo struct {
 	ht        float64
 	birthYear int
 	from      int
+	wt        float64 // weight in pounds (0 = unknown)
 }
 
 type draftPick struct {
@@ -157,6 +158,7 @@ type realData struct {
 	models map[int]*seasonModel
 	rated  map[int]map[string]*ratedPlayer
 	target map[int]map[string]float64 // standing.csv overall targets (optional)
+	adist  map[int]*attrDists         // extra season distributions for attributes (attributes.go)
 	ped    *pedigree                  // pick-band table, measured on first use (realprospect.go)
 }
 
@@ -290,7 +292,7 @@ func loadRealDataFrom(dir string, start int) (*realData, error) {
 		if len(m["birth_date"]) >= 4 {
 			by = int(num(m["birth_date"][:4]))
 		}
-		d.career[m["player_id"]] = careerInfo{m["pos"], num(m["ht_in_in"]), by, int(num(m["from"]))}
+		d.career[m["player_id"]] = careerInfo{m["pos"], num(m["ht_in_in"]), by, int(num(m["from"])), num(m["wt"])}
 	}
 	dr, err := readCSV(filepath.Join(dir, "Draft Pick History.csv"))
 	if err != nil {
@@ -659,6 +661,8 @@ func ratingsOf(a [7]float64) Ratings {
 	return Ratings{v(0), v(1), v(2), v(3), v(4), v(5), v(6)}
 }
 
+// overallOfRatings is the best overall across the listed positions (the same
+// rule as Player.Overall for a player who was never moved).
 func overallOfRatings(rt Ratings, pos Position, alt []Position) int {
 	best := overallAt(rt, pos)
 	for _, a := range alt {
@@ -940,6 +944,7 @@ func NewRealLeagueSeason(dataDir string, seed uint64, season int) (*League, erro
 			Ratings: rp.Ratings, TeamID: -1, Impact: rp.Impact, RealID: pid,
 			UsageTendency: usageFromPercentile(d.model(season).usg.pct(row.usg)),
 		}
+		d.realAttributes(p, row) // attributes.go
 		nextID++
 		if ci.from > 0 {
 			p.Experience = max(1, season-ci.from+1)
@@ -1025,6 +1030,7 @@ func NewRealLeagueSeason(dataDir string, seed uint64, season int) (*League, erro
 	lg.assignInitialContracts()
 	lg.initCoaches()
 	applyRealCoaches(lg, dataDir, season)
+	lg.ensureAttributes() // prospects without a real season: fictional rule
 	return lg, nil
 }
 
@@ -1089,6 +1095,7 @@ func (d *realData) prospect(r *RNG, seed uint64, pk draftPick, year int) *Player
 	}
 	p.Pos, p.AltPos, p.Ratings, p.Impact = rp.Pos, rp.Alt, rp.Ratings, rp.Impact
 	p.UsageTendency = usageFromPercentile(d.model(first).usg.pct(row.usg))
+	d.realAttributes(p, row) // attributes.go
 	p.Potential = d.ceilingFor(seed, pk.pid, first, p.Age, p.Overall())
 	return p
 }
